@@ -1,0 +1,39 @@
+==== CLAUDE.md ====
+# Example vault
+
+Fictional. Belongs to "Sam", a backend engineer preparing for interviews. Use `get_context` first. Log every practice session in `sessions/`, tag observed issues with `issue/<improvement-file-name>`, prefer append and frontmatter updates over rewrites.
+
+==== Current week: 2026-W03 ====
+path: weeks/2026-w03.md
+hash: b484cc9de79003ff8871df17e6acd8ab5d744ec055d0abd3db206761d206cd1b
+
+---
+type: week
+week: 2026-W03
+start: 2026-01-12
+end: 2026-01-16
+focus: [Headline first, State the cost]
+tags: [meta/plan]
+---
+## Plan
+| Day | Spoken | Block 2 |
+|---|---|---|
+| Mon | Deep dive: checkout rewrite | System design: rate limiter |
+## Log
+- Mon: deep dive, headline late
+
+==== Open items ====
+improvement (status: open, improving):
+- improvements/buries-headline.md | Buries the headline | status=open | -
+- improvements/missing-tradeoff.md | Trade-off not stated | status=improving | -
+
+application (status: active):
+- applications/acme-backend.md | acme-backend | stage=interview status=active | company/acme
+
+==== Recent ====
+session (newest 5):
+- sessions/2026-01-14-deep-dive-checkout-rewrite.md | 2026-01-14-deep-dive-checkout-rewrite | date=2026-01-14 kind=deep-dive | q/hardest-project, issue/missing-tradeoff
+- sessions/2026-01-12-deep-dive-checkout-rewrite.md | 2026-01-12-deep-dive-checkout-rewrite | date=2026-01-12 kind=deep-dive | q/hardest-project, issue/buries-headline, issue/missing-tradeoff
+
+==== Tags ====
+Top tags, last 30 days (since 2025-12-15): q/hardest-project (3), issue/missing-tradeoff (2), company/acme (1), domain/payments (1), issue/buries-headline (1), meta/plan (1), skill/scale (1), skill/trade-off (1)

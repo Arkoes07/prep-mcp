@@ -1,0 +1,23 @@
+==== CLAUDE.md ====
+# Example vault
+
+Fictional. Belongs to "Sam", a backend engineer preparing for interviews. Use `get_context` first. Log every practice session in `sessions/`, tag observed issues with `issue/<improvement-file-name>`, prefer append and frontmatter updates over rewrites.
+
+==== Current week: 2026-W40 ====
+no week doc for 2026-W40 (create_doc type=week with week: 2026-W40)
+
+==== Open items ====
+improvement (status: open, improving):
+- improvements/buries-headline.md | Buries the headline | status=open | -
+- improvements/missing-tradeoff.md | Trade-off not stated | status=improving | -
+
+application (status: active):
+- applications/acme-backend.md | acme-backend | stage=interview status=active | company/acme
+
+==== Recent ====
+session (newest 5):
+- sessions/2026-01-14-deep-dive-checkout-rewrite.md | 2026-01-14-deep-dive-checkout-rewrite | date=2026-01-14 kind=deep-dive | q/hardest-project, issue/missing-tradeoff
+- sessions/2026-01-12-deep-dive-checkout-rewrite.md | 2026-01-12-deep-dive-checkout-rewrite | date=2026-01-12 kind=deep-dive | q/hardest-project, issue/buries-headline, issue/missing-tradeoff
+
+==== Tags ====
+Top tags, last 30 days (since 2026-08-30): none

@@ -131,5 +131,52 @@ Each entry: the decision, what it replaced, why, and what it costs. Fill in as t
 - Why: every test uses a temp copy of `examples/vault` with fixed mtimes (git doesn't preserve them) and an isolated git environment, so golden output is deterministic and your git config never leaks in.
 - Cost: one extra package outside the PRD layout.
 
+## `get_context` output format (M1)
+- Instead of: JSON, or Markdown headings for the sections. PRD 5.1 lists the content but not the format.
+- Format: plain text in sections introduced by `==== name ====` lines, in PRD order: `CLAUDE.md`, `Current week: <week>`, `Open items`, `Recent`, `Tags`, and a final `Problems` section only when there are any. The hand-written `internal/vault/testdata/context.golden` is the specification.
+- Why:
+  - `==== ... ====` cannot be confused with the `##` headings inside the embedded week document, which Markdown headings would be.
+  - Text costs fewer tokens than JSON and reads well in a chat.
+  - The week section carries the file's `path` and `hash`, so `replace_doc` can be used without another `read_doc`.
+  - Lists are one line per document: `- path | title | attributes | tags`. Attributes are `date=`, `kind=`, `stage=`, `status=`, in that order.
+  - `date=` appears only when the document has a `date` field. File mtime orders documents but is never shown as a date, because a clone or checkout resets it.
+  - Each query block is labelled from its config (`improvement (status: open, improving):`, `session (newest 5):`), so the output explains itself.
+- Cost: the format is ours, not a standard, and a change means regenerating the golden files by hand. The model has to read a convention instead of parsing JSON.
+
+## Dates are calendar days in local time
+- Instead of: comparing instants.
+- Why: `date` fields are calendar dates, and mtime is only a fallback. `ParseDate` returns the date as written at local midnight and drops any time of day, so `2026-01-12T09:30:00Z` is 2026-01-12 in every timezone. `since` and `until` compare the local calendar day of a document's date or mtime, inclusive. Without this, the same vault would answer differently in UTC+13.
+- Cost: a timestamp near midnight in a `date` field is filed under the day written, not the day in the reader's timezone.
+- Consequence to know: undated documents take their mtime as date, so on a fresh clone every undated document looks as if it were touched today. `get_context` then counts their tags in the 30-day summary. The fallback is PRD 5.1, and the documents that need real dates should get a `date` field.
+
+## Broken files are reported, not hidden
+- Instead of: silently skipping a file with invalid frontmatter, or failing the whole call.
+- Why: a typo in one file must not blind every query, and it must not vanish either. Such files are skipped from results and listed under `problems` in `list_docs` and in the `Problems` section of `get_context`. A file without frontmatter, or with frontmatter but no `type`, is skipped silently, because that is normal (`CLAUDE.md`, plain notes). An unparseable `date` and a second week document for the same week are also problems.
+- Frontmatter errors name the line in the file, not the line inside the YAML block, so a human can jump to it. Duplicate keys are rejected, because `yaml.v3` does not detect them when decoding into a `yaml.Node`.
+- Cost: the scan does a little extra work and the output can carry a `Problems` list the model must not ignore.
+
+## Search matches bodies and the `title` field only
+- Instead of: searching whole files including frontmatter, or matching file names.
+- Why: PRD 5.1 says bodies and titles. Matching frontmatter would return every document that merely carries a tag or a field value, which `list_docs` already answers.
+- Rules: case-insensitive substring; a document without a `title` field is not matched by its filename stem, even though the stem is shown as its title; a title match is reported at the file line of the `title:` key, and `Text` is always the verbatim file line; hits are ordered by path; each hit reports up to 3 lines and the total count.
+- Cost: searching for a frontmatter value needs `list_docs` with `where`.
+
+## Limits and defaults
+- `list_docs`: 50 results by default, at most 500. `search_text`: 20 by default, at most 500. Each context query: 20 unless its config says otherwise. Context tag summary: the 10 most used tags of the last 30 days, and no upper date bound.
+- Every sort breaks ties by path, ascending, so output is deterministic.
+- `list_tags` treats `prefix` as a plain string prefix, so `issue` and `issue/` both work.
+- The default commit author is `Claude <claude@local>`. PRD 4.3 shows it only as an example value.
+- Why: PLAN.md open question 23, plus the small gaps the tests exposed.
+- Cost: no truncation. A vault with hundreds of open items produces a long `get_context`.
+
+## `list_docs` returns `date` or `modified`, never a body
+- Instead of: one `date` field that is sometimes a file mtime.
+- Why: a model reading `date` should be able to trust it. A document with a `date` field returns `date`; one without returns `modified` (the file's last-modified day) instead. `status`, `stage`, `kind` and `updated` appear when present. Bodies are never returned. A `type` that is not configured and matches nothing returns a `note` listing the configured types.
+- Cost: a client that wants one sort key must read either field.
+
+## Server clock
+- `vault.Vault.Now()` is the one clock. Production passes `time.Now`, tests pass a fixed day. `get_context` uses it only when the caller gives no `date`.
+- `server.New(v, cfg, version)` has no writer argument until M2 adds the write tools; PLAN.md section 3 shows the final signature.
+
 ## What changed after using it for N weeks
 - ___

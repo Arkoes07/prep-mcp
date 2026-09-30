@@ -1,0 +1,93 @@
+# Data-driven cases for TestSearch, run against a temp copy of examples/vault.
+#
+# Rules the expectations rely on:
+#   - matching is a case-insensitive substring over the body and the `title`
+#     field only; other frontmatter and filenames are not searched;
+#   - a document without a `title` field is not searched by its filename stem;
+#   - a title match is reported at the file line of the `title:` key, and Text
+#     is always the verbatim file line (no trimming);
+#   - line numbers are 1-based file lines;
+#   - hits are ordered by path, ascending, before the limit is applied.
+#
+# Fields per hit: path (required); title, total and lines are checked only when given.
+
+tag_line: &tag_line "`q/failure` `q/hardest-project` `q/changed-mind` `skill/trade-off` `skill/scale` `domain/payments` `issue/buries-headline` `issue/missing-tradeoff` `company/acme` `meta/plan`"
+
+cases:
+  - name: trade_off
+    query: trade-off
+    want:
+      - path: improvements/missing-tradeoff.md
+        title: Trade-off not stated
+        total: 1
+        lines: [{n: 3, text: "title: Trade-off not stated"}]
+      - path: sessions/2026-01-12-deep-dive-checkout-rewrite.md
+        title: 2026-01-12-deep-dive-checkout-rewrite
+        total: 1
+        lines: [{n: 10, text: "Headline at 1:10. Polling trade-off never mentioned."}]
+      - path: sessions/2026-01-14-deep-dive-checkout-rewrite.md
+        total: 1
+        lines: [{n: 10, text: "Headline first. Trade-off still missing."}]
+      - path: stories/checkout-rewrite.md
+        title: Checkout service rewrite
+        total: 1
+        lines:
+          - n: 10
+            text: "**Problem** Checkout called four services in sequence. **Decision** Outbox pattern. **Trade-off** Payment status became asynchronous; the UI had to poll. **Impact** p99 2.1 s to 340 ms; abandoned carts down 6%."
+      - path: tags.md
+        title: Tag vocabulary
+        total: 1
+        lines: [{n: 5, text: *tag_line }]
+
+  - name: case_insensitive
+    query: HEADLINE
+    want:
+      - path: improvements/buries-headline.md
+        total: 1
+        lines: [{n: 3, text: "title: Buries the headline"}]
+      - path: sessions/2026-01-12-deep-dive-checkout-rewrite.md
+        total: 1
+        lines: [{n: 10, text: "Headline at 1:10. Polling trade-off never mentioned."}]
+      - path: sessions/2026-01-14-deep-dive-checkout-rewrite.md
+        total: 1
+        lines: [{n: 10, text: "Headline first. Trade-off still missing."}]
+      - path: stories/checkout-rewrite.md
+        total: 1
+        lines: [{n: 7, text: "## Headline"}]
+      - path: tags.md
+        total: 1
+        lines: [{n: 5, text: *tag_line }]
+      - path: weeks/2026-w03.md
+        total: 1
+        lines: [{n: 14, text: "- Mon: deep dive, headline late"}]
+
+  - name: type_filter_title_match
+    query: headline
+    type: improvement
+    want:
+      - path: improvements/buries-headline.md
+        title: Buries the headline
+        total: 1
+        lines: [{n: 3, text: "title: Buries the headline"}]
+
+  # `kind: deep-dive` is frontmatter and the filenames contain "deep-dive",
+  # but neither is searched.
+  - name: frontmatter_and_filenames_not_searched
+    query: deep-dive
+    want: []
+
+  # "Sam" appears only in the untyped CLAUDE.md.
+  - name: untyped_files_skipped
+    query: Sam
+    want: []
+
+  - name: limit_respected
+    query: headline
+    limit: 2
+    want:
+      - path: improvements/buries-headline.md
+      - path: sessions/2026-01-12-deep-dive-checkout-rewrite.md
+
+  - name: empty_query
+    query: ""
+    err: [query]

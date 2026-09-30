@@ -1,0 +1,149 @@
+# Data-driven cases for TestList, run against a temp copy of examples/vault.
+#
+# Setup facts the expectations rely on:
+#   - the test day is 2026-01-14;
+#   - every file has mtime 2026-01-10 12:00 local, so undated documents sort
+#     below the two dated ones;
+#   - the default sort is date_desc; ties are broken by path, ascending.
+#
+# Fields
+#   filter:   type, tags, any_tags, where, since, until, sort, limit
+#             (since / until are YYYY-MM-DD strings, parsed with vault.ParseDate)
+#   want:     exact expected paths, in order ([] means no results)
+#   err:      instead of want; substrings (all) that the error must contain
+#   parse_err: instead of want; the since/until string must be rejected by ParseDate.
+#             The user-facing message ("since: use YYYY-MM-DD") is added by the caller
+#             and is covered by the M1c wiring test.
+
+paths:
+  s14: &s14 sessions/2026-01-14-deep-dive-checkout-rewrite.md
+  s12: &s12 sessions/2026-01-12-deep-dive-checkout-rewrite.md
+  app: &app applications/acme-backend.md
+  bh: &bh improvements/buries-headline.md
+  mt: &mt improvements/missing-tradeoff.md
+  story: &story stories/checkout-rewrite.md
+  tags: &tags tags.md
+  week: &week weeks/2026-w03.md
+
+cases:
+  - name: all
+    want: [*s14, *s12, *app, *bh, *mt, *story, *tags, *week]
+
+  - name: by_type
+    type: session
+    want: [*s14, *s12]
+
+  - name: acceptance_4
+    type: session
+    tags: [issue/buries-headline]
+    want: [*s12]
+
+  - name: tags_and
+    tags: [q/hardest-project, issue/missing-tradeoff]
+    want: [*s14, *s12]
+
+  - name: tags_and_narrow
+    tags: [q/hardest-project, issue/buries-headline]
+    want: [*s12]
+
+  - name: any_tags_or
+    any_tags: [issue/buries-headline, domain/payments]
+    want: [*s12, *story]
+
+  - name: prefix
+    tags: [issue/]
+    want: [*s14, *s12]
+
+  - name: prefix_any
+    any_tags: [company/, domain/]
+    want: [*app, *story]
+
+  - name: tag_case
+    tags: [Issue/Missing-Tradeoff]
+    want: [*s14, *s12]
+
+  - name: where_scalar
+    where: {status: open}
+    want: [*bh]
+
+  - name: where_list
+    where: {status: [open, improving]}
+    want: [*bh, *mt]
+
+  - name: where_type
+    type: application
+    where: {status: [active]}
+    want: [*app]
+
+  - name: where_list_field
+    where: {focus: Headline first}
+    want: [*week]
+
+  - name: where_nomatch
+    type: application
+    where: {status: open}
+    want: []
+
+  - name: where_missing_field
+    where: {nope: x}
+    want: []
+
+  - name: since
+    type: session
+    since: "2026-01-13"
+    want: [*s14]
+
+  - name: until_inclusive
+    type: session
+    until: "2026-01-12"
+    want: [*s12]
+
+  # Undated documents are dated by mtime (2026-01-10).
+  - name: since_mtime_fallback_included
+    type: improvement
+    since: "2026-01-10"
+    want: [*bh, *mt]
+
+  - name: since_mtime_fallback_excluded
+    type: improvement
+    since: "2026-01-11"
+    want: []
+
+  - name: since_bad
+    since: "13-01-2026"
+    parse_err: true
+
+  - name: date_asc
+    type: session
+    sort: date_asc
+    want: [*s12, *s14]
+
+  - name: date_asc_all
+    sort: date_asc
+    want: [*app, *bh, *mt, *story, *tags, *week, *s12, *s14]
+
+  - name: title
+    type: improvement
+    sort: title
+    want: [*bh, *mt]
+
+  - name: sort_bad
+    sort: newest
+    err: [date_desc, date_asc, title]
+
+  - name: limit
+    limit: 1
+    want: [*s14]
+
+  - name: limit_zero_uses_default
+    limit: 0
+    want: [*s14, *s12, *app, *bh, *mt, *story, *tags, *week]
+
+  # The 500 cap cannot be seen on 8 documents; TestApplyLimitCap covers it.
+  - name: limit_huge
+    limit: 9999
+    want: [*s14, *s12, *app, *bh, *mt, *story, *tags, *week]
+
+  - name: unknown_type
+    type: nope
+    want: []

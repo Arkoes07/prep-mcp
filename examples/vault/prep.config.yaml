@@ -17,7 +17,7 @@ types:
     required: [status, exit_criteria]
   week:
     folder: weeks
-    filename: "{isoweek}.md"
+    filename: "{week}.md"
     required: [week]
   application:
     folder: applications
@@ -34,6 +34,7 @@ types:
 
 context:
   current_week_type: week
+  current_week_field: week
   open_items:
     - {type: improvement, where: {status: [open, improving]}}
     - {type: application, where: {status: [active]}}
