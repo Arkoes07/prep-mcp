@@ -1,6 +1,8 @@
 package vault_test
 
 import (
+	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -105,5 +107,43 @@ func TestSplitFrontmatterInvalidYAML(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "line 3") {
 		t.Errorf("error = %q, want it to name file line 3", err)
+	}
+}
+
+// yaml.v3 numbers some parse errors from 0 and some from 1, so its own line
+// is not trustworthy. The reported line must be where the bad YAML starts in
+// the FILE. Line 1 of each source is the opening fence.
+func TestSplitFrontmatterErrorLine(t *testing.T) {
+	tests := []struct {
+		name, src string
+		line      int
+	}{
+		{"tab_indent", "---\ntype: x\n\tbad: 1\n---\n", 3},
+		{"unterminated_flow_list", "---\na: 1\nb: [1\n---\n", 3},
+		{"unterminated_flow_list_then_keys", "---\na: 1\nb: [1\nc: 2\nd: 3\n---\n", 3},
+		{"unterminated_flow_list_on_first_key", "---\nb: [1\n---\n", 2},
+		{"unterminated_flow_map", "---\na: 1\nb: {x: 1\n---\n", 3},
+		{"unterminated_quote", "---\na: 1\nb: \"open\n---\n", 3},
+		{"double_colon", "---\na: 1\nb: : x\n---\n", 3},
+		{"multi_line_flow_then_error", "---\nf: [a,\n  b]\nc: : x\n---\n", 4},
+		{"unterminated_flow_after_a_valid_multi_line_one", "---\nf: [a,\n  b]\ng: 1\nh: [1\n---\n", 5},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := vault.SplitFrontmatter([]byte(tc.src))
+			if err == nil {
+				t.Fatal("want an error")
+			}
+			want := fmt.Sprintf("line %d", tc.line)
+			if !regexp.MustCompile(want + `\b`).MatchString(err.Error()) {
+				t.Errorf("error = %q, want it to name %s", err, want)
+			}
+			if regexp.MustCompile(`line \d+.*line \d+`).MatchString(err.Error()) {
+				t.Errorf("error = %q names more than one line", err)
+			}
+			if !strings.Contains(err.Error(), "fix") {
+				t.Errorf("error = %q, want it to say what to do next", err)
+			}
+		})
 	}
 }

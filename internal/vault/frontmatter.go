@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
-	"strconv"
 
 	"gopkg.in/yaml.v3"
 )
@@ -65,18 +64,19 @@ func isFence(line []byte) bool {
 	return string(bytes.TrimRight(line, " \t\r")) == "---"
 }
 
-var yamlLineRE = regexp.MustCompile(`line (\d+)`)
+// yamlPrefix strips yaml.v3's "yaml: " and "line N: " from an error, keeping
+// the reason. The line is dropped because yaml.v3 counts it from 0 for some
+// errors and from 1 for others; badLine finds the real one.
+var yamlPrefix = regexp.MustCompile(`^yaml: (line \d+: )?`)
 
 func parseBlock(src []byte, fm *Frontmatter) (*Frontmatter, error) {
 	// Block line 1 is file line 2 (line 1 is the opening fence).
 	const lineShift = 1
+	block := src[fm.Start:fm.End]
 	var doc yaml.Node
-	if err := yaml.Unmarshal(src[fm.Start:fm.End], &doc); err != nil {
-		msg := yamlLineRE.ReplaceAllStringFunc(err.Error(), func(m string) string {
-			n, _ := strconv.Atoi(m[len("line "):])
-			return "line " + strconv.Itoa(n+lineShift)
-		})
-		return nil, fmt.Errorf("invalid frontmatter: %s; fix that line in the file, then retry", msg)
+	if err := yaml.Unmarshal(block, &doc); err != nil {
+		reason := yamlPrefix.ReplaceAllString(err.Error(), "")
+		return nil, fmt.Errorf("invalid frontmatter at line %d: %s; fix that line in the file, then retry", badLine(block)+lineShift, reason)
 	}
 	switch {
 	case doc.Kind == 0 || len(doc.Content) == 0: // empty, or only comments
@@ -95,6 +95,34 @@ func parseBlock(src []byte, fm *Frontmatter) (*Frontmatter, error) {
 		seen[k.Value] = true
 	}
 	return fm, nil
+}
+
+// maxPrefixParses bounds the work badLine does on a huge block.
+const maxPrefixParses = 1000
+
+// badLine returns the 1-based line of block where its YAML stops being valid:
+// the smallest n such that no prefix of n or more lines parses. A prefix that
+// ends inside a legal multi-line value fails too, but a longer prefix then
+// parses again, so only the failure that lasts to the end counts. For an
+// unterminated [, { or " that is the line that opens it.
+func badLine(block []byte) int {
+	var ends []int // ends[i] is the offset just after line i+1
+	for pos := 0; pos < len(block); {
+		_, next := nextLine(block, pos)
+		ends = append(ends, next)
+		pos = next
+	}
+	valid := func(n int) bool {
+		var d yaml.Node
+		return yaml.Unmarshal(block[:ends[n-1]], &d) == nil
+	}
+	n := len(ends)
+	for tries := 0; n > 1 && !valid(n-1); n-- {
+		if tries++; tries > maxPrefixParses {
+			break
+		}
+	}
+	return max(n, 1)
 }
 
 // mapGet returns the value node of key in a mapping node, or nil.

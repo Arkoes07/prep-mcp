@@ -16,15 +16,16 @@ import (
 
 	"github.com/Arkoes07/prep-mcp/internal/config"
 	"github.com/Arkoes07/prep-mcp/internal/vault"
+	"github.com/Arkoes07/prep-mcp/internal/write"
 )
 
 const instructions = "Call get_context first: it returns the vault's working rules, the current week, open items and recent activity in one call. " +
 	"Use list_docs for metadata queries, search_text for text, read_doc for a whole file and list_tags for the tag vocabulary in use."
 
-// New builds the server with the read tools registered.
-func New(v *vault.Vault, cfg *config.Config, version string) *mcp.Server {
+// New builds the server with the read and write tools registered.
+func New(v *vault.Vault, w *write.Writer, cfg *config.Config, version string) *mcp.Server {
 	s := mcp.NewServer(&mcp.Implementation{Name: "prep-mcp", Version: version}, &mcp.ServerOptions{Instructions: instructions})
-	h := &handlers{v: v, cfg: cfg}
+	h := &handlers{v: v, w: w, cfg: cfg}
 	readOnly := &mcp.ToolAnnotations{ReadOnlyHint: true}
 
 	mcp.AddTool(s, &mcp.Tool{
@@ -71,6 +72,7 @@ func New(v *vault.Vault, cfg *config.Config, version string) *mcp.Server {
 		Annotations: readOnly,
 	}, guard("list_tags", h.listTags))
 
+	registerWriteTools(s, h)
 	return s
 }
 
@@ -90,6 +92,7 @@ func guard[In any](name string, h mcp.ToolHandlerFor[In, any]) mcp.ToolHandlerFo
 
 type handlers struct {
 	v   *vault.Vault
+	w   *write.Writer
 	cfg *config.Config
 }
 

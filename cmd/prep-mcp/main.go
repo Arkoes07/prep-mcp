@@ -21,6 +21,7 @@ import (
 	"github.com/Arkoes07/prep-mcp/internal/config"
 	"github.com/Arkoes07/prep-mcp/internal/server"
 	"github.com/Arkoes07/prep-mcp/internal/vault"
+	"github.com/Arkoes07/prep-mcp/internal/write"
 )
 
 // version is set at build time with -ldflags "-X main.version=...".
@@ -82,7 +83,8 @@ func run(ctx context.Context, args []string, getenv func(string) string, stderr 
 		return err
 	}
 	log.Printf("serving %s (%d types)", root, len(cfg.Types))
-	err = server.New(v, cfg, version).Run(ctx, &mcp.StdioTransport{})
+	w := write.New(v, cfg, &write.Git{Bin: "git", Author: cfg.Author, Timeout: 10 * time.Second}, time.Now)
+	err = server.New(v, w, cfg, version).Run(ctx, &mcp.StdioTransport{})
 	if err != nil && ctx.Err() == nil && !errors.Is(err, io.EOF) {
 		return err
 	}

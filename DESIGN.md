@@ -96,6 +96,7 @@ Each entry: the decision, what it replaced, why, and what it costs. Fill in as t
 ## Atomic writes (temp file + rename)
 - Instead of: writing the target file in place.
 - Why: a crash never leaves a half-written note. A hard link to a file outside the vault is replaced rather than written through. The mode of an existing file is kept.
+- Also decided: the temp file is created 0600 and chmod-ed to its final mode before the rename (an existing file keeps its mode; a new file gets 0644), so it is never briefly more open than the result. Its name is `.prep-tmp-<random>`.
 - Cost: the file's inode changes on every write, and a dot-prefixed temp file briefly exists next to the target.
 
 ## Tag warnings only for tags a write adds; closest tag by edit distance
@@ -108,6 +109,49 @@ Each entry: the decision, what it replaced, why, and what it costs. Fill in as t
 - Instead of: validating required fields only in create_doc (PRD 5.2).
 - Why: otherwise replace_doc and update_frontmatter (for example, unsetting a field) could produce documents create_doc would reject. Absent, null, `""`, `[]` and `{}` all count as missing.
 - Cost: a human-made doc that is already missing a required field must be fixed before the AI can rewrite it.
+
+## Writes: serialised, one retry, and a seam for the moment between write and rename (M2)
+- Instead of: unlocked writes, or a lock file.
+- Why: the server may get overlapping tool calls, so one mutex per `Writer` serialises them. A human can still save the file at any time, so `append_section` and `update_frontmatter` re-hash the file after staging the temp file and just before the rename. If it changed, they start over once from the new content, so the human's save is kept. If it changes twice in a row they stop with a "re-read and retry" error and write nothing. `replace_doc` never retries: a change after the hash check is a `ConflictError`, because the caller's content was based on the old version.
+- Test seam: an unexported `beforeRename` hook runs after the temp file is written and before the rename. `internal/write/seam_test.go` (package `write`) uses it to inject a failure, to simulate a human save in that window, and to check that no `.prep-tmp-*` file survives either. PLAN.md asked for an "injected failure" test without saying how; this is the least invasive way, and production code never sets it.
+- Cost: a package-level variable that exists only for tests. `create_doc` checks that the file does not exist, stages, and checks again before the rename, but a rename cannot refuse to overwrite, so a file created in those microseconds would be replaced. Accepted: a human creating the same filename at that instant is not a case worth a hard-link dance that some filesystems lack.
+
+## A nil `Git` means "do not commit, do not warn" (M2)
+- Instead of: always passing a `Git` and letting it decide.
+- Why: `commit_on_write` is true in the example config. Once M3 gives `Git` real behaviour, a non-repo vault gets a "not committed" warning on every write, which is right for the server but would make every "no warnings" assertion in the write tests depend on git state. Tests pass `nil`; `main` passes a real `Git`.
+- Cost: two ways to be "off" (a nil `Git` and `commit_on_write: false`).
+
+## Frontmatter values: who decides how they are written (M2)
+- Decided: `JSONToNode` gives each node the tag and style that make the encoder write it the way a person would; `ApplyPatch` only encodes.
+  - A string that is a valid `YYYY-MM-DD` is tagged `!!timestamp`, which makes the encoder leave it plain, so Obsidian still sees a date.
+  - A string that plain YAML would read as anything else is double-quoted: numbers, `true`/`null`, lists (`[[x]]`), maps, comments, empty, leading/trailing space, and `yes`/`no`/`on`/`off`. A lone `y` or `n` is left plain, since YAML 1.2 tools (Obsidian) read them as strings.
+  - A list of scalars is written in flow style (`[x, y]`); a list holding lists or objects, or a mapping, in block style. Tag lists follow the rule below.
+  - Multi-line strings are written as block scalars by the encoder.
+- Comments: a rewritten key keeps its line comment, with one space before it. The original spacing is not kept; untouched lines are byte-identical, so aligned comments on other keys survive.
+- Setting a key to the value it already has (compared by what it says, not how it is quoted) is a no-op: no write, no `updated`.
+- `updated` is replaced in place when present, appended otherwise, and left alone when the patch sets or unsets it.
+- Tags: comparison is on normalised tags, so adding a tag that is already there, or removing one that is not, changes nothing. A tag list a patch touches is written back normalised in the style it had: a block list stays a block list at its own indent, anything else (flow list, comma string, absent, null) becomes a flow list. Comments on individual tag items are lost when the list is rewritten. Removing the last tag gives `tags: []`.
+- Removing a tag the document does not have is reported by the writer as a warning; `ApplyPatch` itself has no warnings channel.
+- Cost: the quoting rule is ours, not the encoder's, and needs its own tests. Rewriting a tag list drops item comments.
+
+## Appending to a section: what "end of the section" and "blank line" mean (M2)
+- Rules: the insertion point is after the last non-blank line of the section, so blank lines before the next heading stay where they were. A blank line separates the new text from the old unless both the last old line and the first new line are list items. A section with nothing in it gets a blank line after its heading. The file's line ending (LF or CRLF) is used for everything inserted. Frontmatter is never searched, so a `## x` YAML comment cannot match.
+- Consequence: a file that is only frontmatter gets a blank line between the closing `---` and the new `## heading`.
+- Cost: list detection is a simple prefix test (`-`, `*`, `+`, `1.` or `1)`), so an indented continuation line counts as prose.
+
+## Replacing a document (M2)
+- Rules: the hash is checked first, then the new content. Content that is not valid frontmatter, or misses a required field of a configured type, is rejected. Content with no frontmatter, or no `type`, is accepted with a warning that the document will no longer appear in queries. A type that is not configured is accepted and only checked for valid YAML. Tag warnings cover only tags the new content adds compared with the old file.
+- Cost: an unconfigured type gets no required-field check, so a typo in `type` (for example `wek`) is accepted without a warning. `create_doc` is stricter because the type is an argument and must be configured. `update_frontmatter` skips the required-field check for a type that is not configured, for the same reason.
+
+## `create_doc`'s description names the configured types; the description test uses a neutral config (M2)
+- Instead of: a static description, or checking descriptions against the example config.
+- Why: PLAN.md wants the description generated from the config so the model never reads the config file, and also wants descriptions free of domain words. The example config's type names are domain words by design, so both cannot hold for the example vault. The Go code only ever adds words that come from the config; `TestDescriptionsAreDomainNeutral` therefore runs against a vault whose config uses neutral names, and a separate test checks that the description lists the example vault's types, patterns and required fields.
+- Cost: the neutrality check does not see what a real config puts into the description. That text is data the owner chose.
+
+## Tag checks stay quiet without a vocabulary (M2)
+- Instead of: warning about every tag when the tags file is missing or has no tags.
+- Why: with nothing to compare against there is no closest tag to name, and a warning that cannot help is noise.
+- Cost: a vocabulary file that exists but is empty turns the check off.
 
 ## Commit only when the vault is its git repo's root
 - Instead of: committing whenever the vault is anywhere inside a git work tree.
@@ -152,7 +196,7 @@ Each entry: the decision, what it replaced, why, and what it costs. Fill in as t
 ## Broken files are reported, not hidden
 - Instead of: silently skipping a file with invalid frontmatter, or failing the whole call.
 - Why: a typo in one file must not blind every query, and it must not vanish either. Such files are skipped from results and listed under `problems` in `list_docs` and in the `Problems` section of `get_context`. A file without frontmatter, or with frontmatter but no `type`, is skipped silently, because that is normal (`CLAUDE.md`, plain notes). An unparseable `date` and a second week document for the same week are also problems.
-- Frontmatter errors name the line in the file, not the line inside the YAML block, so a human can jump to it. Duplicate keys are rejected, because `yaml.v3` does not detect them when decoding into a `yaml.Node`.
+- Frontmatter errors name the line in the file, not the line inside the YAML block, so a human can jump to it. `yaml.v3`'s own line numbers are not used: it counts from 0 for parser errors (an unterminated `[`, `{`) and from 1 for scanner errors (a tab, `: :`), so its number is sometimes one too low. The line reported is instead the smallest `n` such that no prefix of `n` or more lines parses. That is the line that opens an unterminated value, and the line that contains a scanner error. A prefix that ends inside a legal multi-line value fails too but is followed by a valid one, so it is not mistaken for the error. The search is capped at 1000 parses for a huge block. Duplicate keys are rejected, because `yaml.v3` does not detect them when decoding into a `yaml.Node`.
 - Cost: the scan does a little extra work and the output can carry a `Problems` list the model must not ignore.
 
 ## Search matches bodies and the `title` field only
@@ -176,7 +220,7 @@ Each entry: the decision, what it replaced, why, and what it costs. Fill in as t
 
 ## Server clock
 - `vault.Vault.Now()` is the one clock. Production passes `time.Now`, tests pass a fixed day. `get_context` uses it only when the caller gives no `date`.
-- `server.New(v, cfg, version)` has no writer argument until M2 adds the write tools; PLAN.md section 3 shows the final signature.
+- `server.New(v, w, cfg, version)` takes the `*write.Writer` (M2). The writer has its own clock, injected the same way, and uses it for `created`, `updated` and the `{date}` default.
 
 ## What changed after using it for N weeks
 - ___

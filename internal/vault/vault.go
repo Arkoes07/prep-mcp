@@ -51,6 +51,9 @@ func Open(dir string, cfg *config.Config, now func() time.Time) (*Vault, error) 
 	return &Vault{dir: real, root: root, cfg: cfg, now: now}, nil
 }
 
+// Dir returns the vault's absolute directory, resolved through symlinks.
+func (v *Vault) Dir() string { return v.dir }
+
 // Now returns the vault's clock, which is the server clock in production.
 func (v *Vault) Now() time.Time { return v.now() }
 
