@@ -1,0 +1,33 @@
+# Build output (anchored so cmd/prep-mcp/ stays tracked)
+/prep-mcp
+/bin/
+/dist/
+*.exe
+*.test
+*.out
+
+# Coverage and profiling
+coverage.*
+*.coverprofile
+*.prof
+
+# Go workspace
+go.work
+go.work.sum
+
+# Local env and config overrides
+.env
+.env.*
+*.local.yaml
+
+# Real vaults live outside the repo; only examples/vault is tracked
+/vault/
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# Editors and OS
+.idea/
+.vscode/
+*.swp
+.DS_Store

@@ -1,0 +1,41 @@
+tags_file: tags.md
+commit_on_write: true
+author: "Claude <claude@local>"
+
+types:
+  story:
+    folder: stories
+    filename: "{slug}.md"
+    required: [title, tags, ownership]
+  session:
+    folder: sessions
+    filename: "{date}-{kind}-{slug}.md"
+    required: [kind, date]
+  improvement:
+    folder: improvements
+    filename: "{slug}.md"
+    required: [status, exit_criteria]
+  week:
+    folder: weeks
+    filename: "{isoweek}.md"
+    required: [week]
+  application:
+    folder: applications
+    filename: "{slug}.md"
+    required: [company, role, stage, status]
+  learning:
+    folder: learning
+    filename: "{slug}.md"
+    required: [title, track]
+  reference:
+    folder: reference
+    filename: "{slug}.md"
+    required: [title]
+
+context:
+  current_week_type: week
+  open_items:
+    - {type: improvement, where: {status: [open, improving]}}
+    - {type: application, where: {status: [active]}}
+  recent:
+    - {type: session, limit: 5}
