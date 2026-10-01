@@ -356,9 +356,9 @@ context:
 			name: "author_valid",
 			yaml: `author: "A B <a@b.c>"`,
 			check: func(t *testing.T, c *config.Config) {
-				name, email := c.AuthorIdent()
+				name, email, _ := config.ParseAuthor(c.Author)
 				if name != "A B" || email != "a@b.c" {
-					t.Errorf("AuthorIdent = %q, %q", name, email)
+					t.Errorf("ParseAuthor(%q) = %q, %q", c.Author, name, email)
 				}
 			},
 		},
@@ -366,9 +366,9 @@ context:
 			name: "author_default_ident",
 			yaml: ``,
 			check: func(t *testing.T, c *config.Config) {
-				name, email := c.AuthorIdent()
+				name, email, _ := config.ParseAuthor(c.Author)
 				if name != "Claude" || email != "claude@local" {
-					t.Errorf("AuthorIdent = %q, %q", name, email)
+					t.Errorf("ParseAuthor(%q) = %q, %q", c.Author, name, email)
 				}
 			},
 		},

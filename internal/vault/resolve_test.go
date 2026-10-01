@@ -70,7 +70,7 @@ func TestResolve(t *testing.T) {
 			name string
 			a    vault.Access
 			want outcome
-		}{{"read", vault.Read, tc.read}, {"write", vault.Write, tc.write}} {
+		}{{"read", vault.AccessRead, tc.read}, {"write", vault.AccessWrite, tc.write}} {
 			t.Run(mode.name+"/"+strings.ReplaceAll(tc.in, "/", "|"), func(t *testing.T) {
 				got, err := v.Resolve(tc.in, mode.a)
 				if mode.want.fail {
@@ -97,7 +97,7 @@ func TestResolve(t *testing.T) {
 // Resolve approves a path, the kernel-level os.Root refuses to leave the vault.
 func TestRootEnforced(t *testing.T) {
 	root, v := copyOpen(t)
-	if _, err := v.Resolve("weeks/new.md", vault.Write); err != nil {
+	if _, err := v.Resolve("weeks/new.md", vault.AccessWrite); err != nil {
 		t.Fatalf("Resolve before the swap: %v", err)
 	}
 
@@ -132,7 +132,7 @@ func TestOpenViaSymlinkedRoot(t *testing.T) {
 	mustSymlink(t, root, link)
 
 	v := openAt(t, link)
-	if _, err := v.Resolve("weeks/2026-w03.md", vault.Write); err != nil {
+	if _, err := v.Resolve("weeks/2026-w03.md", vault.AccessWrite); err != nil {
 		t.Errorf("Resolve through a symlinked root: %v", err)
 	}
 	if _, content, _, err := v.Read("CLAUDE.md"); err != nil || len(content) == 0 {

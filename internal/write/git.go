@@ -41,7 +41,7 @@ func (g *Git) Commit(ctx context.Context, dir, rel, msg string) (hash, warning s
 		return "", "not committed: " + fmt.Sprintf(format, args...)
 	}
 	// problem turns a failed git run into a warning, telling a timeout from other failures.
-	problem := func(what string, out string, err error) (string, string) {
+	problem := func(what, out string, err error) (string, string) {
 		switch {
 		case errors.Is(ctx.Err(), context.DeadlineExceeded):
 			return fail("git timed out after %s during %s (a hook or a prompt may be hanging). The file is saved; commit it yourself in %s", timeout, what, dir)

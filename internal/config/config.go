@@ -23,6 +23,7 @@ const (
 	DefaultQueryLimit = 20
 )
 
+// Config is a validated prep.config.yaml with its defaults applied.
 type Config struct {
 	TagsFile      string
 	CommitOnWrite bool
@@ -31,16 +32,20 @@ type Config struct {
 	Context       ContextSpec
 }
 
+// TypeSpec is one document type: where its files live, how they are named
+// and which frontmatter fields they must have.
 type TypeSpec struct {
 	Folder, Filename string
 	Required         []string
 }
 
+// ContextSpec says what get_context returns besides the working rules.
 type ContextSpec struct {
 	CurrentWeekType, CurrentWeekField string
 	OpenItems, Recent                 []Query
 }
 
+// Query is one configured get_context query. Limit is never 0 after Parse.
 type Query struct {
 	Type          string
 	Where         map[string][]string
@@ -321,13 +326,6 @@ func (c *Config) TypeList() string {
 // TypeNames returns the configured type names, sorted.
 func (c *Config) TypeNames() []string {
 	return slices.Sorted(maps.Keys(c.Types))
-}
-
-// AuthorIdent splits the author into name and email. Both are empty if the
-// author is malformed, which Validate rejects.
-func (c *Config) AuthorIdent() (name, email string) {
-	name, email, _ = ParseAuthor(c.Author)
-	return name, email
 }
 
 // ParseAuthor splits "Name <email>" into its parts. ok is false when a does

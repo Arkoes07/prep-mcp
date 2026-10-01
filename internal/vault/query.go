@@ -9,10 +9,14 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// Limits of a Filter.
 const (
 	DefaultListLimit = 50
 	MaxListLimit     = 500
+)
 
+// Orders a Filter can sort by. Every order breaks ties by path, ascending.
+const (
 	SortDateDesc = "date_desc"
 	SortDateAsc  = "date_asc"
 	SortTitle    = "title"

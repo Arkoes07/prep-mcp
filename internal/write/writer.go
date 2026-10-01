@@ -78,19 +78,19 @@ func (w *Writer) Create(ctx context.Context, typ string, fm *yaml.Node, body, sl
 	hasCreated := false
 	if fm != nil {
 		for i := 0; i+1 < len(fm.Content); i += 2 {
-			k, v := fm.Content[i], fm.Content[i+1]
-			switch k.Value {
+			key, val := fm.Content[i], fm.Content[i+1]
+			switch key.Value {
 			case "type":
-				if v.Kind != yaml.ScalarNode || v.Value != typ {
-					return nil, fmt.Errorf("frontmatter type %q conflicts with type %q; drop it from frontmatter or make them match", v.Value, typ)
+				if val.Kind != yaml.ScalarNode || val.Value != typ {
+					return nil, fmt.Errorf("frontmatter type %q conflicts with type %q; drop it from frontmatter or make them match", val.Value, typ)
 				}
 				continue
 			case "created":
 				hasCreated = true
 			case "tags":
-				v = tagsNode(vault.NormalizeTags(v))
+				val = tagsNode(vault.NormalizeTags(val))
 			}
-			doc.Content = append(doc.Content, k, v)
+			doc.Content = append(doc.Content, key, val)
 		}
 	}
 	if !hasCreated {
@@ -104,7 +104,7 @@ func (w *Writer) Create(ctx context.Context, typ string, fm *yaml.Node, body, sl
 	if err != nil {
 		return nil, err
 	}
-	rel, err := w.v.Resolve(path.Join(spec.Folder, name), vault.Write)
+	rel, err := w.v.Resolve(path.Join(spec.Folder, name), vault.AccessWrite)
 	if err != nil {
 		return nil, err
 	}
@@ -134,7 +134,7 @@ func (w *Writer) Create(ctx context.Context, typ string, fm *yaml.Node, body, sl
 func (w *Writer) AppendSection(ctx context.Context, p, heading, content string) (*Result, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	rel, err := w.v.Resolve(p, vault.Write)
+	rel, err := w.v.Resolve(p, vault.AccessWrite)
 	if err != nil {
 		return nil, err
 	}
@@ -148,7 +148,7 @@ func (w *Writer) AppendSection(ctx context.Context, p, heading, content string) 
 func (w *Writer) UpdateFrontmatter(ctx context.Context, p string, patch Patch) (*Result, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	rel, err := w.v.Resolve(p, vault.Write)
+	rel, err := w.v.Resolve(p, vault.AccessWrite)
 	if err != nil {
 		return nil, err
 	}
@@ -190,7 +190,7 @@ func (w *Writer) Replace(ctx context.Context, p, content, expectedHash string) (
 	if expected == "" {
 		return nil, errors.New("expected_hash is required; get it from read_doc")
 	}
-	rel, err := w.v.Resolve(p, vault.Write)
+	rel, err := w.v.Resolve(p, vault.AccessWrite)
 	if err != nil {
 		return nil, err
 	}

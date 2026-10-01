@@ -8,6 +8,7 @@ import (
 	"time"
 )
 
+// Limits of a Search.
 const (
 	DefaultSearchLimit = 20
 	MaxSearchLimit     = 500

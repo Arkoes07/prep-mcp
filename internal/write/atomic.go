@@ -45,11 +45,11 @@ func (w *Writer) replaceFile(rel string, data []byte, oldHash string) error {
 		return err
 	}
 	return w.finish(rel, tmp, func() error {
-		now, err := w.v.Root().ReadFile(rel)
+		current, err := w.v.Root().ReadFile(rel)
 		if err != nil {
 			return fmt.Errorf("cannot write %s: it disappeared while it was being edited (%w); re-read it and retry", rel, err)
 		}
-		if cur := vault.Hash(now); cur != oldHash {
+		if cur := vault.Hash(current); cur != oldHash {
 			return &ConflictError{Path: rel, Current: cur}
 		}
 		return nil

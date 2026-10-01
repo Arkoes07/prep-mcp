@@ -34,11 +34,11 @@ func Open(dir string, cfg *config.Config, now func() time.Time) (*Vault, error) 
 	if err != nil {
 		return nil, fmt.Errorf("vault root %q: %w", dir, err)
 	}
-	real, err := filepath.EvalSymlinks(abs)
+	resolved, err := filepath.EvalSymlinks(abs)
 	if err != nil {
 		return nil, fmt.Errorf("vault root %q: %w (check --root or PREP_ROOT)", dir, err)
 	}
-	root, err := os.OpenRoot(real)
+	root, err := os.OpenRoot(resolved)
 	if err != nil {
 		return nil, fmt.Errorf("vault root %q: %w (check --root or PREP_ROOT)", dir, err)
 	}
@@ -48,7 +48,7 @@ func Open(dir string, cfg *config.Config, now func() time.Time) (*Vault, error) 
 	if now == nil {
 		now = time.Now
 	}
-	return &Vault{dir: real, root: root, cfg: cfg, now: now}, nil
+	return &Vault{dir: resolved, root: root, cfg: cfg, now: now}, nil
 }
 
 // Dir returns the vault's absolute directory, resolved through symlinks.
@@ -63,9 +63,11 @@ func (v *Vault) Root() *os.Root { return v.root }
 // Access says what a path is about to be used for.
 type Access int
 
+// AccessRead is the zero value on purpose: a forgotten Access gets the rules
+// of a read, which never creates or changes a file.
 const (
-	Read Access = iota
-	Write
+	AccessRead Access = iota
+	AccessWrite
 )
 
 // PathError is a rejected path. Msg says what to do next.
@@ -106,7 +108,7 @@ func (v *Vault) Resolve(p string, a Access) (string, error) {
 	if !strings.EqualFold(path.Ext(clean), ".md") {
 		return fail("%q is not a markdown file (.md only); use list_docs to find documents", p)
 	}
-	if a == Write && strings.EqualFold(parts[0], "templates") {
+	if a == AccessWrite && strings.EqualFold(parts[0], "templates") {
 		return fail("templates/ is read-only; read %q with read_doc and create the new file with create_doc", p)
 	}
 
@@ -116,7 +118,7 @@ func (v *Vault) Resolve(p string, a Access) (string, error) {
 		last := i == len(parts)-1
 		fi, err := v.root.Lstat(prefix)
 		if errors.Is(err, fs.ErrNotExist) {
-			if a == Write {
+			if a == AccessWrite {
 				return clean, nil
 			}
 			return "", &PathError{Path: p, Msg: fmt.Sprintf("not found: %s (use list_docs or search_text)", clean)}
@@ -133,7 +135,7 @@ func (v *Vault) Resolve(p string, a Access) (string, error) {
 			if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 				return fail("%q is outside the vault: %s is a symlink that leaves it", p, prefix)
 			}
-			if a == Write {
+			if a == AccessWrite {
 				return fail("%s is a symlink; write to %s instead", prefix, filepath.ToSlash(rel))
 			}
 			continue
@@ -150,19 +152,19 @@ func (v *Vault) Resolve(p string, a Access) (string, error) {
 
 // Read returns a file's cleaned path, bytes and hash. Any .md file in the
 // vault can be read, including templates/, but not dot-folders.
-func (v *Vault) Read(p string) (path string, content []byte, hash string, err error) {
-	path, err = v.Resolve(p, Read)
+func (v *Vault) Read(p string) (rel string, content []byte, hash string, err error) {
+	rel, err = v.Resolve(p, AccessRead)
 	if err != nil {
 		return "", nil, "", err
 	}
-	content, err = v.root.ReadFile(path)
+	content, err = v.root.ReadFile(rel)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return "", nil, "", &PathError{Path: p, Msg: fmt.Sprintf("not found: %s (use list_docs or search_text)", path)}
+			return "", nil, "", &PathError{Path: p, Msg: fmt.Sprintf("not found: %s (use list_docs or search_text)", rel)}
 		}
-		return "", nil, "", fmt.Errorf("read %s: %w", path, err)
+		return "", nil, "", fmt.Errorf("read %s: %w", rel, err)
 	}
-	return path, content, Hash(content), nil
+	return rel, content, Hash(content), nil
 }
 
 // Hash is the lowercase hex sha256 of b. replace_doc compares it.
