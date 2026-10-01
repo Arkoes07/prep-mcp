@@ -2,6 +2,7 @@ package vault
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 )
@@ -10,6 +11,15 @@ import (
 func ISOWeek(t time.Time) string {
 	y, w := t.ISOWeek()
 	return fmt.Sprintf("%d-W%02d", y, w)
+}
+
+// timestampLayouts are the forms a date field may take when it carries a time of day.
+var timestampLayouts = []string{
+	time.RFC3339,
+	"2006-01-02T15:04:05",
+	time.DateTime,
+	"2006-01-02T15:04",
+	"2006-01-02 15:04",
 }
 
 // ParseDate parses YYYY-MM-DD, or a timestamp starting with one. It returns
@@ -28,14 +38,11 @@ func ParseDate(s string) (time.Time, error) {
 			return bad()
 		}
 		// The whole value must be a valid timestamp, but only its date counts.
-		ok := false
-		for _, layout := range []string{time.RFC3339, "2006-01-02T15:04:05", time.DateTime, "2006-01-02T15:04", "2006-01-02 15:04"} {
-			if _, err := time.Parse(layout, s); err == nil {
-				ok = true
-				break
-			}
-		}
-		if !ok {
+		valid := slices.ContainsFunc(timestampLayouts, func(layout string) bool {
+			_, err := time.Parse(layout, s)
+			return err == nil
+		})
+		if !valid {
 			return bad()
 		}
 		s = s[:10]

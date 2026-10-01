@@ -120,7 +120,11 @@ func (w *Writer) Create(ctx context.Context, typ string, fm *yaml.Node, body, sl
 	if err := w.createFile(rel, data); err != nil {
 		return nil, err
 	}
-	res := &Result{Path: rel, Hash: vault.Hash(data), Warnings: w.tagWarnings(vault.NormalizeTags(vault.Field(doc, "tags")))}
+	res := &Result{
+		Path:     rel,
+		Hash:     vault.Hash(data),
+		Warnings: w.tagWarnings(vault.NormalizeTags(vault.Field(doc, "tags"))),
+	}
 	w.commit(ctx, "create_doc", res)
 	return res, nil
 }
@@ -231,7 +235,11 @@ func (w *Writer) Replace(ctx context.Context, p, content, expectedHash string) (
 // changes between the read and the rename it starts over once from the new
 // content, so a human's save is not lost. A transform returning its input
 // unchanged means there is nothing to write.
-func (w *Writer) modify(ctx context.Context, tool, rel string, transform func(old []byte) ([]byte, []string, error)) (*Result, error) {
+func (w *Writer) modify(
+	ctx context.Context,
+	tool, rel string,
+	transform func(old []byte) (next []byte, warnings []string, err error),
+) (*Result, error) {
 	for range 2 {
 		old, err := w.readExisting(rel)
 		if err != nil {

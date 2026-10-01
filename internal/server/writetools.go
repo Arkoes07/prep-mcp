@@ -125,7 +125,11 @@ type createDocIn struct {
 	Slug        string         `json:"slug,omitempty" jsonschema:"Name for {slug} in the filename pattern. Defaults to the title field."`
 }
 
-func (h *handlers) createDoc(ctx context.Context, req *mcp.CallToolRequest, in createDocIn) (*mcp.CallToolResult, any, error) {
+func (h *handlers) createDoc(
+	ctx context.Context,
+	req *mcp.CallToolRequest,
+	in createDocIn,
+) (*mcp.CallToolResult, any, error) {
 	args, err := rawArgs(req, "frontmatter")
 	if err != nil {
 		return nil, nil, err
@@ -143,7 +147,11 @@ type appendSectionIn struct {
 	Content string `json:"content" jsonschema:"Markdown to add at the end of that section."`
 }
 
-func (h *handlers) appendSection(ctx context.Context, _ *mcp.CallToolRequest, in appendSectionIn) (*mcp.CallToolResult, any, error) {
+func (h *handlers) appendSection(
+	ctx context.Context,
+	_ *mcp.CallToolRequest,
+	in appendSectionIn,
+) (*mcp.CallToolResult, any, error) {
 	return writeResult(h.w.AppendSection(ctx, in.Path, in.Heading, in.Content))
 }
 
@@ -155,7 +163,11 @@ type updateFrontmatterIn struct {
 	RemoveTags []string       `json:"remove_tags,omitempty" jsonschema:"Tags to remove."`
 }
 
-func (h *handlers) updateFrontmatter(ctx context.Context, req *mcp.CallToolRequest, in updateFrontmatterIn) (*mcp.CallToolResult, any, error) {
+func (h *handlers) updateFrontmatter(
+	ctx context.Context,
+	req *mcp.CallToolRequest,
+	in updateFrontmatterIn,
+) (*mcp.CallToolResult, any, error) {
 	patch := write.Patch{Unset: in.Unset, AddTags: in.AddTags, RemoveTags: in.RemoveTags}
 	args, err := rawArgs(req, "set")
 	if err != nil {
@@ -175,6 +187,10 @@ type replaceDocIn struct {
 	ExpectedHash string `json:"expected_hash" jsonschema:"The hash read_doc returned for the version you based this on."`
 }
 
-func (h *handlers) replaceDoc(ctx context.Context, _ *mcp.CallToolRequest, in replaceDocIn) (*mcp.CallToolResult, any, error) {
+func (h *handlers) replaceDoc(
+	ctx context.Context,
+	_ *mcp.CallToolRequest,
+	in replaceDocIn,
+) (*mcp.CallToolResult, any, error) {
 	return writeResult(h.w.Replace(ctx, in.Path, in.Content, in.ExpectedHash))
 }

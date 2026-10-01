@@ -143,7 +143,7 @@ func mustContain(t testing.TB, err error, fragments ...string) {
 // lines are counted on '\n' so a CRLF file keeps its '\r'.
 func countLines(s, line string) int {
 	n := 0
-	for _, l := range strings.Split(s, "\n") {
+	for l := range strings.SplitSeq(s, "\n") {
 		if strings.TrimRight(l, " \r") == line {
 			n++
 		}

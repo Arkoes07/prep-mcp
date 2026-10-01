@@ -57,12 +57,15 @@ func (v *Vault) Scan() ([]*Doc, []Problem, error) {
 		}
 		src, err := v.root.ReadFile(p)
 		if err != nil {
-			problems = append(problems, Problem{p, fmt.Sprintf("cannot read: %v; check the file permissions", err)})
+			problems = append(problems, Problem{
+				Path: p,
+				Msg:  fmt.Sprintf("cannot read: %v; check the file permissions", err),
+			})
 			return nil
 		}
 		fm, err := SplitFrontmatter(src)
 		if err != nil {
-			problems = append(problems, Problem{p, err.Error()})
+			problems = append(problems, Problem{Path: p, Msg: err.Error()})
 			return nil
 		}
 		if fm == nil {
@@ -102,7 +105,11 @@ func (v *Vault) Scan() ([]*Doc, []Problem, error) {
 			if t, err := ParseDate(scalar(dn)); err == nil {
 				doc.Date, doc.DateFromMtime = t, false
 			} else {
-				problems = append(problems, Problem{p, fmt.Sprintf("line %d: date %q is not a date; use YYYY-MM-DD (using the file's modification time meanwhile)", dn.Line+1, scalar(dn))})
+				problems = append(problems, Problem{
+					Path: p,
+					Msg: fmt.Sprintf("line %d: date %q is not a date; use YYYY-MM-DD (using the file's modification time meanwhile)",
+						dn.Line+1, scalar(dn)),
+				})
 			}
 		}
 		docs = append(docs, doc)

@@ -69,7 +69,7 @@ func readWords(t *testing.T, path string) []string {
 		t.Fatalf("read word list: %v", err)
 	}
 	var words []string
-	for _, line := range strings.Split(string(b), "\n") {
+	for line := range strings.SplitSeq(string(b), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue

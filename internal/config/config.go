@@ -134,7 +134,12 @@ func Parse(data []byte) (*Config, error) {
 func convertQueries(in []rawQuery) []Query {
 	out := make([]Query, len(in))
 	for i, q := range in {
-		out[i] = Query{Type: q.Type, Tags: q.Tags, AnyTags: q.AnyTags, Limit: DefaultQueryLimit}
+		out[i] = Query{
+			Type:    q.Type,
+			Tags:    q.Tags,
+			AnyTags: q.AnyTags,
+			Limit:   DefaultQueryLimit,
+		}
 		if q.Limit != nil && *q.Limit != 0 {
 			out[i].Limit = *q.Limit
 		}
@@ -200,24 +205,32 @@ func (c *Config) Validate() error {
 		t, ok := c.Types[ctx.CurrentWeekType]
 		switch {
 		case !ok:
-			add("context.current_week_type %q is not a defined type; defined types: %s", ctx.CurrentWeekType, c.TypeList())
+			add("context.current_week_type %q is not a defined type; defined types: %s",
+				ctx.CurrentWeekType, c.TypeList())
 		case ctx.CurrentWeekField == "":
-			add("context.current_week_type is set; set context.current_week_field to the field that holds the week (for example week)")
+			add("context.current_week_type is set; " +
+				"set context.current_week_field to the field that holds the week (for example week)")
 		case !slices.Contains(t.Required, ctx.CurrentWeekField):
-			add("type %s: add %s to required (context.current_week_field uses it)", ctx.CurrentWeekType, ctx.CurrentWeekField)
+			add("type %s: add %s to required (context.current_week_field uses it)",
+				ctx.CurrentWeekType, ctx.CurrentWeekField)
 		}
 	}
 
 	for _, group := range []struct {
 		name string
 		qs   []Query
-	}{{"open_items", ctx.OpenItems}, {"recent", ctx.Recent}} {
+	}{
+		{name: "open_items", qs: ctx.OpenItems},
+		{name: "recent", qs: ctx.Recent},
+	} {
 		for i, q := range group.qs {
 			if _, ok := c.Types[q.Type]; !ok {
-				add("context.%s[%d]: type %q is not a defined type; defined types: %s", group.name, i, q.Type, c.TypeList())
+				add("context.%s[%d]: type %q is not a defined type; defined types: %s",
+					group.name, i, q.Type, c.TypeList())
 			}
 			if q.Limit < 0 {
-				add("context.%s[%d]: limit must be positive (or leave it out for the default %d)", group.name, i, DefaultQueryLimit)
+				add("context.%s[%d]: limit must be positive (or leave it out for the default %d)",
+					group.name, i, DefaultQueryLimit)
 			}
 		}
 	}
@@ -232,10 +245,8 @@ func checkRelPath(p string) error {
 	case strings.HasPrefix(p, "/"):
 		return errors.New("must be relative to the vault root")
 	}
-	for _, part := range strings.Split(path.Clean(p), "/") {
-		if part == ".." {
-			return errors.New("must stay inside the vault")
-		}
+	if slices.Contains(strings.Split(path.Clean(p), "/"), "..") {
+		return errors.New("must stay inside the vault")
 	}
 	return nil
 }

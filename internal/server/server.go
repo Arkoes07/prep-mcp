@@ -26,7 +26,10 @@ const instructions = "Call get_context first: it returns the vault's working rul
 
 // New builds the server with the read and write tools registered.
 func New(v *vault.Vault, w *write.Writer, cfg *config.Config, version string) *mcp.Server {
-	s := mcp.NewServer(&mcp.Implementation{Name: "prep-mcp", Version: version}, &mcp.ServerOptions{Instructions: instructions})
+	s := mcp.NewServer(
+		&mcp.Implementation{Name: "prep-mcp", Version: version},
+		&mcp.ServerOptions{Instructions: instructions},
+	)
 	h := &handlers{v: v, w: w, cfg: cfg}
 	readOnly := &mcp.ToolAnnotations{ReadOnlyHint: true}
 
@@ -126,7 +129,11 @@ type getContextIn struct {
 	Date string `json:"date,omitempty" jsonschema:"Day to build the bundle for, YYYY-MM-DD. Defaults to today."`
 }
 
-func (h *handlers) getContext(_ context.Context, _ *mcp.CallToolRequest, in getContextIn) (*mcp.CallToolResult, any, error) {
+func (h *handlers) getContext(
+	_ context.Context,
+	_ *mcp.CallToolRequest,
+	in getContextIn,
+) (*mcp.CallToolResult, any, error) {
 	day, err := parseDay("date", in.Date)
 	if err != nil {
 		return nil, nil, err
@@ -174,12 +181,16 @@ type problemOut struct {
 func problemsOut(ps []vault.Problem) []problemOut {
 	var out []problemOut
 	for _, p := range ps {
-		out = append(out, problemOut{p.Path, p.Msg})
+		out = append(out, problemOut{Path: p.Path, Msg: p.Msg})
 	}
 	return out
 }
 
-func (h *handlers) listDocs(_ context.Context, _ *mcp.CallToolRequest, in listDocsIn) (*mcp.CallToolResult, any, error) {
+func (h *handlers) listDocs(
+	_ context.Context,
+	_ *mcp.CallToolRequest,
+	in listDocsIn,
+) (*mcp.CallToolResult, any, error) {
 	f := vault.Filter{Type: in.Type, Tags: in.Tags, AnyTags: in.AnyTags, Sort: in.Sort, Limit: in.Limit}
 	var err error
 	if f.Since, err = parseDay("since", in.Since); err != nil {
@@ -208,8 +219,16 @@ func (h *handlers) listDocs(_ context.Context, _ *mcp.CallToolRequest, in listDo
 		Problems []problemOut `json:"problems,omitempty"`
 	}{Docs: []docMeta{}, Count: len(docs), Problems: problemsOut(problems)}
 	for _, d := range docs {
-		m := docMeta{Path: d.Path, Type: d.Type, Title: d.Title, Tags: append([]string{}, d.Tags...), Updated: d.Text("updated"),
-			Kind: d.Text("kind"), Stage: d.Text("stage"), Status: d.Text("status")}
+		m := docMeta{
+			Path:    d.Path,
+			Type:    d.Type,
+			Title:   d.Title,
+			Tags:    append([]string{}, d.Tags...),
+			Updated: d.Text("updated"),
+			Kind:    d.Text("kind"),
+			Stage:   d.Text("stage"),
+			Status:  d.Text("status"),
+		}
 		if d.DateFromMtime {
 			m.Modified = d.Date.Format(time.DateOnly)
 		} else {
@@ -273,7 +292,11 @@ type searchTextIn struct {
 	Limit int    `json:"limit,omitempty" jsonschema:"Maximum documents. Default 20."`
 }
 
-func (h *handlers) searchText(_ context.Context, _ *mcp.CallToolRequest, in searchTextIn) (*mcp.CallToolResult, any, error) {
+func (h *handlers) searchText(
+	_ context.Context,
+	_ *mcp.CallToolRequest,
+	in searchTextIn,
+) (*mcp.CallToolResult, any, error) {
 	hits, err := h.v.Search(in.Query, in.Type, in.Limit)
 	if err != nil {
 		return nil, nil, err
@@ -295,7 +318,7 @@ func (h *handlers) searchText(_ context.Context, _ *mcp.CallToolRequest, in sear
 	for _, hit := range hits {
 		ho := hitOut{Path: hit.Path, Title: hit.Title, Total: hit.Total, Lines: []lineOut{}}
 		for _, l := range hit.Lines {
-			ho.Lines = append(ho.Lines, lineOut{l.N, l.Text})
+			ho.Lines = append(ho.Lines, lineOut{N: l.N, Text: l.Text})
 		}
 		out.Hits = append(out.Hits, ho)
 	}
@@ -306,7 +329,11 @@ type listTagsIn struct {
 	Prefix string `json:"prefix,omitempty" jsonschema:"Only tags starting with this, for example issue/."`
 }
 
-func (h *handlers) listTags(_ context.Context, _ *mcp.CallToolRequest, in listTagsIn) (*mcp.CallToolResult, any, error) {
+func (h *handlers) listTags(
+	_ context.Context,
+	_ *mcp.CallToolRequest,
+	in listTagsIn,
+) (*mcp.CallToolResult, any, error) {
 	stats, err := h.v.TagStats(in.Prefix, nil)
 	if err != nil {
 		return nil, nil, err
@@ -322,7 +349,12 @@ func (h *handlers) listTags(_ context.Context, _ *mcp.CallToolRequest, in listTa
 		Count int      `json:"count"`
 	}{Tags: []tagOut{}, Count: len(stats)}
 	for _, s := range stats {
-		out.Tags = append(out.Tags, tagOut{s.Tag, s.Count, s.Last.Format(time.DateOnly), s.Unknown})
+		out.Tags = append(out.Tags, tagOut{
+			Tag:     s.Tag,
+			Count:   s.Count,
+			Last:    s.Last.Format(time.DateOnly),
+			Unknown: s.Unknown,
+		})
 	}
 	return jsonResult(out)
 }

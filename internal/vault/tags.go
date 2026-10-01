@@ -31,7 +31,7 @@ func NormalizeTags(n *yaml.Node) []string {
 		if strings.HasPrefix(s, "[") && strings.HasSuffix(s, "]") {
 			s = s[1 : len(s)-1]
 		}
-		for _, part := range strings.Split(s, ",") {
+		for part := range strings.SplitSeq(s, ",") {
 			raw = append(raw, strings.Trim(strings.TrimSpace(part), `"'`))
 		}
 	case yaml.SequenceNode:

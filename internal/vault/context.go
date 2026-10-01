@@ -51,8 +51,8 @@ func (v *Vault) Context(day time.Time) (string, error) {
 		qs     []config.Query
 		recent bool
 	}{
-		{"Open items", v.cfg.Context.OpenItems, false},
-		{"Recent", v.cfg.Context.Recent, true},
+		{name: "Open items", qs: v.cfg.Context.OpenItems},
+		{name: "Recent", qs: v.cfg.Context.Recent, recent: true},
 	} {
 		if len(group.qs) == 0 {
 			continue
@@ -109,12 +109,23 @@ func (v *Vault) weekSection(docs []*Doc, day time.Time) (string, []Problem) {
 		}
 	}
 	if len(found) == 0 {
-		return section(title, fmt.Sprintf("no week doc for %s (create_doc type=%s with %s: %s)\n", week, cs.CurrentWeekType, cs.CurrentWeekField, week)), nil
+		missing := fmt.Sprintf(
+			"no week doc for %s (create_doc type=%s with %s: %s)\n",
+			week,
+			cs.CurrentWeekType,
+			cs.CurrentWeekField,
+			week,
+		)
+		return section(title, missing), nil
 	}
 
 	var problems []Problem
 	for _, extra := range found[1:] {
-		problems = append(problems, Problem{extra.Path, fmt.Sprintf("has the same %s (%s) as %s, which is the one used; change or remove one of them", cs.CurrentWeekField, week, found[0].Path)})
+		problems = append(problems, Problem{
+			Path: extra.Path,
+			Msg: fmt.Sprintf("has the same %s (%s) as %s, which is the one used; change or remove one of them",
+				cs.CurrentWeekField, week, found[0].Path),
+		})
 	}
 	doc := found[0]
 	body := fmt.Sprintf("path: %s\nhash: %s\n\n%s", doc.Path, Hash(doc.src), doc.src)
@@ -123,7 +134,13 @@ func (v *Vault) weekSection(docs []*Doc, day time.Time) (string, []Problem) {
 
 // queryBlock renders one configured query: a label line and one line per document.
 func queryBlock(docs []*Doc, q config.Query, recent bool) (string, error) {
-	got, err := Apply(docs, Filter{Type: q.Type, Tags: q.Tags, AnyTags: q.AnyTags, Where: q.Where, Limit: q.Limit})
+	got, err := Apply(docs, Filter{
+		Type:    q.Type,
+		Tags:    q.Tags,
+		AnyTags: q.AnyTags,
+		Where:   q.Where,
+		Limit:   q.Limit,
+	})
 	if err != nil {
 		return "", err
 	}
@@ -146,12 +163,14 @@ func queryBlock(docs []*Doc, q config.Query, recent bool) (string, error) {
 	}
 
 	var b strings.Builder
-	b.WriteString(label + ":\n")
+	b.WriteString(label)
+	b.WriteString(":\n")
 	if len(got) == 0 {
 		b.WriteString("(none)\n")
 	}
 	for _, d := range got {
-		b.WriteString(metaLine(d) + "\n")
+		b.WriteString(metaLine(d))
+		b.WriteByte('\n')
 	}
 	return b.String(), nil
 }

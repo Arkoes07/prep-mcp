@@ -117,7 +117,7 @@ func TestDescriptionsAreDomainNeutral(t *testing.T) {
 		t.Fatal(err)
 	}
 	var words []string
-	for _, line := range strings.Split(string(b), "\n") {
+	for line := range strings.SplitSeq(string(b), "\n") {
 		if line = strings.TrimSpace(line); line != "" && !strings.HasPrefix(line, "#") {
 			words = append(words, regexp.QuoteMeta(line))
 		}

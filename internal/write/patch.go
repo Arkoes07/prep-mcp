@@ -142,7 +142,8 @@ func ApplyPatch(src []byte, p Patch, today string) (out []byte, changed bool, er
 	var block strings.Builder
 	emit := func(rendered []string) {
 		for _, l := range rendered {
-			block.WriteString(l + eol)
+			block.WriteString(l)
+			block.WriteString(eol)
 		}
 	}
 	byStart := map[int]string{}
@@ -208,7 +209,7 @@ func keySpans(m *yaml.Node, lines []string) map[string]span {
 			}
 			break
 		}
-		spans[key.Value] = span{key, val, from, to}
+		spans[key.Value] = span{key: key, val: val, from: from, to: to}
 	}
 	return spans
 }
@@ -240,7 +241,8 @@ func renderKey(k string, v *yaml.Node, comment string) []string {
 // renderTags writes a normalised tag list in the style of the existing node:
 // block if it was a block list, flow otherwise (also for a comma string).
 func renderTags(existing *yaml.Node, tags []string, comment string) []string {
-	if existing != nil && existing.Kind == yaml.SequenceNode && existing.Style&yaml.FlowStyle == 0 && len(existing.Content) > 0 && len(tags) > 0 {
+	isBlockList := existing != nil && existing.Kind == yaml.SequenceNode && existing.Style&yaml.FlowStyle == 0
+	if isBlockList && len(existing.Content) > 0 && len(tags) > 0 {
 		indent := strings.Repeat(" ", max(existing.Column-1, 0))
 		head := "tags:"
 		if comment != "" {

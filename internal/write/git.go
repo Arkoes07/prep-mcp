@@ -81,8 +81,10 @@ func (g *Git) Commit(ctx context.Context, dir, rel, msg string) (hash, warning s
 		}
 		return problem("git rev-parse", top, err)
 	}
-	if !samePath(dir, strings.TrimSpace(top)) {
-		return fail("%s is inside the git repository at %s but is not its root, so nothing is committed there. Run `git init` in %s to make the vault its own repository, or set commit_on_write: false", dir, strings.TrimSpace(top), dir)
+	if top = strings.TrimSpace(top); !samePath(dir, top) {
+		return fail("%s is inside the git repository at %s but is not its root, so nothing is committed there. "+
+			"Run `git init` in %s to make the vault its own repository, or set commit_on_write: false",
+			dir, top, dir)
 	}
 
 	if out, err := r.run(ctx, "add", "--", rel); err != nil {
@@ -127,7 +129,7 @@ func (r runner) run(ctx context.Context, args ...string) (string, error) {
 // describe renders git's output and error on one line, trimmed to a sane length.
 func describe(out string, err error) string {
 	var lines []string
-	for _, l := range strings.Split(out, "\n") {
+	for l := range strings.SplitSeq(out, "\n") {
 		if l = strings.TrimSpace(l); l != "" {
 			lines = append(lines, l)
 		}

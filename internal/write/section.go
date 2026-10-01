@@ -53,7 +53,7 @@ func InsertSection(src []byte, heading, content string) ([]byte, error) {
 		if i := strings.IndexByte(text[pos:], '\n'); i >= 0 {
 			end = pos + i + 1
 		}
-		lines = append(lines, line{strings.TrimRight(text[pos:end], "\r\n"), pos, end})
+		lines = append(lines, line{text: strings.TrimRight(text[pos:end], "\r\n"), begin: pos, end: end})
 		pos = end
 	}
 
@@ -83,7 +83,9 @@ func InsertSection(src []byte, heading, content string) ([]byte, error) {
 				b.WriteString(eol)
 			}
 		}
-		b.WriteString("## " + heading + eol + eol + block)
+		for _, part := range []string{"## ", heading, eol, eol, block} {
+			b.WriteString(part)
+		}
 		return []byte(text + b.String()), nil
 	}
 
@@ -115,8 +117,10 @@ func InsertSection(src []byte, heading, content string) ([]byte, error) {
 	if !strings.HasSuffix(text[:at], "\n") { // the section's last line ends the file without a newline
 		b.WriteString(eol)
 	}
-	firstNew := strings.SplitN(content, "\n", 2)[0]
-	if last == match || !(listItemRE.MatchString(lines[last].text) && listItemRE.MatchString(firstNew)) {
+	firstNew, _, _ := strings.Cut(content, "\n")
+	sectionIsEmpty := last == match
+	continuesList := listItemRE.MatchString(lines[last].text) && listItemRE.MatchString(firstNew)
+	if sectionIsEmpty || !continuesList {
 		b.WriteString(eol)
 	}
 	b.WriteString(block)
