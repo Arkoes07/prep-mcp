@@ -133,8 +133,8 @@ func parseDoc(p string, d fs.DirEntry, src []byte) (*Doc, []Problem) {
 		Date:          info.ModTime(),
 		DateFromMtime: true,
 	}
-	for i := 0; i+1 < len(fm.Map.Content); i += 2 {
-		doc.Fields[fm.Map.Content[i].Value] = fm.Map.Content[i+1]
+	for k, val := range Pairs(fm.Map) {
+		doc.Fields[k.Value] = val
 	}
 	if tn := Field(fm.Map, "title"); tn != nil {
 		if t := strings.TrimSpace(scalar(tn)); t != "" {

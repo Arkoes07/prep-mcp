@@ -143,8 +143,8 @@ func squeezeComments(s string) string { return spacesBeforeHash.ReplaceAllString
 func TestJSONToNode(t *testing.T) {
 	keys := func(n *yaml.Node) []string {
 		var out []string
-		for i := 0; i+1 < len(n.Content); i += 2 {
-			out = append(out, n.Content[i].Value)
+		for k := range vault.Pairs(n) {
+			out = append(out, k.Value)
 		}
 		return out
 	}

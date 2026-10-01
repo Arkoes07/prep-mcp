@@ -43,13 +43,9 @@ func paths(docs []*vault.Doc) []string {
 
 // mapValue returns the scalar value of key in a mapping node, and whether it exists.
 func mapValue(n *yaml.Node, key string) (string, bool) {
-	if n == nil || n.Kind != yaml.MappingNode {
+	val := vault.Field(n, key)
+	if val == nil {
 		return "", false
 	}
-	for i := 0; i+1 < len(n.Content); i += 2 {
-		if n.Content[i].Value == key {
-			return n.Content[i+1].Value, true
-		}
-	}
-	return "", false
+	return val.Value, true
 }

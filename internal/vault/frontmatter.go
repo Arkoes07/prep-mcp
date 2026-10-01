@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"iter"
 	"regexp"
 	"strings"
 
@@ -88,8 +89,7 @@ func parseBlock(src []byte, fm *Frontmatter) (*Frontmatter, error) {
 		fm.Map = doc.Content[0]
 	}
 	seen := map[string]bool{}
-	for i := 0; i+1 < len(fm.Map.Content); i += 2 {
-		k := fm.Map.Content[i]
+	for k := range Pairs(fm.Map) {
 		if seen[k.Value] {
 			return nil, fmt.Errorf("invalid frontmatter: duplicate key %q at line %d; remove one of them", k.Value, k.Line+lineShift)
 		}
@@ -126,14 +126,26 @@ func badLine(block []byte) int {
 	return max(n, 1)
 }
 
+// Pairs yields the key and value nodes of a mapping node, in order. It yields
+// nothing for nil or for a node that is not a mapping.
+func Pairs(m *yaml.Node) iter.Seq2[*yaml.Node, *yaml.Node] {
+	return func(yield func(key, val *yaml.Node) bool) {
+		if m == nil || m.Kind != yaml.MappingNode {
+			return
+		}
+		for i := 0; i+1 < len(m.Content); i += 2 {
+			if !yield(m.Content[i], m.Content[i+1]) {
+				return
+			}
+		}
+	}
+}
+
 // Field returns the value node of key in a mapping node, or nil.
 func Field(m *yaml.Node, key string) *yaml.Node {
-	if m == nil || m.Kind != yaml.MappingNode {
-		return nil
-	}
-	for i := 0; i+1 < len(m.Content); i += 2 {
-		if m.Content[i].Value == key {
-			return m.Content[i+1]
+	for k, val := range Pairs(m) {
+		if k.Value == key {
+			return val
 		}
 	}
 	return nil

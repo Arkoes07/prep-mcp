@@ -143,12 +143,8 @@ func (pl *patchPlan) unsetKeys() {
 // setValues writes every set key whose value differs, except tags, which
 // changeTags handles.
 func (pl *patchPlan) setValues() {
-	set := pl.patch.Set
-	if set == nil {
-		return
-	}
-	for i := 0; i+1 < len(set.Content); i += 2 {
-		k, val := set.Content[i].Value, set.Content[i+1]
+	for key, val := range vault.Pairs(pl.patch.Set) {
+		k := key.Value
 		if k == "tags" {
 			continue
 		}
@@ -234,9 +230,9 @@ func setKeyList(set *yaml.Node) ([]string, error) {
 	if set.Kind != yaml.MappingNode {
 		return nil, errors.New("set must be an object of key: value pairs")
 	}
-	var keys []string
-	for i := 0; i+1 < len(set.Content); i += 2 {
-		keys = append(keys, set.Content[i].Value)
+	keys := make([]string, 0, len(set.Content)/2)
+	for k := range vault.Pairs(set) {
+		keys = append(keys, k.Value)
 	}
 	return keys, nil
 }
@@ -391,18 +387,18 @@ func verifyPatch(src, out []byte, old *vault.Frontmatter, pl *patchPlan) error {
 		return bug("the body changed")
 	}
 	var oldOrder, newOrder []string
-	for i := 0; i+1 < len(old.Map.Content); i += 2 {
-		k := old.Map.Content[i].Value
+	for key, val := range vault.Pairs(old.Map) {
+		k := key.Value
 		if touched[k] {
 			continue
 		}
 		oldOrder = append(oldOrder, k)
-		if !nodeEqual(old.Map.Content[i+1], vault.Field(re.Map, k)) {
+		if !nodeEqual(val, vault.Field(re.Map, k)) {
 			return bug("%s changed", k)
 		}
 	}
-	for i := 0; i+1 < len(re.Map.Content); i += 2 {
-		if k := re.Map.Content[i].Value; !touched[k] && slices.Contains(oldOrder, k) {
+	for key := range vault.Pairs(re.Map) {
+		if k := key.Value; !touched[k] && slices.Contains(oldOrder, k) {
 			newOrder = append(newOrder, k)
 		}
 	}

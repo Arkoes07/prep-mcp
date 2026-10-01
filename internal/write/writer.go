@@ -124,22 +124,19 @@ func newFrontmatter(typ string, fm *yaml.Node, today string) (*yaml.Node, error)
 	}
 	doc := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map", Content: []*yaml.Node{keyNode("type"), strNode(typ)}}
 	hasCreated := false
-	if fm != nil {
-		for i := 0; i+1 < len(fm.Content); i += 2 {
-			key, val := fm.Content[i], fm.Content[i+1]
-			switch key.Value {
-			case "type":
-				if val.Kind != yaml.ScalarNode || val.Value != typ {
-					return nil, fmt.Errorf("frontmatter type %q conflicts with type %q; drop it from frontmatter or make them match", val.Value, typ)
-				}
-				continue
-			case "created":
-				hasCreated = true
-			case "tags":
-				val = tagsNode(vault.NormalizeTags(val))
+	for key, val := range vault.Pairs(fm) {
+		switch key.Value {
+		case "type":
+			if val.Kind != yaml.ScalarNode || val.Value != typ {
+				return nil, fmt.Errorf("frontmatter type %q conflicts with type %q; drop it from frontmatter or make them match", val.Value, typ)
 			}
-			doc.Content = append(doc.Content, key, val)
+			continue
+		case "created":
+			hasCreated = true
+		case "tags":
+			val = tagsNode(vault.NormalizeTags(val))
 		}
+		doc.Content = append(doc.Content, key, val)
 	}
 	if !hasCreated {
 		doc.Content = append(doc.Content, keyNode("created"), strNode(today))
