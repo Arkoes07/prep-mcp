@@ -200,7 +200,7 @@ func (c *Config) Validate() error {
 		t, ok := c.Types[ctx.CurrentWeekType]
 		switch {
 		case !ok:
-			add("context.current_week_type %q is not a defined type; defined types: %s", ctx.CurrentWeekType, typeList(c))
+			add("context.current_week_type %q is not a defined type; defined types: %s", ctx.CurrentWeekType, c.TypeList())
 		case ctx.CurrentWeekField == "":
 			add("context.current_week_type is set; set context.current_week_field to the field that holds the week (for example week)")
 		case !slices.Contains(t.Required, ctx.CurrentWeekField):
@@ -214,7 +214,7 @@ func (c *Config) Validate() error {
 	}{{"open_items", ctx.OpenItems}, {"recent", ctx.Recent}} {
 		for i, q := range group.qs {
 			if _, ok := c.Types[q.Type]; !ok {
-				add("context.%s[%d]: type %q is not a defined type; defined types: %s", group.name, i, q.Type, typeList(c))
+				add("context.%s[%d]: type %q is not a defined type; defined types: %s", group.name, i, q.Type, c.TypeList())
 			}
 			if q.Limit < 0 {
 				add("context.%s[%d]: limit must be positive (or leave it out for the default %d)", group.name, i, DefaultQueryLimit)
@@ -222,13 +222,6 @@ func (c *Config) Validate() error {
 		}
 	}
 	return errors.Join(errs...)
-}
-
-func typeList(c *Config) string {
-	if len(c.Types) == 0 {
-		return "none (add a types: section)"
-	}
-	return strings.Join(c.TypeNames(), ", ")
 }
 
 // checkRelPath accepts a clean, relative, slash-separated path that stays inside the vault.
@@ -303,6 +296,15 @@ func checkFilename(name string, t TypeSpec) []error {
 func (c *Config) Type(name string) (TypeSpec, bool) {
 	t, ok := c.Types[name]
 	return t, ok
+}
+
+// TypeList is the configured type names, sorted and comma-separated, or a
+// hint to add a types: section when there are none. Error messages use it.
+func (c *Config) TypeList() string {
+	if len(c.Types) == 0 {
+		return "none (add a types: section to prep.config.yaml and restart the server)"
+	}
+	return strings.Join(c.TypeNames(), ", ")
 }
 
 // TypeNames returns the configured type names, sorted.

@@ -219,17 +219,10 @@ func (h *handlers) listDocs(_ context.Context, _ *mcp.CallToolRequest, in listDo
 	}
 	if in.Type != "" {
 		if _, ok := h.cfg.Type(in.Type); !ok && len(docs) == 0 {
-			out.Note = fmt.Sprintf("type %q is not configured; configured types: %s", in.Type, typeNames(h.cfg))
+			out.Note = fmt.Sprintf("type %q is not configured; configured types: %s", in.Type, h.cfg.TypeList())
 		}
 	}
 	return jsonResult(out)
-}
-
-func typeNames(cfg *config.Config) string {
-	if names := cfg.TypeNames(); len(names) > 0 {
-		return strings.Join(names, ", ")
-	}
-	return "none"
 }
 
 // whereValues turns a JSON scalar or list of scalars into the texts to compare.

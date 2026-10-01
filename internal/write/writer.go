@@ -70,7 +70,7 @@ func (w *Writer) Create(ctx context.Context, typ string, fm *yaml.Node, body, sl
 
 	spec, ok := w.cfg.Type(typ)
 	if !ok {
-		return nil, w.unknownType(typ)
+		return nil, fmt.Errorf("unknown type %q; configured types: %s", typ, w.cfg.TypeList())
 	}
 	if fm != nil && fm.Kind != yaml.MappingNode {
 		return nil, errors.New("frontmatter must be an object of key: value pairs")
@@ -286,14 +286,6 @@ func (w *Writer) commit(ctx context.Context, tool string, res *Result) {
 	if warning != "" {
 		res.Warnings = append(res.Warnings, warning)
 	}
-}
-
-func (w *Writer) unknownType(typ string) error {
-	names := w.cfg.TypeNames()
-	if len(names) == 0 {
-		return fmt.Errorf("unknown type %q: this vault has no types configured; add a types: section to prep.config.yaml and restart the server", typ)
-	}
-	return fmt.Errorf("unknown type %q; configured types: %s", typ, strings.Join(names, ", "))
 }
 
 // tagWarnings names the closest known tag for each added tag that is not in
