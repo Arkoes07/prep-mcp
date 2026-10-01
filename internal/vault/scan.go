@@ -150,7 +150,8 @@ func parseDoc(p string, d fs.DirEntry, src []byte) (*Doc, []Problem) {
 	if err != nil {
 		return doc, []Problem{{
 			Path: p,
-			Msg: fmt.Sprintf("line %d: date %q is not a date; use YYYY-MM-DD (using the file's modification time meanwhile)",
+			Msg: fmt.Sprintf("line %d: date %q is not a date; "+
+				"use YYYY-MM-DD (using the file's modification time meanwhile)",
 				dn.Line+1, scalar(dn)),
 		}}
 	}

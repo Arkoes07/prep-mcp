@@ -134,7 +134,8 @@ func (v *Vault) Resolve(p string, a Access) (string, error) {
 		if fi.Mode()&fs.ModeSymlink != 0 {
 			target, err := filepath.EvalSymlinks(filepath.Join(v.dir, filepath.FromSlash(prefix)))
 			if err != nil {
-				msg := fmt.Sprintf("%q goes through a broken symlink (%s); remove the link or fix its target", p, prefix)
+				msg := fmt.Sprintf("%q goes through a broken symlink (%s); remove the link or fix its target",
+					p, prefix)
 				return "", &PathError{Path: p, Msg: msg, Err: err}
 			}
 			rel, err := filepath.Rel(v.dir, target)

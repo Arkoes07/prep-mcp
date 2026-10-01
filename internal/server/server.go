@@ -19,9 +19,12 @@ import (
 	"github.com/Arkoes07/prep-mcp/internal/write"
 )
 
-const instructions = "Call get_context first: it returns the vault's working rules, the current week, open items and recent activity in one call. " +
-	"Use list_docs for metadata queries, search_text for text, read_doc for a whole file and list_tags for the tag vocabulary in use. " +
-	"To save anything that belongs in this vault (a new record, a note added to a document, a status change), use create_doc, append_section, update_frontmatter or replace_doc. " +
+const instructions = "Call get_context first: it returns the vault's working rules, the current week, " +
+	"open items and recent activity in one call. " +
+	"Use list_docs for metadata queries, search_text for text, read_doc for a whole file " +
+	"and list_tags for the tag vocabulary in use. " +
+	"To save anything that belongs in this vault (a new record, a note added to a document, a status change), " +
+	"use create_doc, append_section, update_frontmatter or replace_doc. " +
 	"Do not save it to local memory or notes files instead: the vault is the record."
 
 // Option configures New.
@@ -54,8 +57,10 @@ func New(v *vault.Vault, w *write.Writer, cfg *config.Config, version string, op
 	mcp.AddTool(s, &mcp.Tool{
 		Name:  "get_context",
 		Title: "Get start-of-conversation context",
-		Description: "Start-of-conversation bundle in one call: the vault's working rules (CLAUDE.md), the current ISO week's document in full, " +
-			"metadata for open items and recent documents, and the most used tags of the last 30 days. Call this first. " +
+		Description: "Start-of-conversation bundle in one call: the vault's working rules (CLAUDE.md), " +
+			"the current ISO week's document in full, " +
+			"metadata for open items and recent documents, and the most used tags of the last 30 days. " +
+			"Call this first. " +
 			"Optional date (YYYY-MM-DD) builds the bundle as of another day.",
 		Annotations: readOnly,
 	}, guard(h.logger, "get_context", h.getContext))
@@ -63,8 +68,10 @@ func New(v *vault.Vault, w *write.Writer, cfg *config.Config, version string, op
 	mcp.AddTool(s, &mcp.Tool{
 		Name:  "list_docs",
 		Title: "List documents",
-		Description: "List document metadata (path, type, title, tags, date and any kind/stage/status), never bodies. " +
-			"All filters combine with AND. tags: every tag must match; any_tags: at least one; a trailing / matches a prefix (issue/ matches every issue tag). " +
+		Description: "List document metadata (path, type, title, tags, date and any kind/stage/status), " +
+			"never bodies. " +
+			"All filters combine with AND. tags: every tag must match; any_tags: at least one; " +
+			"a trailing / matches a prefix (issue/ matches every issue tag). " +
 			"where: frontmatter equality such as {\"status\": [\"open\", \"improving\"]}; a list means any of. " +
 			"since/until: inclusive YYYY-MM-DD against the date field, else file modification time. " +
 			"sort: date_desc (default), date_asc or title. limit: default 50, at most 500.",
@@ -74,7 +81,9 @@ func New(v *vault.Vault, w *write.Writer, cfg *config.Config, version string, op
 	mcp.AddTool(s, &mcp.Tool{
 		Name:  "read_doc",
 		Title: "Read a document",
-		Description: "Read one markdown file by vault-relative path. Returns its path, its content hash (sha256, needed later to rewrite the file safely) and the full content. " +
+		Description: "Read one markdown file by vault-relative path. " +
+			"Returns its path, its content hash (sha256, needed later to rewrite the file safely) " +
+			"and the full content. " +
 			"Any .md file in the vault can be read, including templates/.",
 		Annotations: readOnly,
 	}, guard(h.logger, "read_doc", h.readDoc))
@@ -82,7 +91,9 @@ func New(v *vault.Vault, w *write.Writer, cfg *config.Config, version string, op
 	mcp.AddTool(s, &mcp.Tool{
 		Name:  "search_text",
 		Title: "Search document text",
-		Description: "Case-insensitive substring search over document bodies and titles. Returns path, title, the total number of matching lines and up to 3 of them with 1-based file line numbers. " +
+		Description: "Case-insensitive substring search over document bodies and titles. " +
+			"Returns path, title, the total number of matching lines and up to 3 of them " +
+			"with 1-based file line numbers. " +
 			"Other frontmatter fields are not searched. Optionally limit to one type; limit defaults to 20.",
 		Annotations: readOnly,
 	}, guard(h.logger, "search_text", h.searchText))
@@ -91,7 +102,8 @@ func New(v *vault.Vault, w *write.Writer, cfg *config.Config, version string, op
 		Name:  "list_tags",
 		Title: "List tags",
 		Description: "Every tag in use with its document count and most recent date, most used first. " +
-			"Optionally only tags under a prefix such as issue/. Tags missing from the vocabulary file are marked unknown.",
+			"Optionally only tags under a prefix such as issue/. " +
+			"Tags missing from the vocabulary file are marked unknown.",
 		Annotations: readOnly,
 	}, guard(h.logger, "list_tags", h.listTags))
 
@@ -110,7 +122,8 @@ func guard[In any](logger *slog.Logger, name string, h mcp.ToolHandlerFor[In, an
 					slog.Any("panic", r),
 					slog.String("stack", string(debug.Stack())),
 				)
-				res, out, err = nil, nil, fmt.Errorf("internal error in %s: %v. This is a bug in prep-mcp; report it and check the server's stderr for the stack", name, r)
+				res, out, err = nil, nil, fmt.Errorf("internal error in %s: %v. "+
+					"This is a bug in prep-mcp; report it and check the server's stderr for the stack", name, r)
 			}
 		}()
 		return h(ctx, req, in)
@@ -172,6 +185,8 @@ func (h *handlers) getContext(
 	return text(out), nil, nil
 }
 
+// The jsonschema tags are the argument descriptions the model reads, and a
+// struct tag cannot be split, so these lines stay long.
 type listDocsIn struct {
 	Type    string         `json:"type,omitempty" jsonschema:"Only documents of this type."`
 	Tags    []string       `json:"tags,omitempty" jsonschema:"All of these tags must match. A trailing / is a prefix match."`

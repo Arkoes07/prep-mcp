@@ -108,7 +108,8 @@ func (v *Vault) Vocabulary() (*Vocabulary, error) {
 		return nil, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("read tags file %s: %w; check its permissions or fix tags_file in the config", v.cfg.TagsFile, err)
+		return nil, fmt.Errorf("read tags file %s: %w; check its permissions or fix tags_file in the config",
+			v.cfg.TagsFile, err)
 	}
 	return ParseVocabulary(src), nil
 }

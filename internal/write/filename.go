@@ -62,7 +62,8 @@ func placeholderValue(name string, fm *yaml.Node, slug string, today time.Time) 
 			if s := Slugify(slug); s != "" {
 				return s, nil
 			}
-			return "", fmt.Errorf("slug %q has no letters or digits to build a filename from; pass a different slug", slug)
+			return "", fmt.Errorf("slug %q has no letters or digits to build a filename from; pass a different slug",
+				slug)
 		}
 		if title := vault.FieldText(fm, "title"); title != "" {
 			if s := Slugify(title); s != "" {
@@ -87,7 +88,8 @@ func placeholderValue(name string, fm *yaml.Node, slug string, today time.Time) 
 	}
 	s := Slugify(n.Value)
 	if s == "" {
-		return "", fmt.Errorf("%s (%q) has no letters or digits to build a filename from; use a different value", name, n.Value)
+		return "", fmt.Errorf("%s (%q) has no letters or digits to build a filename from; use a different value",
+			name, n.Value)
 	}
 	return s, nil
 }

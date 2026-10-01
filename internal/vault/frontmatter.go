@@ -48,7 +48,8 @@ func SplitFrontmatter(src []byte) (*Frontmatter, error) {
 		pos = n
 		line++
 	}
-	return nil, errors.New("frontmatter not closed: add a closing --- line after the last key, or remove the opening ---")
+	return nil, errors.New("frontmatter not closed: " +
+		"add a closing --- line after the last key, or remove the opening ---")
 }
 
 // nextLine returns the line starting at pos without its line ending, and the
@@ -78,20 +79,23 @@ func parseBlock(src []byte, fm *Frontmatter) (*Frontmatter, error) {
 	var doc yaml.Node
 	if err := yaml.Unmarshal(block, &doc); err != nil {
 		reason := yamlPrefix.ReplaceAllString(err.Error(), "")
-		return nil, fmt.Errorf("invalid frontmatter at line %d: %s; fix that line in the file, then retry", badLine(block)+lineShift, reason)
+		return nil, fmt.Errorf("invalid frontmatter at line %d: %s; fix that line in the file, then retry",
+			badLine(block)+lineShift, reason)
 	}
 	switch {
 	case doc.Kind == 0 || len(doc.Content) == 0: // empty, or only comments
 		fm.Map = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
 	case doc.Content[0].Kind != yaml.MappingNode:
-		return nil, fmt.Errorf("frontmatter must be a mapping of key: value lines (line %d is not); fix it, or move the content below the closing ---", doc.Content[0].Line+lineShift)
+		return nil, fmt.Errorf("frontmatter must be a mapping of key: value lines (line %d is not); "+
+			"fix it, or move the content below the closing ---", doc.Content[0].Line+lineShift)
 	default:
 		fm.Map = doc.Content[0]
 	}
 	seen := make(map[string]bool, len(fm.Map.Content)/2)
 	for k := range Pairs(fm.Map) {
 		if seen[k.Value] {
-			return nil, fmt.Errorf("invalid frontmatter: duplicate key %q at line %d; remove one of them", k.Value, k.Line+lineShift)
+			return nil, fmt.Errorf("invalid frontmatter: duplicate key %q at line %d; remove one of them",
+				k.Value, k.Line+lineShift)
 		}
 		seen[k.Value] = true
 	}

@@ -55,7 +55,8 @@ func (e *ExistsError) Error() string {
 type ConflictError struct{ Path, Current string }
 
 func (e *ConflictError) Error() string {
-	return fmt.Sprintf("%s changed since you read it; its current hash is %s. Nothing was written: re-read with read_doc, merge, retry with expected_hash set to the current hash", e.Path, e.Current)
+	return fmt.Sprintf("%s changed since you read it; its current hash is %s. Nothing was written: "+
+		"re-read with read_doc, merge, retry with expected_hash set to the current hash", e.Path, e.Current)
 }
 
 // Draft is a document for Create to make.
@@ -82,7 +83,8 @@ func (w *Writer) Create(ctx context.Context, d Draft) (*Result, error) {
 		return nil, err
 	}
 	if missing := missingFields(spec.Required, doc); len(missing) > 0 {
-		return nil, fmt.Errorf("missing required fields for %s: %s; add them to frontmatter and retry", d.Type, strings.Join(missing, ", "))
+		return nil, fmt.Errorf("missing required fields for %s: %s; add them to frontmatter and retry",
+			d.Type, strings.Join(missing, ", "))
 	}
 
 	name, err := RenderFilename(spec.Filename, doc, d.Slug, day)
@@ -100,7 +102,8 @@ func (w *Writer) Create(ctx context.Context, d Draft) (*Result, error) {
 	}
 	data := []byte("---\n" + encode(doc) + "---\n" + body)
 	if _, err := reread(data); err != nil {
-		return nil, fmt.Errorf("internal error: the new frontmatter did not re-read (%w); nothing was written. Report this as a bug", err)
+		return nil, fmt.Errorf("internal error: the new frontmatter did not re-read (%w); nothing was written. "+
+			"Report this as a bug", err)
 	}
 
 	if err := w.createFile(rel, data); err != nil {
@@ -128,7 +131,8 @@ func newFrontmatter(typ string, fm *yaml.Node, today string) (*yaml.Node, error)
 		switch key.Value {
 		case "type":
 			if val.Kind != yaml.ScalarNode || val.Value != typ {
-				return nil, fmt.Errorf("frontmatter type %q conflicts with type %q; drop it from frontmatter or make them match", val.Value, typ)
+				return nil, fmt.Errorf("frontmatter type %q conflicts with type %q; "+
+					"drop it from frontmatter or make them match", val.Value, typ)
 			}
 			continue
 		case "created":
@@ -172,7 +176,8 @@ func (w *Writer) UpdateFrontmatter(ctx context.Context, p string, patch Patch) (
 		oldTags := tagsOf(old)
 		for _, t := range vault.NormalizeTagList(patch.RemoveTags) {
 			if !slices.Contains(oldTags, t) {
-				warnings = append(warnings, fmt.Sprintf("tag %q is not on this document, so there was nothing to remove", t))
+				warnings = append(warnings,
+					fmt.Sprintf("tag %q is not on this document, so there was nothing to remove", t))
 			}
 		}
 		next, changed, err := ApplyPatch(old, patch, w.now().Format(time.DateOnly))
@@ -181,7 +186,8 @@ func (w *Writer) UpdateFrontmatter(ctx context.Context, p string, patch Patch) (
 		}
 		fm, err := reread(next)
 		if err != nil {
-			return nil, nil, fmt.Errorf("internal error: the patched file did not re-read (%w); nothing was written. Report this as a bug", err)
+			return nil, nil, fmt.Errorf("internal error: the patched file did not re-read (%w); nothing was written. "+
+				"Report this as a bug", err)
 		}
 		if spec, ok := w.cfg.Type(vault.FieldText(fm.Map, "type")); ok {
 			if missing := missingFields(spec.Required, fm.Map); len(missing) > 0 {
@@ -189,7 +195,8 @@ func (w *Writer) UpdateFrontmatter(ctx context.Context, p string, patch Patch) (
 				for i, f := range missing {
 					parts[i] = fmt.Sprintf("%s is required for %s", f, vault.FieldText(fm.Map, "type"))
 				}
-				return nil, nil, fmt.Errorf("%s; give the field a value with set instead of removing or emptying it", strings.Join(parts, "; "))
+				return nil, nil, fmt.Errorf("%s; give the field a value with set instead of removing or emptying it",
+					strings.Join(parts, "; "))
 			}
 		}
 		return next, append(warnings, w.tagWarnings(newTags(oldTags, tagsOf(next)))...), nil
@@ -228,10 +235,12 @@ func (w *Writer) Replace(ctx context.Context, p, content, expectedHash string) (
 		typ = vault.FieldText(fm.Map, "type")
 	}
 	if typ == "" {
-		warnings = append(warnings, "the new content has no frontmatter with a type, so this document will no longer appear in queries (list_docs, search_text, get_context)")
+		warnings = append(warnings, "the new content has no frontmatter with a type, "+
+			"so this document will no longer appear in queries (list_docs, search_text, get_context)")
 	} else if spec, ok := w.cfg.Type(typ); ok {
 		if missing := missingFields(spec.Required, fm.Map); len(missing) > 0 {
-			return nil, fmt.Errorf("missing required fields for %s: %s; keep them in the frontmatter", typ, strings.Join(missing, ", "))
+			return nil, fmt.Errorf("missing required fields for %s: %s; keep them in the frontmatter",
+				typ, strings.Join(missing, ", "))
 		}
 	}
 	warnings = append(warnings, w.tagWarnings(newTags(tagsOf(old), tagsOf(data)))...)
@@ -277,7 +286,8 @@ func (w *Writer) modify(
 		w.commit(ctx, tool, res)
 		return res, nil
 	}
-	return nil, fmt.Errorf("%s changed again while it was being edited, twice in a row. Nothing was written: re-read it with read_doc and retry", rel)
+	return nil, fmt.Errorf("%s changed again while it was being edited, twice in a row. Nothing was written: "+
+		"re-read it with read_doc and retry", rel)
 }
 
 func (w *Writer) commit(ctx context.Context, tool string, res *Result) {
@@ -304,7 +314,9 @@ func (w *Writer) tagWarnings(added []string) []string {
 			continue
 		}
 		if closest := voc.Closest(t); closest != "" {
-			out = append(out, fmt.Sprintf("unknown tag %q; closest known tag: %q (fix it with update_frontmatter add_tags/remove_tags)", t, closest))
+			out = append(out, fmt.Sprintf(
+				"unknown tag %q; closest known tag: %q (fix it with update_frontmatter add_tags/remove_tags)",
+				t, closest))
 		}
 	}
 	return out

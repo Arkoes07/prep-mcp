@@ -47,7 +47,8 @@ func (w *Writer) replaceFile(rel string, data []byte, oldHash string) error {
 	return w.finish(rel, tmp, func() error {
 		current, err := w.v.Root().ReadFile(rel)
 		if err != nil {
-			return fmt.Errorf("cannot write %s: it disappeared while it was being edited (%w); re-read it and retry", rel, err)
+			return fmt.Errorf("cannot write %s: it disappeared while it was being edited (%w); re-read it and retry",
+				rel, err)
 		}
 		if cur := vault.Hash(current); cur != oldHash {
 			return &ConflictError{Path: rel, Current: cur}

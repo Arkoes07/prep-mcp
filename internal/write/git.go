@@ -45,11 +45,14 @@ func (g *Git) Commit(ctx context.Context, dir, rel, msg string) (hash, warning s
 	problem := func(what, out string, err error) (string, string) {
 		switch {
 		case errors.Is(ctx.Err(), context.DeadlineExceeded):
-			return fail("git timed out after %s during %s (a hook or a prompt may be hanging). The file is saved; commit it yourself in %s", timeout, what, dir)
+			return fail("git timed out after %s during %s (a hook or a prompt may be hanging). The file is saved; "+
+				"commit it yourself in %s", timeout, what, dir)
 		case ctx.Err() != nil:
 			return fail("cancelled during %s. The file is saved; commit it yourself in %s", what, dir)
 		}
-		return fail("%s failed: %s. The file is saved; fix the cause, then run `git add -- %s && git commit --only -- %s` in %s", what, describe(out, err), rel, rel, dir)
+		return fail("%s failed: %s. The file is saved; "+
+			"fix the cause, then run `git add -- %s && git commit --only -- %s` in %s",
+			what, describe(out, err), rel, rel, dir)
 	}
 
 	bin, name, email, err := g.identity()
@@ -66,7 +69,8 @@ func (g *Git) Commit(ctx context.Context, dir, rel, msg string) (hash, warning s
 	top, err := r.run(ctx, "rev-parse", "--show-toplevel")
 	if err != nil {
 		if strings.Contains(top, "not a git repository") {
-			return fail("%s is not a git repository. Run `git init` in %s to get a commit per write, or set commit_on_write: false", dir, dir)
+			return fail("%s is not a git repository. "+
+				"Run `git init` in %s to get a commit per write, or set commit_on_write: false", dir, dir)
 		}
 		return problem("git rev-parse", top, err)
 	}

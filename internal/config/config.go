@@ -253,7 +253,8 @@ func (c *Config) queryErrors() []error {
 					group.name, i, q.Type, c.TypeList()))
 			}
 			if q.Limit < 0 {
-				errs = append(errs, fmt.Errorf("context.%s[%d]: limit must be positive (or leave it out for the default %d)",
+				errs = append(errs, fmt.Errorf(
+					"context.%s[%d]: limit must be positive (or leave it out for the default %d)",
 					group.name, i, DefaultQueryLimit))
 			}
 		}
