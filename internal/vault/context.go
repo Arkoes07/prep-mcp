@@ -106,7 +106,7 @@ func (v *Vault) weekSection(docs []*Doc, day time.Time) (string, []Problem, erro
 
 	var found []*Doc
 	for _, d := range docs {
-		if d.Type == cs.CurrentWeekType && strings.EqualFold(strings.TrimSpace(scalar(d.Fields[cs.CurrentWeekField])), week) {
+		if d.Type == cs.CurrentWeekType && strings.EqualFold(d.Text(cs.CurrentWeekField), week) {
 			found = append(found, d)
 		}
 	}
@@ -174,7 +174,7 @@ func metaLine(d *Doc) string {
 		attrs = append(attrs, "date="+d.Date.Format("2006-01-02"))
 	}
 	for _, k := range []string{"kind", "stage", "status"} {
-		if val := strings.TrimSpace(scalar(d.Fields[k])); val != "" {
+		if val := d.Text(k); val != "" {
 			attrs = append(attrs, k+"="+oneLine(val))
 		}
 	}

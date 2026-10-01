@@ -9,6 +9,8 @@ import (
 	"unicode"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/Arkoes07/prep-mcp/internal/vault"
 )
 
 // Slugify turns free text into a lowercase kebab-case file name part. Letters
@@ -62,21 +64,21 @@ func placeholderValue(name string, fm *yaml.Node, slug string, today time.Time) 
 			}
 			return "", fmt.Errorf("slug %q has no letters or digits to build a filename from; pass a different slug", slug)
 		}
-		if title := fieldText(fm, "title"); title != "" {
+		if title := vault.FieldText(fm, "title"); title != "" {
 			if s := Slugify(title); s != "" {
 				return s, nil
 			}
 		}
 		return "", errors.New("no name for the file: pass slug or set title")
 	case "date":
-		if d := fieldText(fm, "date"); d != "" {
+		if d := vault.FieldText(fm, "date"); d != "" {
 			if s := Slugify(d); s != "" {
 				return s, nil
 			}
 		}
 		return today.Format("2006-01-02"), nil
 	}
-	n := mapGet(fm, name)
+	n := vault.Field(fm, name)
 	switch {
 	case isMissing(n):
 		return "", fmt.Errorf("%s is required to build the filename; set %s in the frontmatter", name, name)
@@ -88,28 +90,6 @@ func placeholderValue(name string, fm *yaml.Node, slug string, today time.Time) 
 		return "", fmt.Errorf("%s (%q) has no letters or digits to build a filename from; use a different value", name, n.Value)
 	}
 	return s, nil
-}
-
-// fieldText returns the scalar text of a frontmatter field, or "".
-func fieldText(fm *yaml.Node, key string) string {
-	n := mapGet(fm, key)
-	if n == nil || n.Kind != yaml.ScalarNode || n.Tag == "!!null" {
-		return ""
-	}
-	return strings.TrimSpace(n.Value)
-}
-
-// mapGet returns the value node of key in a mapping node, or nil.
-func mapGet(m *yaml.Node, key string) *yaml.Node {
-	if m == nil || m.Kind != yaml.MappingNode {
-		return nil
-	}
-	for i := 0; i+1 < len(m.Content); i += 2 {
-		if m.Content[i].Value == key {
-			return m.Content[i+1]
-		}
-	}
-	return nil
 }
 
 // isMissing is the "required field" test: absent, null, "", [] and {} all count as missing.

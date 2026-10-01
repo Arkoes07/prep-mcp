@@ -13,13 +13,13 @@ import (
 
 // Doc is one typed document: a .md file whose frontmatter has a type.
 type Doc struct {
-	Path, Type, Title, Updated string
-	Tags                       []string
-	Date                       time.Time // the date field, else the file's modification time
-	DateFromMtime              bool
-	Fields                     map[string]*yaml.Node
-	Body                       []byte
-	BodyLine                   int // 1-based file line where Body starts
+	Path, Type, Title string
+	Tags              []string
+	Date              time.Time // the date field, else the file's modification time
+	DateFromMtime     bool
+	Fields            map[string]*yaml.Node
+	Body              []byte
+	BodyLine          int // 1-based file line where Body starts
 
 	titleLine int // file line of the title key, 0 when there is no title field
 }
@@ -67,7 +67,7 @@ func (v *Vault) Scan() ([]*Doc, []Problem, error) {
 		if fm == nil {
 			return nil
 		}
-		typ := strings.TrimSpace(scalar(mapGet(fm.Map, "type")))
+		typ := FieldText(fm.Map, "type")
 		if typ == "" {
 			return nil
 		}
@@ -77,27 +77,26 @@ func (v *Vault) Scan() ([]*Doc, []Problem, error) {
 		}
 
 		doc := &Doc{
-			Path:     p,
-			Type:     typ,
-			Fields:   map[string]*yaml.Node{},
-			Body:     src[fm.BodyOffset:],
-			BodyLine: fm.BodyLine,
-			Tags:     NormalizeTags(mapGet(fm.Map, "tags")),
-			Updated:  strings.TrimSpace(scalar(mapGet(fm.Map, "updated"))),
-			Date:     info.ModTime(),
+			Path:          p,
+			Type:          typ,
+			Fields:        map[string]*yaml.Node{},
+			Body:          src[fm.BodyOffset:],
+			BodyLine:      fm.BodyLine,
+			Tags:          NormalizeTags(Field(fm.Map, "tags")),
+			Date:          info.ModTime(),
+			DateFromMtime: true,
 		}
-		doc.DateFromMtime = true
 		for i := 0; i+1 < len(fm.Map.Content); i += 2 {
 			doc.Fields[fm.Map.Content[i].Value] = fm.Map.Content[i+1]
 		}
 		doc.Title = strings.TrimSuffix(name, path.Ext(name))
-		if tn := mapGet(fm.Map, "title"); tn != nil {
+		if tn := Field(fm.Map, "title"); tn != nil {
 			if t := strings.TrimSpace(scalar(tn)); t != "" {
 				doc.Title = t
 				doc.titleLine = tn.Line + 1
 			}
 		}
-		if dn := mapGet(fm.Map, "date"); dn != nil && strings.TrimSpace(scalar(dn)) != "" {
+		if dn := Field(fm.Map, "date"); dn != nil && strings.TrimSpace(scalar(dn)) != "" {
 			if t, err := ParseDate(scalar(dn)); err == nil {
 				doc.Date, doc.DateFromMtime = t, false
 			} else {

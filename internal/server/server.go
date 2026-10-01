@@ -208,7 +208,7 @@ func (h *handlers) listDocs(_ context.Context, _ *mcp.CallToolRequest, in listDo
 		Problems []problemOut `json:"problems,omitempty"`
 	}{Docs: []docMeta{}, Count: len(docs), Problems: problemsOut(problems)}
 	for _, d := range docs {
-		m := docMeta{Path: d.Path, Type: d.Type, Title: d.Title, Tags: append([]string{}, d.Tags...), Updated: d.Updated,
+		m := docMeta{Path: d.Path, Type: d.Type, Title: d.Title, Tags: append([]string{}, d.Tags...), Updated: d.Text("updated"),
 			Kind: d.Text("kind"), Stage: d.Text("stage"), Status: d.Text("status")}
 		if d.DateFromMtime {
 			m.Modified = d.Date.Format("2006-01-02")

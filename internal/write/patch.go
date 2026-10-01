@@ -110,9 +110,9 @@ func ApplyPatch(src []byte, p Patch, today string) (out []byte, changed bool, er
 
 	var wantTags []string
 	if hasTagOps || setTags {
-		cur := vault.NormalizeTags(mapGet(fm.Map, "tags"))
+		cur := vault.NormalizeTags(vault.Field(fm.Map, "tags"))
 		if setTags {
-			wantTags = vault.NormalizeTags(mapGet(p.Set, "tags"))
+			wantTags = vault.NormalizeTags(vault.Field(p.Set, "tags"))
 		} else {
 			wantTags = slices.Clone(cur)
 			for _, t := range vault.NormalizeTagList(p.AddTags) {
@@ -124,7 +124,7 @@ func ApplyPatch(src []byte, p Patch, today string) (out []byte, changed bool, er
 			wantTags = slices.DeleteFunc(wantTags, func(t string) bool { return slices.Contains(drop, t) })
 		}
 		if !slices.Equal(cur, wantTags) {
-			put("tags", renderTags(mapGet(fm.Map, "tags"), wantTags, commentOf("tags")))
+			put("tags", renderTags(vault.Field(fm.Map, "tags"), wantTags, commentOf("tags")))
 		}
 	}
 
@@ -331,7 +331,7 @@ func verifyPatch(src, out []byte, old *vault.Frontmatter, p Patch, setKeys []str
 			continue
 		}
 		oldOrder = append(oldOrder, k)
-		if !nodeEqual(old.Map.Content[i+1], mapGet(re.Map, k)) {
+		if !nodeEqual(old.Map.Content[i+1], vault.Field(re.Map, k)) {
 			return bug("%s changed", k)
 		}
 	}
@@ -347,16 +347,16 @@ func verifyPatch(src, out []byte, old *vault.Frontmatter, p Patch, setKeys []str
 		if k == "tags" {
 			continue
 		}
-		if !nodeEqual(mapGet(p.Set, k), mapGet(re.Map, k)) {
+		if !nodeEqual(vault.Field(p.Set, k), vault.Field(re.Map, k)) {
 			return bug("%s was not written as given", k)
 		}
 	}
 	for _, k := range p.Unset {
-		if mapGet(re.Map, k) != nil {
+		if vault.Field(re.Map, k) != nil {
 			return bug("%s is still present", k)
 		}
 	}
-	if tagsTouched && !slices.Equal(vault.NormalizeTags(mapGet(re.Map, "tags")), wantTags) {
+	if tagsTouched && !slices.Equal(vault.NormalizeTags(vault.Field(re.Map, "tags")), wantTags) {
 		return bug("tags differ")
 	}
 	return nil

@@ -124,7 +124,7 @@ func (w *Writer) Create(ctx context.Context, typ string, fm *yaml.Node, body, sl
 	if err := w.createFile(rel, data); err != nil {
 		return nil, err
 	}
-	res := &Result{Path: rel, Hash: vault.Hash(data), Warnings: w.tagWarnings(vault.NormalizeTags(mapGet(doc, "tags")))}
+	res := &Result{Path: rel, Hash: vault.Hash(data), Warnings: w.tagWarnings(vault.NormalizeTags(vault.Field(doc, "tags")))}
 	w.commit(ctx, "create_doc", res)
 	return res, nil
 }
@@ -168,11 +168,11 @@ func (w *Writer) UpdateFrontmatter(ctx context.Context, p string, patch Patch) (
 		if err != nil || fm == nil {
 			return nil, nil, fmt.Errorf("internal error: the patched file did not re-read (%v); nothing was written. Report this as a bug", err)
 		}
-		if spec, ok := w.cfg.Type(fieldText(fm.Map, "type")); ok {
+		if spec, ok := w.cfg.Type(vault.FieldText(fm.Map, "type")); ok {
 			if missing := missingFields(spec.Required, fm.Map); len(missing) > 0 {
 				parts := make([]string, len(missing))
 				for i, f := range missing {
-					parts[i] = fmt.Sprintf("%s is required for %s", f, fieldText(fm.Map, "type"))
+					parts[i] = fmt.Sprintf("%s is required for %s", f, vault.FieldText(fm.Map, "type"))
 				}
 				return nil, nil, fmt.Errorf("%s; give the field a value with set instead of removing or emptying it", strings.Join(parts, "; "))
 			}
@@ -210,7 +210,7 @@ func (w *Writer) Replace(ctx context.Context, p, content, expectedHash string) (
 	}
 	typ := ""
 	if fm != nil {
-		typ = fieldText(fm.Map, "type")
+		typ = vault.FieldText(fm.Map, "type")
 	}
 	if typ == "" {
 		warnings = append(warnings, "the new content has no frontmatter with a type, so this document will no longer appear in queries (list_docs, search_text, get_context)")
@@ -320,7 +320,7 @@ func tagsOf(src []byte) []string {
 	if err != nil || fm == nil {
 		return nil
 	}
-	return vault.NormalizeTags(mapGet(fm.Map, "tags"))
+	return vault.NormalizeTags(vault.Field(fm.Map, "tags"))
 }
 
 // newTags returns the tags in now that were not in before.
@@ -337,7 +337,7 @@ func newTags(before, now []string) []string {
 func missingFields(required []string, m *yaml.Node) []string {
 	var out []string
 	for _, r := range required {
-		if isMissing(mapGet(m, r)) {
+		if isMissing(vault.Field(m, r)) {
 			out = append(out, r)
 		}
 	}

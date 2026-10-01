@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -125,8 +126,8 @@ func badLine(block []byte) int {
 	return max(n, 1)
 }
 
-// mapGet returns the value node of key in a mapping node, or nil.
-func mapGet(m *yaml.Node, key string) *yaml.Node {
+// Field returns the value node of key in a mapping node, or nil.
+func Field(m *yaml.Node, key string) *yaml.Node {
 	if m == nil || m.Kind != yaml.MappingNode {
 		return nil
 	}
@@ -136,4 +137,10 @@ func mapGet(m *yaml.Node, key string) *yaml.Node {
 		}
 	}
 	return nil
+}
+
+// FieldText returns the trimmed text of a scalar field of a mapping node, or
+// "" if the field is missing, null or not a scalar.
+func FieldText(m *yaml.Node, key string) string {
+	return strings.TrimSpace(scalar(Field(m, key)))
 }
