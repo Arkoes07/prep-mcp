@@ -23,8 +23,9 @@ go.work.sum
 # Real vaults live outside the repo; only examples/vault is tracked
 /vault/
 
-# Claude Code local settings
+# Claude Code local settings and per-machine skill symlinks
 .claude/settings.local.json
+.claude/skills/
 
 # Editors and OS
 .idea/
