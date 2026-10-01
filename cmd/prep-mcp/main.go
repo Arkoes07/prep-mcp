@@ -44,6 +44,9 @@ func run(ctx context.Context, args []string, getenv func(string) string, stderr 
 	configFlag := flags.String("config", "", "config file (env PREP_CONFIG; default: <root>/prep.config.yaml)")
 	showVersion := flags.Bool("version", false, "print the version and exit")
 	if err := flags.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return nil // usage is already printed; asking for it is not a failure
+		}
 		return err
 	}
 	if *showVersion {

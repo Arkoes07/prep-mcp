@@ -184,7 +184,7 @@ func (c *Config) Validate() error {
 	}
 	if c.TagsFile != "" {
 		if err := checkRelPath(c.TagsFile); err != nil {
-			add("tags_file %q: %v", c.TagsFile, err)
+			add("tags_file %q: %w", c.TagsFile, err)
 		}
 	}
 
@@ -193,7 +193,7 @@ func (c *Config) Validate() error {
 		if t.Folder == "" {
 			add("type %s: folder is required (for example folder: notes)", name)
 		} else if err := checkFolder(t.Folder); err != nil {
-			add("type %s: folder %q: %v", name, t.Folder, err)
+			add("type %s: folder %q: %w", name, t.Folder, err)
 		}
 		if t.Filename == "" {
 			add(`type %s: filename is required (for example filename: "{slug}.md")`, name)

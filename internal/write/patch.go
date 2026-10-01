@@ -377,12 +377,14 @@ func isNull(n *yaml.Node) bool { return n.Kind == yaml.ScalarNode && n.Tag == "!
 // verifyPatch is the safety net: the result must re-read as the patch intended,
 // with every untouched key and the body unchanged.
 func verifyPatch(src, out []byte, old *vault.Frontmatter, pl *patchPlan) error {
+	const failed = "internal error: the patched frontmatter did not re-read as intended (%w); " +
+		"nothing was written. Report this as a bug and use replace_doc instead"
 	bug := func(format string, args ...any) error {
-		return fmt.Errorf("internal error: the patched frontmatter did not re-read as intended (%s); nothing was written. Report this as a bug and use replace_doc instead", fmt.Sprintf(format, args...))
+		return fmt.Errorf(failed, fmt.Errorf(format, args...))
 	}
 	re, err := reread(out)
 	if err != nil {
-		return bug("%v", err)
+		return fmt.Errorf(failed, err)
 	}
 	p, touched := pl.patch, pl.touched
 	if !bytes.Equal(out[re.BodyOffset:], src[old.BodyOffset:]) {
@@ -441,7 +443,7 @@ func JSONToNode(raw json.RawMessage) (*yaml.Node, error) {
 		return nil, fmt.Errorf("invalid JSON: %w; %s", err, want)
 	}
 	if d, ok := tok.(json.Delim); !ok || d != '{' {
-		return nil, fmt.Errorf("%s, got %v", want, describeToken(tok))
+		return nil, fmt.Errorf("%s, got %s", want, describeToken(tok))
 	}
 	n, err := decodeObject(dec)
 	if err != nil {
