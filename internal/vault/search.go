@@ -3,7 +3,6 @@ package vault
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"slices"
 	"strings"
 	"time"
@@ -53,11 +52,7 @@ func (v *Vault) Search(q, typ string, limit int) ([]Hit, error) {
 		}
 		var lines []Line
 		if d.titleLine > 0 && strings.Contains(strings.ToLower(d.Title), needle) {
-			text, err := v.fileLine(d.Path, d.titleLine)
-			if err != nil {
-				return nil, err
-			}
-			lines = append(lines, Line{N: d.titleLine, Text: text})
+			lines = append(lines, Line{N: d.titleLine, Text: d.line(d.titleLine)})
 		}
 		for i, text := range strings.Split(string(d.Body), "\n") {
 			text = strings.TrimSuffix(text, "\r")
@@ -80,17 +75,14 @@ func (v *Vault) Search(q, typ string, limit int) ([]Hit, error) {
 	return hits, nil
 }
 
-// fileLine returns the verbatim text of a 1-based line of a vault file.
-func (v *Vault) fileLine(p string, n int) (string, error) {
-	src, err := v.root.ReadFile(p)
-	if err != nil {
-		return "", fmt.Errorf("read %s: %w", p, err)
-	}
-	lines := bytes.Split(src, []byte("\n"))
+// line returns the verbatim text of a 1-based line of the scanned file,
+// without its line ending.
+func (d *Doc) line(n int) string {
+	lines := bytes.Split(d.src, []byte("\n"))
 	if n < 1 || n > len(lines) {
-		return "", nil
+		return ""
 	}
-	return strings.TrimSuffix(string(lines[n-1]), "\r"), nil
+	return strings.TrimSuffix(string(lines[n-1]), "\r")
 }
 
 // TagCount is one tag with its usage.

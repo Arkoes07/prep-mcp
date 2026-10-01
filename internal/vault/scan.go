@@ -21,7 +21,8 @@ type Doc struct {
 	Body              []byte
 	BodyLine          int // 1-based file line where Body starts
 
-	titleLine int // file line of the title key, 0 when there is no title field
+	src       []byte // the whole file as scanned; Body is a slice of it
+	titleLine int    // file line of the title key, 0 when there is no title field
 }
 
 // Problem is a file the vault could not fully use, with what to do about it.
@@ -81,6 +82,7 @@ func (v *Vault) Scan() ([]*Doc, []Problem, error) {
 			Type:          typ,
 			Fields:        map[string]*yaml.Node{},
 			Body:          src[fm.BodyOffset:],
+			src:           src,
 			BodyLine:      fm.BodyLine,
 			Tags:          NormalizeTags(Field(fm.Map, "tags")),
 			Date:          info.ModTime(),

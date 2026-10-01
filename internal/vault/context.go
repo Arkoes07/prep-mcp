@@ -40,10 +40,7 @@ func (v *Vault) Context(day time.Time) (string, error) {
 	}
 
 	if cs := v.cfg.Context; cs.CurrentWeekType != "" {
-		sec, weekProblems, err := v.weekSection(docs, day)
-		if err != nil {
-			return "", err
-		}
+		sec, weekProblems := v.weekSection(docs, day)
 		sections = append(sections, sec)
 		problems = append(problems, weekProblems...)
 	}
@@ -98,8 +95,8 @@ func section(name, content string) string {
 }
 
 // weekSection finds the week document for day by field value (not by file
-// name) and renders it in full, or says how to create it.
-func (v *Vault) weekSection(docs []*Doc, day time.Time) (string, []Problem, error) {
+// name) and renders it in full, as scanned, or says how to create it.
+func (v *Vault) weekSection(docs []*Doc, day time.Time) (string, []Problem) {
 	cs := v.cfg.Context
 	week := ISOWeek(day)
 	title := "Current week: " + week
@@ -111,19 +108,16 @@ func (v *Vault) weekSection(docs []*Doc, day time.Time) (string, []Problem, erro
 		}
 	}
 	if len(found) == 0 {
-		return section(title, fmt.Sprintf("no week doc for %s (create_doc type=%s with %s: %s)\n", week, cs.CurrentWeekType, cs.CurrentWeekField, week)), nil, nil
+		return section(title, fmt.Sprintf("no week doc for %s (create_doc type=%s with %s: %s)\n", week, cs.CurrentWeekType, cs.CurrentWeekField, week)), nil
 	}
 
 	var problems []Problem
 	for _, extra := range found[1:] {
 		problems = append(problems, Problem{extra.Path, fmt.Sprintf("has the same %s (%s) as %s, which is the one used; change or remove one of them", cs.CurrentWeekField, week, found[0].Path)})
 	}
-	p, content, hash, err := v.Read(found[0].Path)
-	if err != nil {
-		return "", nil, err
-	}
-	body := fmt.Sprintf("path: %s\nhash: %s\n\n%s", p, hash, content)
-	return section(title, body), problems, nil
+	doc := found[0]
+	body := fmt.Sprintf("path: %s\nhash: %s\n\n%s", doc.Path, Hash(doc.src), doc.src)
+	return section(title, body), problems
 }
 
 // queryBlock renders one configured query: a label line and one line per document.
