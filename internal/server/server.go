@@ -6,7 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -24,13 +24,31 @@ const instructions = "Call get_context first: it returns the vault's working rul
 	"To save anything that belongs in this vault (a new record, a note added to a document, a status change), use create_doc, append_section, update_frontmatter or replace_doc. " +
 	"Do not save it to local memory or notes files instead: the vault is the record."
 
+// Option configures New.
+type Option func(*options)
+
+type options struct {
+	logger *slog.Logger
+}
+
+// WithLogger sets where the server logs what the client must not see, such as
+// the stack of a handler panic. The default is slog.Default(). It must not
+// write to stdout, which carries the protocol.
+func WithLogger(l *slog.Logger) Option {
+	return func(o *options) { o.logger = l }
+}
+
 // New builds the server with the read and write tools registered.
-func New(v *vault.Vault, w *write.Writer, cfg *config.Config, version string) *mcp.Server {
+func New(v *vault.Vault, w *write.Writer, cfg *config.Config, version string, opts ...Option) *mcp.Server {
+	o := options{logger: slog.Default()}
+	for _, opt := range opts {
+		opt(&o)
+	}
 	s := mcp.NewServer(
 		&mcp.Implementation{Name: "prep-mcp", Version: version},
 		&mcp.ServerOptions{Instructions: instructions},
 	)
-	h := &handlers{v: v, w: w, cfg: cfg}
+	h := &handlers{v: v, w: w, cfg: cfg, logger: o.logger}
 	readOnly := &mcp.ToolAnnotations{ReadOnlyHint: true}
 
 	mcp.AddTool(s, &mcp.Tool{
@@ -40,7 +58,7 @@ func New(v *vault.Vault, w *write.Writer, cfg *config.Config, version string) *m
 			"metadata for open items and recent documents, and the most used tags of the last 30 days. Call this first. " +
 			"Optional date (YYYY-MM-DD) builds the bundle as of another day.",
 		Annotations: readOnly,
-	}, guard("get_context", h.getContext))
+	}, guard(h.logger, "get_context", h.getContext))
 
 	mcp.AddTool(s, &mcp.Tool{
 		Name:  "list_docs",
@@ -51,7 +69,7 @@ func New(v *vault.Vault, w *write.Writer, cfg *config.Config, version string) *m
 			"since/until: inclusive YYYY-MM-DD against the date field, else file modification time. " +
 			"sort: date_desc (default), date_asc or title. limit: default 50, at most 500.",
 		Annotations: readOnly,
-	}, guard("list_docs", h.listDocs))
+	}, guard(h.logger, "list_docs", h.listDocs))
 
 	mcp.AddTool(s, &mcp.Tool{
 		Name:  "read_doc",
@@ -59,7 +77,7 @@ func New(v *vault.Vault, w *write.Writer, cfg *config.Config, version string) *m
 		Description: "Read one markdown file by vault-relative path. Returns its path, its content hash (sha256, needed later to rewrite the file safely) and the full content. " +
 			"Any .md file in the vault can be read, including templates/.",
 		Annotations: readOnly,
-	}, guard("read_doc", h.readDoc))
+	}, guard(h.logger, "read_doc", h.readDoc))
 
 	mcp.AddTool(s, &mcp.Tool{
 		Name:  "search_text",
@@ -67,7 +85,7 @@ func New(v *vault.Vault, w *write.Writer, cfg *config.Config, version string) *m
 		Description: "Case-insensitive substring search over document bodies and titles. Returns path, title, the total number of matching lines and up to 3 of them with 1-based file line numbers. " +
 			"Other frontmatter fields are not searched. Optionally limit to one type; limit defaults to 20.",
 		Annotations: readOnly,
-	}, guard("search_text", h.searchText))
+	}, guard(h.logger, "search_text", h.searchText))
 
 	mcp.AddTool(s, &mcp.Tool{
 		Name:  "list_tags",
@@ -75,19 +93,23 @@ func New(v *vault.Vault, w *write.Writer, cfg *config.Config, version string) *m
 		Description: "Every tag in use with its document count and most recent date, most used first. " +
 			"Optionally only tags under a prefix such as issue/. Tags missing from the vocabulary file are marked unknown.",
 		Annotations: readOnly,
-	}, guard("list_tags", h.listTags))
+	}, guard(h.logger, "list_tags", h.listTags))
 
 	registerWriteTools(s, h)
 	return s
 }
 
 // guard turns a panic in a handler into an error result, so one bad call
-// cannot take the server down. The stack goes to stderr, never to the client.
-func guard[In any](name string, h mcp.ToolHandlerFor[In, any]) mcp.ToolHandlerFor[In, any] {
+// cannot take the server down. The stack goes to logger, never to the client.
+func guard[In any](logger *slog.Logger, name string, h mcp.ToolHandlerFor[In, any]) mcp.ToolHandlerFor[In, any] {
 	return func(ctx context.Context, req *mcp.CallToolRequest, in In) (res *mcp.CallToolResult, out any, err error) {
 		defer func() {
 			if r := recover(); r != nil {
-				log.Printf("panic in %s: %v\n%s", name, r, debug.Stack())
+				logger.Error("tool handler panicked",
+					slog.String("tool", name),
+					slog.Any("panic", r),
+					slog.String("stack", string(debug.Stack())),
+				)
 				res, out, err = nil, nil, fmt.Errorf("internal error in %s: %v. This is a bug in prep-mcp; report it and check the server's stderr for the stack", name, r)
 			}
 		}()
@@ -96,9 +118,10 @@ func guard[In any](name string, h mcp.ToolHandlerFor[In, any]) mcp.ToolHandlerFo
 }
 
 type handlers struct {
-	v   *vault.Vault
-	w   *write.Writer
-	cfg *config.Config
+	v      *vault.Vault
+	w      *write.Writer
+	cfg    *config.Config
+	logger *slog.Logger
 }
 
 func text(s string) *mcp.CallToolResult {

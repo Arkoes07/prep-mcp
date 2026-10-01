@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -50,8 +50,8 @@ func run(ctx context.Context, args []string, getenv func(string) string, stderr 
 		fmt.Fprintln(stderr, "prep-mcp", version)
 		return nil
 	}
-	log.SetOutput(stderr)
-	log.SetFlags(log.LstdFlags)
+	// stdout carries the protocol, so every log line goes to stderr.
+	logger := slog.New(slog.NewTextHandler(stderr, nil))
 
 	root := cmp.Or(*rootFlag, getenv("PREP_ROOT"))
 	if root == "" {
@@ -70,7 +70,8 @@ func run(ctx context.Context, args []string, getenv func(string) string, stderr 
 	cfg, err := config.Load(cfgPath)
 	switch {
 	case errors.Is(err, fs.ErrNotExist) && !explicit:
-		log.Printf("no config at %s; starting with no document types (queries still work)", cfgPath)
+		logger.Warn("no config file; starting with no document types (queries still work)",
+			slog.String("config", cfgPath))
 		cfg, err = config.Parse(nil)
 		if err != nil {
 			return err
@@ -83,9 +84,9 @@ func run(ctx context.Context, args []string, getenv func(string) string, stderr 
 	if err != nil {
 		return err
 	}
-	log.Printf("serving %s (%d types)", root, len(cfg.Types))
+	logger.Info("serving vault", slog.String("root", v.Dir()), slog.Int("types", len(cfg.Types)))
 	w := write.New(v, cfg, &write.Git{Bin: "git", Author: cfg.Author, Timeout: 10 * time.Second}, time.Now)
-	err = server.New(v, w, cfg, version).Run(ctx, &mcp.StdioTransport{})
+	err = server.New(v, w, cfg, version, server.WithLogger(logger)).Run(ctx, &mcp.StdioTransport{})
 	if err != nil && ctx.Err() == nil && !errors.Is(err, io.EOF) {
 		return err
 	}

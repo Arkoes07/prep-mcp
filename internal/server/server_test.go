@@ -3,8 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
-	"io"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -243,15 +242,14 @@ func TestUnknownTypeNamesTheConfiguredOnes(t *testing.T) {
 }
 
 func TestPanicBecomesToolError(t *testing.T) {
-	log.SetOutput(io.Discard) // guard logs the stack; keep test output clean
-	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+	quiet := slog.New(slog.DiscardHandler) // guard logs the stack; keep test output clean
 	s := mcp.NewServer(&mcp.Implementation{Name: "t", Version: "0"}, nil)
 	mcp.AddTool(s, &mcp.Tool{Name: "boom", Description: "panics"},
-		guard("boom", func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, any, error) {
+		guard(quiet, "boom", func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, any, error) {
 			panic("kaboom")
 		}))
 	mcp.AddTool(s, &mcp.Tool{Name: "fine", Description: "works"},
-		guard("fine", func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, any, error) {
+		guard(quiet, "fine", func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, any, error) {
 			return text("still here"), nil, nil
 		}))
 	cs := serve(t, s)

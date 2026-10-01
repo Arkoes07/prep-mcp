@@ -24,7 +24,7 @@ func registerWriteTools(s *mcp.Server, h *handlers) {
 		Title:       "Create a document",
 		Description: createDocDescription(h.cfg),
 		Annotations: additive,
-	}, guard("create_doc", h.createDoc))
+	}, guard(h.logger, "create_doc", h.createDoc))
 
 	mcp.AddTool(s, &mcp.Tool{
 		Name:  "append_section",
@@ -33,7 +33,7 @@ func registerWriteTools(s *mcp.Server, h *handlers) {
 			"if the file has no such section, a new \"## heading\" section is added at the end. Only level-2 headings match, exactly. " +
 			"Frontmatter and all existing text stay byte for byte. Returns path, new hash, warnings and commit. This is the default way to add to a document.",
 		Annotations: additive,
-	}, guard("append_section", h.appendSection))
+	}, guard(h.logger, "append_section", h.appendSection))
 
 	mcp.AddTool(s, &mcp.Tool{
 		Name:  "update_frontmatter",
@@ -43,7 +43,7 @@ func registerWriteTools(s *mcp.Server, h *handlers) {
 			"updated is set to today. Required fields cannot be removed or emptied and type cannot be unset. set.tags cannot be combined with add_tags/remove_tags. " +
 			"A patch that changes nothing writes nothing. Returns path, new hash and warnings such as unknown tags.",
 		Annotations: additive,
-	}, guard("update_frontmatter", h.updateFrontmatter))
+	}, guard(h.logger, "update_frontmatter", h.updateFrontmatter))
 
 	mcp.AddTool(s, &mcp.Tool{
 		Name:  "replace_doc",
@@ -52,7 +52,7 @@ func registerWriteTools(s *mcp.Server, h *handlers) {
 			"re-read with read_doc, merge the changes, and retry. Prefer append_section or update_frontmatter for small changes. " +
 			"The new content must keep valid frontmatter and the type's required fields. Returns path, new hash and warnings.",
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes, OpenWorldHint: &no},
-	}, guard("replace_doc", h.replaceDoc))
+	}, guard(h.logger, "replace_doc", h.replaceDoc))
 }
 
 // createDocDescription lists every configured type with its path pattern and
