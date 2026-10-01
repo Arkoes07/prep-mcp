@@ -93,13 +93,10 @@ func bodyLines(src []byte) []line {
 		start = fm.BodyOffset
 	}
 	var lines []line
-	for pos := start; pos < len(text); {
-		end := len(text)
-		if i := strings.IndexByte(text[pos:], '\n'); i >= 0 {
-			end = pos + i + 1
-		}
-		lines = append(lines, line{text: strings.TrimRight(text[pos:end], "\r\n"), end: end})
-		pos = end
+	end := start
+	for l := range strings.Lines(text[start:]) {
+		end += len(l)
+		lines = append(lines, line{text: strings.TrimRight(l, "\r\n"), end: end})
 	}
 	return lines
 }

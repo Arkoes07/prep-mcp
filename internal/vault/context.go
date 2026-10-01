@@ -57,7 +57,7 @@ func (v *Vault) Context(day time.Time) (string, error) {
 		if len(group.qs) == 0 {
 			continue
 		}
-		var blocks []string
+		blocks := make([]string, 0, len(group.qs))
 		for _, q := range group.qs {
 			block, err := queryBlock(docs, q, group.recent)
 			if err != nil {

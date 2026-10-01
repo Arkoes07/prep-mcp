@@ -88,7 +88,7 @@ func parseBlock(src []byte, fm *Frontmatter) (*Frontmatter, error) {
 	default:
 		fm.Map = doc.Content[0]
 	}
-	seen := map[string]bool{}
+	seen := make(map[string]bool, len(fm.Map.Content)/2)
 	for k := range Pairs(fm.Map) {
 		if seen[k.Value] {
 			return nil, fmt.Errorf("invalid frontmatter: duplicate key %q at line %d; remove one of them", k.Value, k.Line+lineShift)
@@ -107,11 +107,11 @@ const maxPrefixParses = 1000
 // parses again, so only the failure that lasts to the end counts. For an
 // unterminated [, { or " that is the line that opens it.
 func badLine(block []byte) int {
-	var ends []int // ends[i] is the offset just after line i+1
-	for pos := 0; pos < len(block); {
-		_, next := nextLine(block, pos)
-		ends = append(ends, next)
-		pos = next
+	ends := make([]int, 0, bytes.Count(block, []byte("\n"))+1) // ends[i] is the offset just after line i+1
+	pos := 0
+	for l := range bytes.Lines(block) {
+		pos += len(l)
+		ends = append(ends, pos)
 	}
 	valid := func(n int) bool {
 		var d yaml.Node

@@ -39,7 +39,7 @@ func ApplyPatch(src []byte, p Patch, today string) (out []byte, changed bool, er
 		return nil, false, err
 	}
 
-	lines := splitLinesKeep(string(src[fm.Start:fm.End]))
+	lines := slices.Collect(strings.Lines(string(src[fm.Start:fm.End])))
 	pl := &patchPlan{
 		patch:   p,
 		setKeys: setKeys,
@@ -204,7 +204,7 @@ func (pl *patchPlan) rebuild(lines []string, eol string) string {
 			block.WriteString(eol)
 		}
 	}
-	byStart := map[int]string{}
+	byStart := make(map[int]string, len(pl.edits))
 	for k, s := range pl.spans {
 		if _, ok := pl.edits[k]; ok {
 			byStart[s.from] = k
@@ -246,7 +246,7 @@ type span struct {
 }
 
 func keySpans(m *yaml.Node, lines []string) map[string]span {
-	spans := map[string]span{}
+	spans := make(map[string]span, len(m.Content)/2)
 	for i := 0; i+1 < len(m.Content); i += 2 {
 		key, val := m.Content[i], m.Content[i+1]
 		from, to := key.Line-1, len(lines)
@@ -265,20 +265,6 @@ func keySpans(m *yaml.Node, lines []string) map[string]span {
 		spans[key.Value] = span{key: key, val: val, from: from, to: to}
 	}
 	return spans
-}
-
-func splitLinesKeep(s string) []string {
-	var out []string
-	for len(s) > 0 {
-		i := strings.IndexByte(s, '\n')
-		if i < 0 {
-			out = append(out, s)
-			break
-		}
-		out = append(out, s[:i+1])
-		s = s[i+1:]
-	}
-	return out
 }
 
 // renderKey encodes one "key: value" pair as YAML lines, keeping the old line comment.
@@ -312,7 +298,12 @@ func renderTags(existing *yaml.Node, tags []string, comment string) []string {
 
 // tagsNode is a flow list of tags, the form create_doc and patches write.
 func tagsNode(tags []string) *yaml.Node {
-	seq := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq", Style: yaml.FlowStyle}
+	seq := &yaml.Node{
+		Kind:    yaml.SequenceNode,
+		Tag:     "!!seq",
+		Style:   yaml.FlowStyle,
+		Content: make([]*yaml.Node, 0, len(tags)),
+	}
 	for _, t := range tags {
 		seq.Content = append(seq.Content, strNode(t))
 	}

@@ -40,7 +40,7 @@ func (v *Vault) Search(q, typ string, limit int) ([]Hit, error) {
 		limit = DefaultSearchLimit
 	}
 	limit = min(limit, MaxSearchLimit)
-	needle := strings.ToLower(q)
+	needle := []byte(strings.ToLower(q))
 
 	docs, _, err := v.Scan() // problems are reported by List and Context
 	if err != nil {
@@ -51,22 +51,9 @@ func (v *Vault) Search(q, typ string, limit int) ([]Hit, error) {
 		if typ != "" && d.Type != typ {
 			continue
 		}
-		var lines []Line
-		if d.titleLine > 0 && strings.Contains(strings.ToLower(d.Title), needle) {
-			lines = append(lines, Line{N: d.titleLine, Text: d.line(d.titleLine)})
-		}
-		for i, text := range strings.Split(string(d.Body), "\n") {
-			text = strings.TrimSuffix(text, "\r")
-			if strings.Contains(strings.ToLower(text), needle) {
-				lines = append(lines, Line{N: d.BodyLine + i, Text: text})
-			}
-		}
-		if len(lines) == 0 {
+		h := d.match(needle)
+		if h.Total == 0 {
 			continue
-		}
-		h := Hit{Path: d.Path, Title: d.Title, Total: len(lines), Lines: lines}
-		if len(h.Lines) > MaxHitLines {
-			h.Lines = h.Lines[:MaxHitLines]
 		}
 		hits = append(hits, h)
 		if len(hits) == limit {
@@ -76,14 +63,46 @@ func (v *Vault) Search(q, typ string, limit int) ([]Hit, error) {
 	return hits, nil
 }
 
+// match finds the lines of d that contain needle (already lowercase): the
+// title field's line, then body lines. It keeps the first MaxHitLines and
+// counts them all.
+func (d *Doc) match(needle []byte) Hit {
+	h := Hit{Path: d.Path, Title: d.Title}
+	add := func(n int, text string) {
+		h.Total++
+		if len(h.Lines) < MaxHitLines {
+			h.Lines = append(h.Lines, Line{N: n, Text: text})
+		}
+	}
+	if d.titleLine > 0 && bytes.Contains(bytes.ToLower([]byte(d.Title)), needle) {
+		add(d.titleLine, d.line(d.titleLine))
+	}
+	n := d.BodyLine
+	for raw := range bytes.Lines(d.Body) {
+		if text := trimEOL(raw); bytes.Contains(bytes.ToLower(text), needle) {
+			add(n, string(text))
+		}
+		n++
+	}
+	return h
+}
+
 // line returns the verbatim text of a 1-based line of the scanned file,
 // without its line ending.
 func (d *Doc) line(n int) string {
-	lines := bytes.Split(d.src, []byte("\n"))
-	if n < 1 || n > len(lines) {
-		return ""
+	i := 1
+	for raw := range bytes.Lines(d.src) {
+		if i == n {
+			return string(trimEOL(raw))
+		}
+		i++
 	}
-	return strings.TrimSuffix(string(lines[n-1]), "\r")
+	return ""
+}
+
+// trimEOL removes one trailing LF or CRLF.
+func trimEOL(b []byte) []byte {
+	return bytes.TrimSuffix(bytes.TrimSuffix(b, []byte("\n")), []byte("\r"))
 }
 
 // TagCount is one tag with its usage.

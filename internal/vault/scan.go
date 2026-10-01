@@ -125,7 +125,7 @@ func parseDoc(p string, d fs.DirEntry, src []byte) (*Doc, []Problem) {
 		Path:          p,
 		Type:          typ,
 		Title:         strings.TrimSuffix(name, path.Ext(name)),
-		Fields:        map[string]*yaml.Node{},
+		Fields:        make(map[string]*yaml.Node, len(fm.Map.Content)/2),
 		Body:          src[fm.BodyOffset:],
 		src:           src,
 		BodyLine:      fm.BodyLine,

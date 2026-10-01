@@ -202,7 +202,7 @@ type problemOut struct {
 }
 
 func problemsOut(ps []vault.Problem) []problemOut {
-	var out []problemOut
+	out := make([]problemOut, 0, len(ps))
 	for _, p := range ps {
 		out = append(out, problemOut{Path: p.Path, Msg: p.Msg})
 	}
@@ -240,7 +240,7 @@ func (h *handlers) listDocs(
 		Count    int          `json:"count"`
 		Note     string       `json:"note,omitempty"`
 		Problems []problemOut `json:"problems,omitempty"`
-	}{Docs: []docMeta{}, Count: len(docs), Problems: problemsOut(problems)}
+	}{Docs: make([]docMeta, 0, len(docs)), Count: len(docs), Problems: problemsOut(problems)}
 	for _, d := range docs {
 		m := docMeta{
 			Path:    d.Path,
@@ -337,9 +337,9 @@ func (h *handlers) searchText(
 	out := struct {
 		Hits  []hitOut `json:"hits"`
 		Count int      `json:"count"`
-	}{Hits: []hitOut{}, Count: len(hits)}
+	}{Hits: make([]hitOut, 0, len(hits)), Count: len(hits)}
 	for _, hit := range hits {
-		ho := hitOut{Path: hit.Path, Title: hit.Title, Total: hit.Total, Lines: []lineOut{}}
+		ho := hitOut{Path: hit.Path, Title: hit.Title, Total: hit.Total, Lines: make([]lineOut, 0, len(hit.Lines))}
 		for _, l := range hit.Lines {
 			ho.Lines = append(ho.Lines, lineOut{N: l.N, Text: l.Text})
 		}
@@ -370,7 +370,7 @@ func (h *handlers) listTags(
 	out := struct {
 		Tags  []tagOut `json:"tags"`
 		Count int      `json:"count"`
-	}{Tags: []tagOut{}, Count: len(stats)}
+	}{Tags: make([]tagOut, 0, len(stats)), Count: len(stats)}
 	for _, s := range stats {
 		out.Tags = append(out.Tags, tagOut{
 			Tag:     s.Tag,
