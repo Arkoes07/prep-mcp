@@ -2,6 +2,7 @@ package write
 
 import (
 	"errors"
+	"iter"
 	"regexp"
 	"strings"
 
@@ -19,93 +20,25 @@ var (
 // never searched. The last of several equal headings is used; headings inside
 // code fences do not count.
 func InsertSection(src []byte, heading, content string) ([]byte, error) {
-	heading = strings.TrimSpace(heading)
-	if strings.ContainsAny(heading, "\r\n") {
-		return nil, errors.New("heading must be a single line; pass one line of text such as Log")
-	}
-	heading = strings.TrimSpace(strings.TrimPrefix(heading, "## "))
-	if heading == "" {
-		return nil, errors.New("heading is empty; pass the section title, for example Log")
-	}
-	content = strings.TrimRight(strings.ReplaceAll(content, "\r\n", "\n"), " \t\r\n")
-	if strings.TrimSpace(content) == "" {
-		return nil, errors.New("content is empty; pass the text to add")
-	}
-
-	eol := "\n"
-	if i := strings.IndexByte(string(src), '\n'); i > 0 && src[i-1] == '\r' {
-		eol = "\r\n"
+	heading, content, err := cleanSectionArgs(heading, content)
+	if err != nil {
+		return nil, err
 	}
 	text := string(src)
-
-	// Scan the body line by line, remembering where the last matching section is.
-	start := 0
-	if fm, err := vault.SplitFrontmatter(src); err == nil && fm != nil {
-		start = fm.BodyOffset
+	eol := "\n"
+	if i := strings.IndexByte(text, '\n'); i > 0 && text[i-1] == '\r' {
+		eol = "\r\n"
 	}
-	type line struct {
-		text       string // without the line ending
-		begin, end int    // src[begin:end] includes the line ending
-	}
-	var lines []line
-	for pos := start; pos < len(text); {
-		end := len(text)
-		if i := strings.IndexByte(text[pos:], '\n'); i >= 0 {
-			end = pos + i + 1
-		}
-		lines = append(lines, line{text: strings.TrimRight(text[pos:end], "\r\n"), begin: pos, end: end})
-		pos = end
-	}
-
-	match, inFence := -1, false
-	for i, l := range lines {
-		if isCodeFence(l.text) {
-			inFence = !inFence
-			continue
-		}
-		if inFence {
-			continue
-		}
-		if m := headingRE.FindStringSubmatch(l.text); m != nil && len(m[1]) == 2 && m[2] == heading {
-			match = i
-		}
-	}
-
 	block := strings.ReplaceAll(content, "\n", eol) + eol
 
+	lines := bodyLines(src)
+	match := findSection(lines, heading)
 	if match < 0 {
-		var b strings.Builder
-		if len(text) > 0 {
-			if !strings.HasSuffix(text, "\n") {
-				b.WriteString(eol)
-			}
-			if !endsWithBlankLine(text) {
-				b.WriteString(eol)
-			}
-		}
-		for _, part := range []string{"## ", heading, eol, eol, block} {
-			b.WriteString(part)
-		}
-		return []byte(text + b.String()), nil
+		return []byte(text + newSection(text, heading, block, eol)), nil
 	}
 
-	// The section runs to the next level 1 or 2 heading outside a code fence.
-	end := match + 1
-	inFence = false
-	for ; end < len(lines); end++ {
-		l := lines[end]
-		if isCodeFence(l.text) {
-			inFence = !inFence
-			continue
-		}
-		if inFence {
-			continue
-		}
-		if m := headingRE.FindStringSubmatch(l.text); m != nil && len(m[1]) <= 2 {
-			break
-		}
-	}
 	// Insert after the last non-blank line of the section.
+	end := sectionEnd(lines, match)
 	last := match
 	for i := match + 1; i < end; i++ {
 		if strings.TrimSpace(lines[i].text) != "" {
@@ -125,6 +58,117 @@ func InsertSection(src []byte, heading, content string) ([]byte, error) {
 	}
 	b.WriteString(block)
 	return []byte(text[:at] + b.String() + text[at:]), nil
+}
+
+// cleanSectionArgs trims the heading (a leading "## " is allowed) and the
+// content, normalises the content to LF, and rejects empty or multi-line input.
+func cleanSectionArgs(heading, content string) (string, string, error) {
+	heading = strings.TrimSpace(heading)
+	if strings.ContainsAny(heading, "\r\n") {
+		return "", "", errors.New("heading must be a single line; pass one line of text such as Log")
+	}
+	heading = strings.TrimSpace(strings.TrimPrefix(heading, "## "))
+	if heading == "" {
+		return "", "", errors.New("heading is empty; pass the section title, for example Log")
+	}
+	content = strings.TrimRight(strings.ReplaceAll(content, "\r\n", "\n"), " \t\r\n")
+	if strings.TrimSpace(content) == "" {
+		return "", "", errors.New("content is empty; pass the text to add")
+	}
+	return heading, content, nil
+}
+
+// line is one body line of a file.
+type line struct {
+	text string // without the line ending
+	end  int    // offset just after the line ending
+}
+
+// bodyLines splits src into lines, starting after the frontmatter if it has
+// valid frontmatter.
+func bodyLines(src []byte) []line {
+	text := string(src)
+	start := 0
+	if fm, err := vault.SplitFrontmatter(src); err == nil && fm != nil {
+		start = fm.BodyOffset
+	}
+	var lines []line
+	for pos := start; pos < len(text); {
+		end := len(text)
+		if i := strings.IndexByte(text[pos:], '\n'); i >= 0 {
+			end = pos + i + 1
+		}
+		lines = append(lines, line{text: strings.TrimRight(text[pos:end], "\r\n"), end: end})
+		pos = end
+	}
+	return lines
+}
+
+// unfenced yields the lines from index from on that are outside code fences,
+// with their index. The fence lines themselves are not yielded.
+func unfenced(lines []line, from int) iter.Seq2[int, line] {
+	return func(yield func(int, line) bool) {
+		inFence := false
+		for i := from; i < len(lines); i++ {
+			if isCodeFence(lines[i].text) {
+				inFence = !inFence
+				continue
+			}
+			if !inFence && !yield(i, lines[i]) {
+				return
+			}
+		}
+	}
+}
+
+// headingLevel returns the level and title of a markdown heading line, or 0
+// when the line is not a heading.
+func headingLevel(l string) (level int, title string) {
+	m := headingRE.FindStringSubmatch(l)
+	if m == nil {
+		return 0, ""
+	}
+	return len(m[1]), m[2]
+}
+
+// findSection returns the index of the last "## heading" line, or -1.
+func findSection(lines []line, heading string) int {
+	match := -1
+	for i, l := range unfenced(lines, 0) {
+		if level, title := headingLevel(l.text); level == 2 && title == heading {
+			match = i
+		}
+	}
+	return match
+}
+
+// sectionEnd returns the index of the next level 1 or 2 heading after the
+// heading at match, or len(lines) when the section runs to the end.
+func sectionEnd(lines []line, match int) int {
+	for i, l := range unfenced(lines, match+1) {
+		if level, _ := headingLevel(l.text); level > 0 && level <= 2 {
+			return i
+		}
+	}
+	return len(lines)
+}
+
+// newSection is the text that adds "## heading" with block at the end of text,
+// separated from what is there by one blank line.
+func newSection(text, heading, block, eol string) string {
+	var b strings.Builder
+	if len(text) > 0 {
+		if !strings.HasSuffix(text, "\n") {
+			b.WriteString(eol)
+		}
+		if !endsWithBlankLine(text) {
+			b.WriteString(eol)
+		}
+	}
+	for _, part := range []string{"## ", heading, eol, eol, block} {
+		b.WriteString(part)
+	}
+	return b.String()
 }
 
 func isCodeFence(l string) bool {

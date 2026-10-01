@@ -3,6 +3,8 @@ package write_test
 import (
 	"os"
 	"testing"
+
+	"github.com/Arkoes07/prep-mcp/internal/write"
 )
 
 // The atomic write is internal, so these tests reach it through the Writer.
@@ -60,7 +62,7 @@ func TestAtomicWrite(t *testing.T) {
 	t.Run("no_temp_after_exists_error", func(t *testing.T) {
 		e := newEnv(t)
 		before := snapshot(t, e.root)
-		if _, err := e.w.Create(ctx, "week", node(t, `{"week":"2026-W03"}`), "", ""); err == nil {
+		if _, err := e.w.Create(ctx, write.Draft{Type: "week", Frontmatter: node(t, `{"week":"2026-W03"}`)}); err == nil {
 			t.Fatal("Create over an existing file succeeded")
 		}
 		sameSnapshot(t, before, snapshot(t, e.root))

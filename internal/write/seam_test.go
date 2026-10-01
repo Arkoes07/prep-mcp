@@ -69,7 +69,7 @@ func TestFailureBeforeRenameLeavesNothingBehind(t *testing.T) {
 	if _, err := w.AppendSection(context.Background(), p, "Log", "- Tue: x"); err == nil || !strings.Contains(err.Error(), "injected failure") {
 		t.Fatalf("AppendSection error = %v, want the injected failure", err)
 	}
-	if _, err := w.Create(context.Background(), "reference", nodeOf(t, `{"title":"T"}`), "x", ""); err == nil {
+	if _, err := w.Create(context.Background(), Draft{Type: "reference", Frontmatter: nodeOf(t, `{"title":"T"}`), Body: "x"}); err == nil {
 		t.Fatal("Create succeeded despite the injected failure")
 	}
 	if got, _ := os.ReadFile(filepath.Join(root, p)); string(got) != string(orig) {

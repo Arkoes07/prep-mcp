@@ -58,22 +58,70 @@ func (e *ConflictError) Error() string {
 	return fmt.Sprintf("%s changed since you read it; its current hash is %s. Nothing was written: re-read with read_doc, merge, retry with expected_hash set to the current hash", e.Path, e.Current)
 }
 
+// Draft is a document for Create to make.
+type Draft struct {
+	Type        string     // a configured type
+	Frontmatter *yaml.Node // a mapping in the order to write it; nil for none
+	Body        string
+	Slug        string // fills {slug} in the filename; empty means the title field
+}
+
 // Create makes a new document of a configured type. The path comes from the
 // type's folder and filename pattern.
-func (w *Writer) Create(ctx context.Context, typ string, fm *yaml.Node, body, slug string) (*Result, error) {
+func (w *Writer) Create(ctx context.Context, d Draft) (*Result, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	spec, ok := w.cfg.Type(typ)
+	spec, ok := w.cfg.Type(d.Type)
 	if !ok {
-		return nil, fmt.Errorf("unknown type %q; configured types: %s", typ, w.cfg.TypeList())
+		return nil, fmt.Errorf("unknown type %q; configured types: %s", d.Type, w.cfg.TypeList())
 	}
+	day := w.now()
+	doc, err := newFrontmatter(d.Type, d.Frontmatter, day.Format(time.DateOnly))
+	if err != nil {
+		return nil, err
+	}
+	if missing := missingFields(spec.Required, doc); len(missing) > 0 {
+		return nil, fmt.Errorf("missing required fields for %s: %s; add them to frontmatter and retry", d.Type, strings.Join(missing, ", "))
+	}
+
+	name, err := RenderFilename(spec.Filename, doc, d.Slug, day)
+	if err != nil {
+		return nil, err
+	}
+	rel, err := w.v.Resolve(path.Join(spec.Folder, name), vault.AccessWrite)
+	if err != nil {
+		return nil, err
+	}
+
+	body := d.Body
+	if body != "" && !strings.HasSuffix(body, "\n") {
+		body += "\n"
+	}
+	data := []byte("---\n" + encode(doc) + "---\n" + body)
+	if _, err := reread(data); err != nil {
+		return nil, fmt.Errorf("internal error: the new frontmatter did not re-read (%w); nothing was written. Report this as a bug", err)
+	}
+
+	if err := w.createFile(rel, data); err != nil {
+		return nil, err
+	}
+	res := &Result{
+		Path:     rel,
+		Hash:     vault.Hash(data),
+		Warnings: w.tagWarnings(vault.NormalizeTags(vault.Field(doc, "tags"))),
+	}
+	w.commit(ctx, "create_doc", res)
+	return res, nil
+}
+
+// newFrontmatter builds a new document's frontmatter: type first, then the
+// caller's keys in their order with tags normalised, then created (today)
+// unless the caller set it.
+func newFrontmatter(typ string, fm *yaml.Node, today string) (*yaml.Node, error) {
 	if fm != nil && fm.Kind != yaml.MappingNode {
 		return nil, errors.New("frontmatter must be an object of key: value pairs")
 	}
-	day := w.now()
-
-	// type first, then the caller's keys in their order, then created.
 	doc := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map", Content: []*yaml.Node{keyNode("type"), strNode(typ)}}
 	hasCreated := false
 	if fm != nil {
@@ -94,39 +142,9 @@ func (w *Writer) Create(ctx context.Context, typ string, fm *yaml.Node, body, sl
 		}
 	}
 	if !hasCreated {
-		doc.Content = append(doc.Content, keyNode("created"), strNode(day.Format(time.DateOnly)))
+		doc.Content = append(doc.Content, keyNode("created"), strNode(today))
 	}
-	if missing := missingFields(spec.Required, doc); len(missing) > 0 {
-		return nil, fmt.Errorf("missing required fields for %s: %s; add them to frontmatter and retry", typ, strings.Join(missing, ", "))
-	}
-
-	name, err := RenderFilename(spec.Filename, doc, slug, day)
-	if err != nil {
-		return nil, err
-	}
-	rel, err := w.v.Resolve(path.Join(spec.Folder, name), vault.AccessWrite)
-	if err != nil {
-		return nil, err
-	}
-
-	if body != "" && !strings.HasSuffix(body, "\n") {
-		body += "\n"
-	}
-	data := []byte("---\n" + encode(doc) + "---\n" + body)
-	if _, err := reread(data); err != nil {
-		return nil, fmt.Errorf("internal error: the new frontmatter did not re-read (%w); nothing was written. Report this as a bug", err)
-	}
-
-	if err := w.createFile(rel, data); err != nil {
-		return nil, err
-	}
-	res := &Result{
-		Path:     rel,
-		Hash:     vault.Hash(data),
-		Warnings: w.tagWarnings(vault.NormalizeTags(vault.Field(doc, "tags"))),
-	}
-	w.commit(ctx, "create_doc", res)
-	return res, nil
+	return doc, nil
 }
 
 // AppendSection adds content to the end of a "## heading" section, or adds

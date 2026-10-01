@@ -108,7 +108,7 @@ func TestWriterCreate(t *testing.T) {
 					t.Fatalf("test setup: %v", err)
 				}
 			}
-			res, err := e.w.Create(ctx, tc.typ, node(t, tc.fm), tc.body, tc.slug)
+			res, err := e.w.Create(ctx, write.Draft{Type: tc.typ, Frontmatter: node(t, tc.fm), Body: tc.body, Slug: tc.slug})
 			if err != nil {
 				t.Fatalf("Create: %v", err)
 			}
@@ -151,7 +151,7 @@ func TestWriterCreate(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			e := newEnv(t)
 			before := snapshot(t, e.root)
-			res, err := e.w.Create(ctx, tc.typ, node(t, tc.fm), tc.body, tc.slug)
+			res, err := e.w.Create(ctx, write.Draft{Type: tc.typ, Frontmatter: node(t, tc.fm), Body: tc.body, Slug: tc.slug})
 			if err == nil {
 				t.Fatalf("Create succeeded (%+v), want an error", res)
 			}

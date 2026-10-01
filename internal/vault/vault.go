@@ -81,38 +81,14 @@ func (e *PathError) Error() string { return e.Msg }
 // separators. Reads follow symlinks that stay inside the vault. Writes refuse
 // any symlink, refuse templates/, and allow files that do not exist yet.
 func (v *Vault) Resolve(p string, a Access) (string, error) {
+	clean, err := checkPathText(p, a)
+	if err != nil {
+		return "", err
+	}
 	fail := func(format string, args ...any) (string, error) {
 		return "", &PathError{Path: p, Msg: fmt.Sprintf(format, args...)}
 	}
-	switch {
-	case p == "":
-		return fail("empty path; pass a vault-relative path such as notes/x.md")
-	case strings.ContainsRune(p, 0) || strings.ContainsRune(p, '\\'):
-		return fail(`invalid path %q; use "/" separators and no control characters`, p)
-	case strings.HasPrefix(p, "/") || filepath.IsAbs(p):
-		return fail("absolute paths not allowed; use a vault-relative path (got %q)", p)
-	case strings.HasSuffix(p, "/"):
-		return fail("%q ends with /; name a file, for example notes/x.md", p)
-	}
-	clean := path.Clean(p)
-	if clean == ".." || strings.HasPrefix(clean, "../") {
-		return fail("%q is outside the vault; use a path relative to the vault root", p)
-	}
-	if clean == "." {
-		return fail("%q is the vault root; name a file inside it", p)
-	}
 	parts := strings.Split(clean, "/")
-	for _, part := range parts {
-		if strings.HasPrefix(part, ".") {
-			return fail("%q has a hidden component (%s); dot-folders and dot-files are not accessible", p, part)
-		}
-	}
-	if !strings.EqualFold(path.Ext(clean), ".md") {
-		return fail("%q is not a markdown file (.md only); use list_docs to find documents", p)
-	}
-	if a == AccessWrite && strings.EqualFold(parts[0], "templates") {
-		return fail("templates/ is read-only; read %q with read_doc and create the new file with create_doc", p)
-	}
 
 	// Walk the components, looking for symlinks and missing pieces.
 	for i := range parts {
@@ -148,6 +124,44 @@ func (v *Vault) Resolve(p string, a Access) (string, error) {
 		if !last && !fi.IsDir() {
 			return fail("%q: %s is a file, not a folder", p, prefix)
 		}
+	}
+	return clean, nil
+}
+
+// checkPathText rejects a path by its text alone and returns it cleaned. The
+// file system is not touched; Resolve does that next.
+func checkPathText(p string, a Access) (string, error) {
+	fail := func(format string, args ...any) (string, error) {
+		return "", &PathError{Path: p, Msg: fmt.Sprintf(format, args...)}
+	}
+	switch {
+	case p == "":
+		return fail("empty path; pass a vault-relative path such as notes/x.md")
+	case strings.ContainsRune(p, 0) || strings.ContainsRune(p, '\\'):
+		return fail(`invalid path %q; use "/" separators and no control characters`, p)
+	case strings.HasPrefix(p, "/") || filepath.IsAbs(p):
+		return fail("absolute paths not allowed; use a vault-relative path (got %q)", p)
+	case strings.HasSuffix(p, "/"):
+		return fail("%q ends with /; name a file, for example notes/x.md", p)
+	}
+	clean := path.Clean(p)
+	if clean == ".." || strings.HasPrefix(clean, "../") {
+		return fail("%q is outside the vault; use a path relative to the vault root", p)
+	}
+	if clean == "." {
+		return fail("%q is the vault root; name a file inside it", p)
+	}
+	parts := strings.Split(clean, "/")
+	for _, part := range parts {
+		if strings.HasPrefix(part, ".") {
+			return fail("%q has a hidden component (%s); dot-folders and dot-files are not accessible", p, part)
+		}
+	}
+	if !strings.EqualFold(path.Ext(clean), ".md") {
+		return fail("%q is not a markdown file (.md only); use list_docs to find documents", p)
+	}
+	if a == AccessWrite && strings.EqualFold(parts[0], "templates") {
+		return fail("templates/ is read-only; read %q with read_doc and create the new file with create_doc", p)
 	}
 	return clean, nil
 }

@@ -138,7 +138,7 @@ func (h *handlers) createDoc(
 	if err != nil {
 		return nil, nil, fmt.Errorf("frontmatter %w", err)
 	}
-	return writeResult(h.w.Create(ctx, in.Type, fm, in.Body, in.Slug))
+	return writeResult(h.w.Create(ctx, write.Draft{Type: in.Type, Frontmatter: fm, Body: in.Body, Slug: in.Slug}))
 }
 
 type appendSectionIn struct {

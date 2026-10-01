@@ -81,7 +81,7 @@ const gitTimeout = 10 * time.Second
 // createNote writes learning/ddia-ch5.md through the writer.
 func createNote(t *testing.T, e *env) *write.Result {
 	t.Helper()
-	res, err := e.w.Create(ctx, "learning", node(t, `{"title":"DDIA ch5","track":"ddia"}`), "x", "")
+	res, err := e.w.Create(ctx, write.Draft{Type: "learning", Frontmatter: node(t, `{"title":"DDIA ch5","track":"ddia"}`), Body: "x"})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -193,7 +193,7 @@ func TestGitEachTool(t *testing.T) {
 		do        func(t *testing.T) (*write.Result, error)
 	}{
 		{"create_doc: learning/ddia-ch5.md", "learning/ddia-ch5.md", func(t *testing.T) (*write.Result, error) {
-			return e.w.Create(ctx, "learning", node(t, `{"title":"DDIA ch5","track":"ddia"}`), "x", "")
+			return e.w.Create(ctx, write.Draft{Type: "learning", Frontmatter: node(t, `{"title":"DDIA ch5","track":"ddia"}`), Body: "x"})
 		}},
 		{"append_section: weeks/2026-w03.md", "weeks/2026-w03.md", func(t *testing.T) (*write.Result, error) {
 			return e.w.AppendSection(ctx, "weeks/2026-w03.md", "Log", "- Tue: x")
@@ -278,7 +278,7 @@ func TestGitRootViaSymlink(t *testing.T) {
 		w := write.New(v, e.cfg, gitFor(e, "git", gitTimeout), testvault.Clock())
 		before := commitCount(t, e.root)
 
-		res, err := w.Create(ctx, "learning", node(t, `{"title":"DDIA ch5","track":"ddia"}`), "x", "")
+		res, err := w.Create(ctx, write.Draft{Type: "learning", Frontmatter: node(t, `{"title":"DDIA ch5","track":"ddia"}`), Body: "x"})
 		if err != nil {
 			t.Fatal(err)
 		}
