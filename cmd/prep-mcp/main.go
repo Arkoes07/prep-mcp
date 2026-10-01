@@ -56,31 +56,13 @@ func run(ctx context.Context, args []string, getenv func(string) string, stderr 
 	// stdout carries the protocol, so every log line goes to stderr.
 	logger := slog.New(slog.NewTextHandler(stderr, nil))
 
-	root := cmp.Or(*rootFlag, getenv("PREP_ROOT"))
-	if root == "" {
-		wd, err := os.Getwd()
-		if err != nil {
-			return fmt.Errorf("cannot find the current directory: %w; pass --root", err)
-		}
-		root = wd
+	root, err := vaultRoot(*rootFlag, getenv)
+	if err != nil {
+		return err
 	}
-	cfgPath := cmp.Or(*configFlag, getenv("PREP_CONFIG"))
-	explicit := cfgPath != ""
-	if !explicit {
-		cfgPath = filepath.Join(root, "prep.config.yaml")
-	}
-
-	cfg, err := config.Load(cfgPath)
-	switch {
-	case errors.Is(err, fs.ErrNotExist) && !explicit:
-		logger.Warn("no config file; starting with no document types (queries still work)",
-			slog.String("config", cfgPath))
-		cfg, err = config.Parse(nil)
-		if err != nil {
-			return err
-		}
-	case err != nil:
-		return fmt.Errorf("%w\nfix the config, or point --config / PREP_CONFIG at a valid file", err)
+	cfg, err := loadConfig(cmp.Or(*configFlag, getenv("PREP_CONFIG")), root, logger)
+	if err != nil {
+		return err
 	}
 
 	v, err := vault.Open(root, cfg, time.Now)
@@ -99,4 +81,37 @@ func run(ctx context.Context, args []string, getenv func(string) string, stderr 
 		return err
 	}
 	return nil
+}
+
+// vaultRoot picks the vault directory: --root, else PREP_ROOT, else the
+// current directory.
+func vaultRoot(flagValue string, getenv func(string) string) (string, error) {
+	if root := cmp.Or(flagValue, getenv("PREP_ROOT")); root != "" {
+		return root, nil
+	}
+	wd, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("cannot find the current directory: %w; pass --root", err)
+	}
+	return wd, nil
+}
+
+// loadConfig loads the config at path, or <root>/prep.config.yaml when path
+// is empty. A missing default config means an empty one, so reads still
+// work; a missing explicit config is an error.
+func loadConfig(path, root string, logger *slog.Logger) (*config.Config, error) {
+	explicit := path != ""
+	if !explicit {
+		path = filepath.Join(root, "prep.config.yaml")
+	}
+	cfg, err := config.Load(path)
+	switch {
+	case errors.Is(err, fs.ErrNotExist) && !explicit:
+		logger.Warn("no config file; starting with no document types (queries still work)",
+			slog.String("config", path))
+		return config.Parse(nil)
+	case err != nil:
+		return nil, fmt.Errorf("%w\nfix the config, or point --config / PREP_CONFIG at a valid file", err)
+	}
+	return cfg, nil
 }

@@ -177,69 +177,88 @@ var authorRE = regexp.MustCompile(`^(.+?)\s*<([^<>\s]+@[^<>\s]+)>$`)
 // Validate reports every problem in the config, joined into one error.
 func (c *Config) Validate() error {
 	var errs []error
-	add := func(format string, args ...any) { errs = append(errs, fmt.Errorf(format, args...)) }
-
 	if _, _, ok := ParseAuthor(c.Author); c.Author != "" && !ok {
-		add(`author %q must look like "Name <email>"; fix it in the config`, c.Author)
+		errs = append(errs, fmt.Errorf(`author %q must look like "Name <email>"; fix it in the config`, c.Author))
 	}
 	if c.TagsFile != "" {
 		if err := checkRelPath(c.TagsFile); err != nil {
-			add("tags_file %q: %w", c.TagsFile, err)
+			errs = append(errs, fmt.Errorf("tags_file %q: %w", c.TagsFile, err))
 		}
 	}
+	errs = append(errs, c.typeErrors()...)
+	errs = append(errs, c.weekErrors()...)
+	errs = append(errs, c.queryErrors()...)
+	return errors.Join(errs...)
+}
 
+// typeErrors checks every type's folder and filename pattern.
+func (c *Config) typeErrors() []error {
+	var errs []error
 	for _, name := range c.TypeNames() {
 		t := c.Types[name]
 		if t.Folder == "" {
-			add("type %s: folder is required (for example folder: notes)", name)
+			errs = append(errs, fmt.Errorf("type %s: folder is required (for example folder: notes)", name))
 		} else if err := checkFolder(t.Folder); err != nil {
-			add("type %s: folder %q: %w", name, t.Folder, err)
+			errs = append(errs, fmt.Errorf("type %s: folder %q: %w", name, t.Folder, err))
 		}
 		if t.Filename == "" {
-			add(`type %s: filename is required (for example filename: "{slug}.md")`, name)
+			errs = append(errs, fmt.Errorf(`type %s: filename is required (for example filename: "{slug}.md")`, name))
 		} else {
 			errs = append(errs, checkFilename(name, t)...)
 		}
 	}
+	return errs
+}
 
+// weekErrors checks that the current-week settings name a type and one of
+// its required fields, or are both left out.
+func (c *Config) weekErrors() []error {
 	ctx := c.Context
-	switch {
-	case ctx.CurrentWeekType == "" && ctx.CurrentWeekField != "":
-		add("context.current_week_field is set but context.current_week_type is not; set both or neither")
-	case ctx.CurrentWeekType != "":
-		t, ok := c.Types[ctx.CurrentWeekType]
-		switch {
-		case !ok:
-			add("context.current_week_type %q is not a defined type; defined types: %s",
-				ctx.CurrentWeekType, c.TypeList())
-		case ctx.CurrentWeekField == "":
-			add("context.current_week_type is set; " +
-				"set context.current_week_field to the field that holds the week (for example week)")
-		case !slices.Contains(t.Required, ctx.CurrentWeekField):
-			add("type %s: add %s to required (context.current_week_field uses it)",
-				ctx.CurrentWeekType, ctx.CurrentWeekField)
+	if ctx.CurrentWeekType == "" {
+		if ctx.CurrentWeekField != "" {
+			return []error{errors.New(
+				"context.current_week_field is set but context.current_week_type is not; set both or neither")}
 		}
+		return nil
 	}
+	t, ok := c.Types[ctx.CurrentWeekType]
+	switch {
+	case !ok:
+		return []error{fmt.Errorf("context.current_week_type %q is not a defined type; defined types: %s",
+			ctx.CurrentWeekType, c.TypeList())}
+	case ctx.CurrentWeekField == "":
+		return []error{errors.New("context.current_week_type is set; " +
+			"set context.current_week_field to the field that holds the week (for example week)")}
+	case !slices.Contains(t.Required, ctx.CurrentWeekField):
+		return []error{fmt.Errorf("type %s: add %s to required (context.current_week_field uses it)",
+			ctx.CurrentWeekType, ctx.CurrentWeekField)}
+	}
+	return nil
+}
 
+// queryErrors checks that every context query names a defined type and a
+// usable limit.
+func (c *Config) queryErrors() []error {
+	var errs []error
 	for _, group := range []struct {
 		name string
 		qs   []Query
 	}{
-		{name: "open_items", qs: ctx.OpenItems},
-		{name: "recent", qs: ctx.Recent},
+		{name: "open_items", qs: c.Context.OpenItems},
+		{name: "recent", qs: c.Context.Recent},
 	} {
 		for i, q := range group.qs {
 			if _, ok := c.Types[q.Type]; !ok {
-				add("context.%s[%d]: type %q is not a defined type; defined types: %s",
-					group.name, i, q.Type, c.TypeList())
+				errs = append(errs, fmt.Errorf("context.%s[%d]: type %q is not a defined type; defined types: %s",
+					group.name, i, q.Type, c.TypeList()))
 			}
 			if q.Limit < 0 {
-				add("context.%s[%d]: limit must be positive (or leave it out for the default %d)",
-					group.name, i, DefaultQueryLimit)
+				errs = append(errs, fmt.Errorf("context.%s[%d]: limit must be positive (or leave it out for the default %d)",
+					group.name, i, DefaultQueryLimit))
 			}
 		}
 	}
-	return errors.Join(errs...)
+	return errs
 }
 
 // checkRelPath accepts a clean, relative, slash-separated path that stays inside the vault.

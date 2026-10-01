@@ -1,6 +1,7 @@
 package vault
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"strings"
@@ -66,10 +67,7 @@ func Apply(docs []*Doc, f Filter) ([]*Doc, error) {
 		case SortTitle:
 			c = strings.Compare(strings.ToLower(a.Title), strings.ToLower(b.Title))
 		}
-		if c != 0 {
-			return c
-		}
-		return strings.Compare(a.Path, b.Path)
+		return cmp.Or(c, strings.Compare(a.Path, b.Path))
 	})
 	if len(out) > limit {
 		out = out[:limit]
@@ -81,22 +79,16 @@ func matches(d *Doc, f Filter) bool {
 	if f.Type != "" && d.Type != f.Type {
 		return false
 	}
+	hasTag := func(pattern string) bool {
+		return slices.ContainsFunc(d.Tags, func(t string) bool { return MatchTag(pattern, t) })
+	}
 	for _, p := range f.Tags {
-		if !slices.ContainsFunc(d.Tags, func(t string) bool { return MatchTag(p, t) }) {
+		if !hasTag(p) {
 			return false
 		}
 	}
-	if len(f.AnyTags) > 0 {
-		found := false
-		for _, p := range f.AnyTags {
-			if slices.ContainsFunc(d.Tags, func(t string) bool { return MatchTag(p, t) }) {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return false
-		}
+	if len(f.AnyTags) > 0 && !slices.ContainsFunc(f.AnyTags, hasTag) {
+		return false
 	}
 	for key, want := range f.Where {
 		if !fieldMatches(d.Fields[key], want) {

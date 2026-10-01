@@ -2,6 +2,7 @@ package write
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -51,22 +52,10 @@ func (g *Git) Commit(ctx context.Context, dir, rel, msg string) (hash, warning s
 		return fail("%s failed: %s. The file is saved; fix the cause, then run `git add -- %s && git commit --only -- %s` in %s", what, describe(out, err), rel, rel, dir)
 	}
 
-	bin := g.Bin
-	if bin == "" {
-		bin = "git"
+	bin, name, email, err := g.identity()
+	if err != nil {
+		return fail("%s", err)
 	}
-	if _, err := exec.LookPath(bin); err != nil {
-		return fail("cannot run git (%v). Install git, fix the path %q, or set commit_on_write: false in the config", err, bin)
-	}
-	author := g.Author
-	if strings.TrimSpace(author) == "" {
-		author = config.DefaultAuthor
-	}
-	name, email, ok := config.ParseAuthor(author)
-	if !ok {
-		return fail("author %q must look like \"Name <email>\"; fix author in the config", g.Author)
-	}
-
 	r := runner{bin: bin, dir: dir, env: append(os.Environ(),
 		"GIT_TERMINAL_PROMPT=0",
 		"LC_ALL=C", // stable messages, so "not a git repository" can be recognised
@@ -104,6 +93,25 @@ func (g *Git) Commit(ctx context.Context, dir, rel, msg string) (hash, warning s
 		return problem("git rev-parse", out, err)
 	}
 	return strings.TrimSpace(out), ""
+}
+
+// identity finds the git binary and splits the author into name and email,
+// applying the defaults for empty settings.
+func (g *Git) identity() (bin, name, email string, err error) {
+	bin = cmp.Or(g.Bin, "git")
+	if _, err := exec.LookPath(bin); err != nil {
+		return "", "", "", fmt.Errorf(
+			"cannot run git (%w). Install git, fix the path %q, or set commit_on_write: false in the config", err, bin)
+	}
+	author := g.Author
+	if strings.TrimSpace(author) == "" {
+		author = config.DefaultAuthor
+	}
+	name, email, ok := config.ParseAuthor(author)
+	if !ok {
+		return "", "", "", fmt.Errorf("author %q must look like \"Name <email>\"; fix author in the config", g.Author)
+	}
+	return bin, name, email, nil
 }
 
 type runner struct {

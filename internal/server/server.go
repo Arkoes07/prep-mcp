@@ -214,21 +214,9 @@ func (h *handlers) listDocs(
 	_ *mcp.CallToolRequest,
 	in listDocsIn,
 ) (*mcp.CallToolResult, any, error) {
-	f := vault.Filter{Type: in.Type, Tags: in.Tags, AnyTags: in.AnyTags, Sort: in.Sort, Limit: in.Limit}
-	var err error
-	if f.Since, err = parseDay("since", in.Since); err != nil {
+	f, err := in.filter()
+	if err != nil {
 		return nil, nil, err
-	}
-	if f.Until, err = parseDay("until", in.Until); err != nil {
-		return nil, nil, err
-	}
-	if len(in.Where) > 0 {
-		f.Where = make(map[string][]string, len(in.Where))
-		for k, val := range in.Where {
-			if f.Where[k], err = whereValues(k, val); err != nil {
-				return nil, nil, err
-			}
-		}
 	}
 	docs, problems, err := h.v.List(f)
 	if err != nil {
@@ -242,22 +230,7 @@ func (h *handlers) listDocs(
 		Problems []problemOut `json:"problems,omitempty"`
 	}{Docs: make([]docMeta, 0, len(docs)), Count: len(docs), Problems: problemsOut(problems)}
 	for _, d := range docs {
-		m := docMeta{
-			Path:    d.Path,
-			Type:    d.Type,
-			Title:   d.Title,
-			Tags:    append([]string{}, d.Tags...),
-			Updated: d.Text("updated"),
-			Kind:    d.Text("kind"),
-			Stage:   d.Text("stage"),
-			Status:  d.Text("status"),
-		}
-		if d.DateFromMtime {
-			m.Modified = d.Date.Format(time.DateOnly)
-		} else {
-			m.Date = d.Date.Format(time.DateOnly)
-		}
-		out.Docs = append(out.Docs, m)
+		out.Docs = append(out.Docs, metaOf(d))
 	}
 	if in.Type != "" {
 		if _, ok := h.cfg.Type(in.Type); !ok && len(docs) == 0 {
@@ -265,6 +238,48 @@ func (h *handlers) listDocs(
 		}
 	}
 	return jsonResult(out)
+}
+
+// filter checks the arguments and turns them into a vault filter.
+func (in listDocsIn) filter() (vault.Filter, error) {
+	f := vault.Filter{Type: in.Type, Tags: in.Tags, AnyTags: in.AnyTags, Sort: in.Sort, Limit: in.Limit}
+	var err error
+	if f.Since, err = parseDay("since", in.Since); err != nil {
+		return vault.Filter{}, err
+	}
+	if f.Until, err = parseDay("until", in.Until); err != nil {
+		return vault.Filter{}, err
+	}
+	if len(in.Where) > 0 {
+		f.Where = make(map[string][]string, len(in.Where))
+		for k, val := range in.Where {
+			if f.Where[k], err = whereValues(k, val); err != nil {
+				return vault.Filter{}, err
+			}
+		}
+	}
+	return f, nil
+}
+
+// metaOf is the list_docs entry for d: its date field as date, or its file
+// modification day as modified when it has none.
+func metaOf(d *vault.Doc) docMeta {
+	m := docMeta{
+		Path:    d.Path,
+		Type:    d.Type,
+		Title:   d.Title,
+		Tags:    append([]string{}, d.Tags...),
+		Updated: d.Text("updated"),
+		Kind:    d.Text("kind"),
+		Stage:   d.Text("stage"),
+		Status:  d.Text("status"),
+	}
+	if d.DateFromMtime {
+		m.Modified = d.Date.Format(time.DateOnly)
+	} else {
+		m.Date = d.Date.Format(time.DateOnly)
+	}
+	return m
 }
 
 // whereValues turns a JSON scalar or list of scalars into the texts to compare.

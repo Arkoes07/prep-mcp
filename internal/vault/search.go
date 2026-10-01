@@ -2,6 +2,7 @@ package vault
 
 import (
 	"bytes"
+	"cmp"
 	"errors"
 	"slices"
 	"strings"
@@ -155,10 +156,7 @@ func tagStats(docs []*Doc, voc *Vocabulary, prefix string, since *time.Time) []T
 		out = append(out, *tc)
 	}
 	slices.SortFunc(out, func(a, b TagCount) int {
-		if a.Count != b.Count {
-			return b.Count - a.Count
-		}
-		return strings.Compare(a.Tag, b.Tag)
+		return cmp.Or(cmp.Compare(b.Count, a.Count), strings.Compare(a.Tag, b.Tag))
 	})
 	return out
 }

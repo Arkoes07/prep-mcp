@@ -32,41 +32,25 @@ func (v *Vault) Context(day time.Time) (string, error) {
 	}
 	var sections []string
 
-	rules, err := v.root.ReadFile(rulesFile)
-	switch {
-	case err == nil:
-		sections = append(sections, section(rulesFile, string(rules)))
-	case !errors.Is(err, fs.ErrNotExist):
-		return "", fmt.Errorf("read %s: %w", rulesFile, err)
+	rules, err := v.rulesSection()
+	if err != nil {
+		return "", err
+	}
+	if rules != "" {
+		sections = append(sections, rules)
 	}
 
-	if cs := v.cfg.Context; cs.CurrentWeekType != "" {
+	if v.cfg.Context.CurrentWeekType != "" {
 		sec, weekProblems := v.weekSection(docs, day)
 		sections = append(sections, sec)
 		problems = append(problems, weekProblems...)
 	}
 
-	for _, group := range []struct {
-		name   string
-		qs     []config.Query
-		recent bool
-	}{
-		{name: "Open items", qs: v.cfg.Context.OpenItems},
-		{name: "Recent", qs: v.cfg.Context.Recent, recent: true},
-	} {
-		if len(group.qs) == 0 {
-			continue
-		}
-		blocks := make([]string, 0, len(group.qs))
-		for _, q := range group.qs {
-			block, err := queryBlock(docs, q, group.recent)
-			if err != nil {
-				return "", err
-			}
-			blocks = append(blocks, block)
-		}
-		sections = append(sections, "==== "+group.name+" ====\n"+strings.Join(blocks, "\n"))
+	queries, err := v.querySections(docs)
+	if err != nil {
+		return "", err
 	}
+	sections = append(sections, queries...)
 
 	voc, err := v.Vocabulary()
 	if err != nil {
@@ -76,15 +60,60 @@ func (v *Vault) Context(day time.Time) (string, error) {
 	sections = append(sections, "==== Tags ====\n"+tagLine(tagStats(docs, voc, "", &since), since)+"\n")
 
 	if len(problems) > 0 {
-		slices.SortStableFunc(problems, func(a, b Problem) int { return strings.Compare(a.Path, b.Path) })
-		var b strings.Builder
-		b.WriteString("==== Problems ====\n")
-		for _, p := range problems {
-			fmt.Fprintf(&b, "- %s: %s\n", p.Path, oneLine(p.Msg))
-		}
-		sections = append(sections, b.String())
+		sections = append(sections, problemsSection(problems))
 	}
 	return strings.Join(sections, "\n"), nil
+}
+
+// rulesSection renders the working rules file, or "" when there is none.
+func (v *Vault) rulesSection() (string, error) {
+	rules, err := v.root.ReadFile(rulesFile)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		return "", nil
+	case err != nil:
+		return "", fmt.Errorf("read %s: %w", rulesFile, err)
+	}
+	return section(rulesFile, string(rules)), nil
+}
+
+// querySections renders the configured open-item and recent queries, one
+// section per group that has any.
+func (v *Vault) querySections(docs []*Doc) ([]string, error) {
+	var sections []string
+	for _, group := range []struct {
+		name     string
+		qs       []config.Query
+		isRecent bool
+	}{
+		{name: "Open items", qs: v.cfg.Context.OpenItems},
+		{name: "Recent", qs: v.cfg.Context.Recent, isRecent: true},
+	} {
+		if len(group.qs) == 0 {
+			continue
+		}
+		blocks := make([]string, 0, len(group.qs))
+		for _, q := range group.qs {
+			block, err := queryBlock(docs, q, group.isRecent)
+			if err != nil {
+				return nil, err
+			}
+			blocks = append(blocks, block)
+		}
+		sections = append(sections, "==== "+group.name+" ====\n"+strings.Join(blocks, "\n"))
+	}
+	return sections, nil
+}
+
+// problemsSection lists the files that could not be fully used, by path.
+func problemsSection(problems []Problem) string {
+	slices.SortStableFunc(problems, func(a, b Problem) int { return strings.Compare(a.Path, b.Path) })
+	var b strings.Builder
+	b.WriteString("==== Problems ====\n")
+	for _, p := range problems {
+		fmt.Fprintf(&b, "- %s: %s\n", p.Path, oneLine(p.Msg))
+	}
+	return b.String()
 }
 
 // section renders "==== name ====" followed by content, always ending in a newline.
