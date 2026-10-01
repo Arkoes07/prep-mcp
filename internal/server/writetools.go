@@ -69,7 +69,7 @@ func createDocDescription(cfg *config.Config) string {
 	}
 	b.WriteString("Types (path pattern; required frontmatter fields):\n")
 	for _, name := range names {
-		t, _ := cfg.Type(name)
+		t := cfg.Types[name]
 		required := "none"
 		if len(t.Required) > 0 {
 			required = strings.Join(t.Required, ", ")
@@ -106,7 +106,7 @@ func rawArgs(req *mcp.CallToolRequest, keys ...string) (map[string]json.RawMessa
 	var all map[string]json.RawMessage
 	if len(req.Params.Arguments) > 0 {
 		if err := json.Unmarshal(req.Params.Arguments, &all); err != nil {
-			return nil, fmt.Errorf("arguments are not a JSON object: %v", err)
+			return nil, fmt.Errorf("arguments are not a JSON object: %w", err)
 		}
 	}
 	out := map[string]json.RawMessage{}

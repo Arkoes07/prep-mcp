@@ -42,7 +42,7 @@ func (v *Vault) Search(q, typ string, limit int) ([]Hit, error) {
 	limit = min(limit, MaxSearchLimit)
 	needle := strings.ToLower(q)
 
-	docs, _, err := v.Scan()
+	docs, _, err := v.Scan() // problems are reported by List and Context
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +98,7 @@ type TagCount struct {
 // prefix limits it to tags starting with it; since drops documents dated
 // before that day.
 func (v *Vault) TagStats(prefix string, since *time.Time) ([]TagCount, error) {
-	docs, _, err := v.Scan()
+	docs, _, err := v.Scan() // problems are reported by List and Context
 	if err != nil {
 		return nil, err
 	}

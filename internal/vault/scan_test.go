@@ -188,6 +188,28 @@ func TestScan(t *testing.T) {
 			},
 		},
 		{
+			name: "unreadable_folder_reported",
+			setup: func(t *testing.T, root string) {
+				if os.Geteuid() == 0 {
+					t.Skip("root reads any folder")
+				}
+				testvault.Write(t, root, "notes/locked/x.md", learning)
+				locked := filepath.Join(root, "notes", "locked")
+				if err := os.Chmod(locked, 0); err != nil {
+					t.Fatal(err)
+				}
+				t.Cleanup(func() { os.Chmod(locked, 0o755) })
+			},
+			check: func(t *testing.T, _ string, _ *vault.Vault, docs []*vault.Doc, problems []vault.Problem) {
+				if len(docs) == 0 {
+					t.Error("an unreadable folder hid every document")
+				}
+				if len(problems) != 1 || problems[0].Path != "notes/locked" || !strings.Contains(problems[0].Msg, "permission") {
+					t.Errorf("problems = %+v, want one for notes/locked naming the permission problem", problems)
+				}
+			},
+		},
+		{
 			name: "symlinked_dir_not_followed",
 			setup: func(t *testing.T, root string) {
 				outside := filepath.Join(filepath.Dir(root), "outside")

@@ -20,7 +20,9 @@ func killGroupOnCancel(cmd *exec.Cmd) (stop func()) {
 	var kill *time.Timer
 	cmd.Cancel = func() error {
 		pid := cmd.Process.Pid
-		kill = time.AfterFunc(termGrace, func() { syscall.Kill(-pid, syscall.SIGKILL) })
+		kill = time.AfterFunc(termGrace, func() {
+			_ = syscall.Kill(-pid, syscall.SIGKILL) // the group may already be gone; nothing to do then
+		})
 		return syscall.Kill(-pid, syscall.SIGTERM)
 	}
 	cmd.WaitDelay = termGrace + 500*time.Millisecond

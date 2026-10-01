@@ -113,8 +113,8 @@ func (w *Writer) Create(ctx context.Context, typ string, fm *yaml.Node, body, sl
 		body += "\n"
 	}
 	data := []byte("---\n" + encode(doc) + "---\n" + body)
-	if re, err := vault.SplitFrontmatter(data); err != nil || re == nil {
-		return nil, fmt.Errorf("internal error: the new frontmatter did not re-read (%v); nothing was written. Report this as a bug", err)
+	if _, err := reread(data); err != nil {
+		return nil, fmt.Errorf("internal error: the new frontmatter did not re-read (%w); nothing was written. Report this as a bug", err)
 	}
 
 	if err := w.createFile(rel, data); err != nil {
@@ -164,9 +164,9 @@ func (w *Writer) UpdateFrontmatter(ctx context.Context, p string, patch Patch) (
 		if err != nil || !changed {
 			return old, warnings, err
 		}
-		fm, err := vault.SplitFrontmatter(next)
-		if err != nil || fm == nil {
-			return nil, nil, fmt.Errorf("internal error: the patched file did not re-read (%v); nothing was written. Report this as a bug", err)
+		fm, err := reread(next)
+		if err != nil {
+			return nil, nil, fmt.Errorf("internal error: the patched file did not re-read (%w); nothing was written. Report this as a bug", err)
 		}
 		if spec, ok := w.cfg.Type(vault.FieldText(fm.Map, "type")); ok {
 			if missing := missingFields(spec.Required, fm.Map); len(missing) > 0 {
@@ -293,6 +293,18 @@ func (w *Writer) tagWarnings(added []string) []string {
 		}
 	}
 	return out
+}
+
+// reread parses the frontmatter of a file this package built, which must have one.
+func reread(src []byte) (*vault.Frontmatter, error) {
+	fm, err := vault.SplitFrontmatter(src)
+	if err != nil {
+		return nil, err
+	}
+	if fm == nil {
+		return nil, errors.New("no frontmatter found")
+	}
+	return fm, nil
 }
 
 func tagsOf(src []byte) []string {

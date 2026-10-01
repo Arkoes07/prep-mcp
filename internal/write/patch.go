@@ -270,10 +270,14 @@ func encode(n *yaml.Node) string {
 	var b bytes.Buffer
 	enc := yaml.NewEncoder(&b)
 	enc.SetIndent(2)
+	// Encoding fails only for an invalid node tree, and every tree here is
+	// built by this package: that is a bug, which guard turns into an error result.
 	if err := enc.Encode(n); err != nil {
-		panic(fmt.Sprintf("yaml encode: %v", err)) // only for an invalid node tree we built ourselves; guard turns it into an error result
+		panic(fmt.Sprintf("yaml encode: %v", err))
 	}
-	enc.Close()
+	if err := enc.Close(); err != nil {
+		panic(fmt.Sprintf("yaml encode: %v", err))
+	}
 	return b.String()
 }
 
@@ -320,8 +324,11 @@ func verifyPatch(src, out []byte, old *vault.Frontmatter, p Patch, setKeys []str
 		return fmt.Errorf("internal error: the patched frontmatter did not re-read as intended (%s); nothing was written. Report this as a bug and use replace_doc instead", fmt.Sprintf(format, args...))
 	}
 	re, err := vault.SplitFrontmatter(out)
-	if err != nil || re == nil {
+	switch {
+	case err != nil:
 		return bug("%v", err)
+	case re == nil:
+		return bug("no frontmatter found")
 	}
 	if !bytes.Equal(out[re.BodyOffset:], src[old.BodyOffset:]) {
 		return bug("the body changed")
@@ -376,7 +383,7 @@ func JSONToNode(raw json.RawMessage) (*yaml.Node, error) {
 	const want = `must be a JSON object such as {"key": "value"}`
 	tok, err := dec.Token()
 	if err != nil {
-		return nil, fmt.Errorf("invalid JSON: %v; %s", err, want)
+		return nil, fmt.Errorf("invalid JSON: %w; %s", err, want)
 	}
 	if d, ok := tok.(json.Delim); !ok || d != '{' {
 		return nil, fmt.Errorf("%s, got %v", want, describeToken(tok))
@@ -385,7 +392,7 @@ func JSONToNode(raw json.RawMessage) (*yaml.Node, error) {
 	if err != nil {
 		return nil, err
 	}
-	if _, err := dec.Token(); err != io.EOF {
+	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
 		return nil, errors.New("unexpected text after the JSON object; pass one object")
 	}
 	return n, nil
@@ -414,9 +421,9 @@ func decodeObject(dec *json.Decoder) (*yaml.Node, error) {
 	for dec.More() {
 		kt, err := dec.Token()
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON: %v", err)
+			return nil, fmt.Errorf("invalid JSON: %w", err)
 		}
-		key, _ := kt.(string)
+		key, _ := kt.(string) // inside an object the decoder only yields string keys
 		if seen[key] {
 			return nil, fmt.Errorf("duplicate key %q in the JSON object; use each key once", key)
 		}
@@ -428,7 +435,7 @@ func decodeObject(dec *json.Decoder) (*yaml.Node, error) {
 		m.Content = append(m.Content, keyNode(key), v)
 	}
 	if _, err := dec.Token(); err != nil { // the closing brace
-		return nil, fmt.Errorf("invalid JSON: %v", err)
+		return nil, fmt.Errorf("invalid JSON: %w", err)
 	}
 	if len(m.Content) == 0 {
 		m.Style = yaml.FlowStyle
@@ -439,7 +446,7 @@ func decodeObject(dec *json.Decoder) (*yaml.Node, error) {
 func decodeValue(dec *json.Decoder) (*yaml.Node, error) {
 	tok, err := dec.Token()
 	if err != nil {
-		return nil, fmt.Errorf("invalid JSON: %v", err)
+		return nil, fmt.Errorf("invalid JSON: %w", err)
 	}
 	switch t := tok.(type) {
 	case json.Delim:
@@ -475,7 +482,7 @@ func decodeArray(dec *json.Decoder) (*yaml.Node, error) {
 		seq.Content = append(seq.Content, v)
 	}
 	if _, err := dec.Token(); err != nil { // the closing bracket
-		return nil, fmt.Errorf("invalid JSON: %v", err)
+		return nil, fmt.Errorf("invalid JSON: %w", err)
 	}
 	return seq, nil
 }

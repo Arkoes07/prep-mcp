@@ -109,8 +109,7 @@ func (w *Writer) stage(rel string, data []byte, mode fs.FileMode) (string, error
 		werr = root.Chmod(tmp, mode)
 	}
 	if werr != nil {
-		root.Remove(tmp)
-		return "", fmt.Errorf("cannot write %s: %w", rel, werr)
+		return "", w.discard(tmp, fmt.Errorf("cannot write %s: %w", rel, werr))
 	}
 	return tmp, nil
 }
@@ -119,20 +118,27 @@ func (w *Writer) stage(rel string, data []byte, mode fs.FileMode) (string, error
 // failure, a refusing check included, the temp file is removed and the error
 // returned.
 func (w *Writer) finish(rel, tmp string, check func() error) error {
-	root := w.v.Root()
 	if beforeRename != nil {
 		if err := beforeRename(tmp); err != nil {
-			root.Remove(tmp)
-			return fmt.Errorf("cannot write %s: %w", rel, err)
+			return w.discard(tmp, fmt.Errorf("cannot write %s: %w", rel, err))
 		}
 	}
 	if err := check(); err != nil {
-		root.Remove(tmp)
-		return err
+		return w.discard(tmp, err)
 	}
-	if err := root.Rename(tmp, rel); err != nil {
-		root.Remove(tmp)
-		return fmt.Errorf("cannot write %s: %w", rel, err)
+	if err := w.v.Root().Rename(tmp, rel); err != nil {
+		return w.discard(tmp, fmt.Errorf("cannot write %s: %w", rel, err))
 	}
 	return nil
+}
+
+// discard removes the temp file of a failed write and returns err. If the temp
+// file cannot be removed, that is joined onto err so a person can delete it;
+// err stays inspectable with errors.As.
+func (w *Writer) discard(tmp string, err error) error {
+	rerr := w.v.Root().Remove(tmp)
+	if rerr == nil || errors.Is(rerr, fs.ErrNotExist) {
+		return err
+	}
+	return errors.Join(err, fmt.Errorf("the temp file %s was left behind (%w); delete it by hand", tmp, rerr))
 }

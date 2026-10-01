@@ -39,7 +39,18 @@ func (v *Vault) Scan() ([]*Doc, []Problem, error) {
 
 	err := fs.WalkDir(fsys, ".", func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
-			return err
+			if p == "." {
+				return err
+			}
+			// One unreadable folder or file must not fail every query.
+			problems = append(problems, Problem{
+				Path: p,
+				Msg:  fmt.Sprintf("cannot read: %v; check the permissions", err),
+			})
+			if d != nil && d.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
 		}
 		name := d.Name()
 		if d.IsDir() {
@@ -77,7 +88,11 @@ func (v *Vault) Scan() ([]*Doc, []Problem, error) {
 		}
 		info, err := d.Info()
 		if err != nil {
-			return err
+			problems = append(problems, Problem{
+				Path: p,
+				Msg:  fmt.Sprintf("cannot read the file's details: %v; check the permissions", err),
+			})
+			return nil
 		}
 
 		doc := &Doc{

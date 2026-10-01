@@ -43,7 +43,9 @@ func Open(dir string, cfg *config.Config, now func() time.Time) (*Vault, error) 
 		return nil, fmt.Errorf("vault root %q: %w (check --root or PREP_ROOT)", dir, err)
 	}
 	if cfg == nil {
-		cfg, _ = config.Parse(nil)
+		if cfg, err = config.Parse(nil); err != nil {
+			return nil, fmt.Errorf("empty default config: %w", err)
+		}
 	}
 	if now == nil {
 		now = time.Now
