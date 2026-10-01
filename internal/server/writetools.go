@@ -29,7 +29,7 @@ func registerWriteTools(s *mcp.Server, h *handlers) {
 	mcp.AddTool(s, &mcp.Tool{
 		Name:  "append_section",
 		Title: "Append to a section",
-		Description: "Add text to a living document without touching the rest of it. The content goes at the end of the \"## heading\" section (before the next # or ## heading); " +
+		Description: "Add text to a living document without touching the rest of it. Use this, not local memory or notes files, to add to a record that belongs in the vault. The content goes at the end of the \"## heading\" section (before the next # or ## heading); " +
 			"if the file has no such section, a new \"## heading\" section is added at the end. Only level-2 headings match, exactly. " +
 			"Frontmatter and all existing text stay byte for byte. Returns path, new hash, warnings and commit. This is the default way to add to a document.",
 		Annotations: additive,
@@ -59,7 +59,7 @@ func registerWriteTools(s *mcp.Server, h *handlers) {
 // required fields, so the model can call create_doc correctly the first time.
 func createDocDescription(cfg *config.Config) string {
 	var b strings.Builder
-	b.WriteString("Create a new document of a configured type. The path is built from the type's folder and filename pattern. " +
+	b.WriteString("Create a new document of a configured type. Use this, not local memory or notes files, to save a new record that belongs in the vault. The path is built from the type's folder and filename pattern. " +
 		"Fails if the file already exists (the error names it). Sets created to today if absent. Required fields must be present and not empty. " +
 		"tags may be a list or a comma-separated string; unknown tags produce a warning naming the closest known tag. Returns path, hash, warnings and commit.\n")
 	names := cfg.TypeNames()

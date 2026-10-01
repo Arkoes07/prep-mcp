@@ -148,6 +148,12 @@ Each entry: the decision, what it replaced, why, and what it costs. Fill in as t
 - Why: PLAN.md wants the description generated from the config so the model never reads the config file, and also wants descriptions free of domain words. The example config's type names are domain words by design, so both cannot hold for the example vault. The Go code only ever adds words that come from the config; `TestDescriptionsAreDomainNeutral` therefore runs against a vault whose config uses neutral names, and a separate test checks that the description lists the example vault's types, patterns and required fields.
 - Cost: the neutrality check does not see what a real config puts into the description. That text is data the owner chose.
 
+## The server's text tells the model to write to the vault, not to its own memory (M2)
+- Found in M2d: asked to "log this session", Claude Code saved a note to its own auto-memory and never called `create_doc`. The client's memory instructions outrank a tool description, and MCP tools are loaded on demand.
+- Decided: the server `instructions` and the `create_doc` and `append_section` descriptions say to use the write tools, and not local memory or notes files, for anything that belongs in the vault. The words are domain-neutral. `TestTextSteersWritesToTheVault` guards them.
+- Instead of: putting the rule in `examples/vault/CLAUDE.md`, which is data and only reaches the model if `get_context` runs first. The example can still name the tools.
+- Cost: this steers but cannot force. The model can still ignore it, and the prompt naming the tool is the reliable fallback.
+
 ## Tag checks stay quiet without a vocabulary (M2)
 - Instead of: warning about every tag when the tags file is missing or has no tags.
 - Why: with nothing to compare against there is no closest tag to name, and a warning that cannot help is noise.

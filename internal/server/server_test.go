@@ -402,3 +402,24 @@ func TestWriteErrorsAreToolResultsWithHints(t *testing.T) {
 		t.Error("a failed write changed the file")
 	}
 }
+
+// An assistant asked to "save this" may reach for its own memory or notes
+// instead of the vault. The text it reads first must steer it to the write tools.
+func TestTextSteersWritesToTheVault(t *testing.T) {
+	cs := connect(t)
+	init := cs.InitializeResult()
+	if init == nil || !strings.Contains(init.Instructions, "memory") {
+		t.Errorf("server instructions should say to use the write tools instead of local memory or notes:\n%v", init)
+	}
+	for _, tool := range []string{"create_doc", "append_section"} {
+		res, err := cs.ListTools(context.Background(), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, tl := range res.Tools {
+			if tl.Name == tool && !strings.Contains(tl.Description, "memory") {
+				t.Errorf("%s description should say it replaces local memory or notes:\n%s", tool, tl.Description)
+			}
+		}
+	}
+}

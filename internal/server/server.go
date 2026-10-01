@@ -20,7 +20,9 @@ import (
 )
 
 const instructions = "Call get_context first: it returns the vault's working rules, the current week, open items and recent activity in one call. " +
-	"Use list_docs for metadata queries, search_text for text, read_doc for a whole file and list_tags for the tag vocabulary in use."
+	"Use list_docs for metadata queries, search_text for text, read_doc for a whole file and list_tags for the tag vocabulary in use. " +
+	"To save anything that belongs in this vault (a new record, a note added to a document, a status change), use create_doc, append_section, update_frontmatter or replace_doc. " +
+	"Do not save it to local memory or notes files instead: the vault is the record."
 
 // New builds the server with the read and write tools registered.
 func New(v *vault.Vault, w *write.Writer, cfg *config.Config, version string) *mcp.Server {
