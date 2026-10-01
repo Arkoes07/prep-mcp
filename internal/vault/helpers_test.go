@@ -1,6 +1,7 @@
 package vault_test
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -48,4 +49,11 @@ func mapValue(n *yaml.Node, key string) (string, bool) {
 		return "", false
 	}
 	return val.Value, true
+}
+
+func mustSymlink(t testing.TB, target, link string) {
+	t.Helper()
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatalf("symlink %s -> %s: %v", link, target, err)
+	}
 }
