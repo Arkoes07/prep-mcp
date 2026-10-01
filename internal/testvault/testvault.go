@@ -3,6 +3,7 @@
 package testvault
 
 import (
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -79,4 +80,14 @@ func Write(t testing.TB, root, rel, content string) {
 	if err := os.Chtimes(p, Mtime, Mtime); err != nil {
 		t.Fatalf("testvault.Write: %v", err)
 	}
+}
+
+// CloseOnCleanup closes c when the test ends and fails the test if that fails.
+func CloseOnCleanup(t testing.TB, c io.Closer) {
+	t.Helper()
+	t.Cleanup(func() {
+		if err := c.Close(); err != nil {
+			t.Errorf("close: %v", err)
+		}
+	})
 }

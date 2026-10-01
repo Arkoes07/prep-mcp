@@ -84,6 +84,11 @@ func run(ctx context.Context, args []string, getenv func(string) string, stderr 
 	if err != nil {
 		return err
 	}
+	defer func() {
+		if err := v.Close(); err != nil {
+			logger.Warn("closing the vault failed", slog.Any("error", err))
+		}
+	}()
 	logger.Info("serving vault", slog.String("root", v.Dir()), slog.Int("types", len(cfg.Types)))
 	w := write.New(v, cfg, &write.Git{Bin: "git", Author: cfg.Author, Timeout: 10 * time.Second}, time.Now)
 	err = server.New(v, w, cfg, version, server.WithLogger(logger)).Run(ctx, &mcp.StdioTransport{})

@@ -44,6 +44,7 @@ func connectAt(t *testing.T, root string) *mcp.ClientSession {
 	if err != nil {
 		t.Fatal(err)
 	}
+	testvault.CloseOnCleanup(t, v)
 	// A nil Git: the server tests do not commit.
 	return serve(t, New(v, write.New(v, cfg, nil, testvault.Clock()), cfg, "test"))
 }

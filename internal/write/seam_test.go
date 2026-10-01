@@ -31,6 +31,7 @@ func seamEnv(t *testing.T) (string, *Writer) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	testvault.CloseOnCleanup(t, v)
 	return root, New(v, cfg, nil, testvault.Clock())
 }
 

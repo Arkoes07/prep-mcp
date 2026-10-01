@@ -41,6 +41,7 @@ func newEnv(t testing.TB) *env {
 	if err != nil {
 		t.Fatalf("open vault: %v", err)
 	}
+	testvault.CloseOnCleanup(t, v)
 	return &env{root: root, v: v, cfg: cfg, w: write.New(v, cfg, nil, testvault.Clock())}
 }
 

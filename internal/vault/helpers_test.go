@@ -22,6 +22,7 @@ func openAt(t testing.TB, dir string) *vault.Vault {
 	if err != nil {
 		t.Fatalf("open vault: %v", err)
 	}
+	testvault.CloseOnCleanup(t, v)
 	return v
 }
 

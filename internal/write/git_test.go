@@ -275,6 +275,7 @@ func TestGitRootViaSymlink(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		testvault.CloseOnCleanup(t, v)
 		w := write.New(v, e.cfg, gitFor(e, "git", gitTimeout), testvault.Clock())
 		before := commitCount(t, e.root)
 

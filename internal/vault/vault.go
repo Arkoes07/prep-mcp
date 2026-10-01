@@ -28,7 +28,8 @@ type Vault struct {
 }
 
 // Open opens the vault at dir. The directory is resolved through symlinks once.
-// A nil now means the system clock; a nil cfg means an empty config.
+// A nil now means the system clock; a nil cfg means an empty config. The
+// caller must Close the vault when done with it.
 func Open(dir string, cfg *config.Config, now func() time.Time) (*Vault, error) {
 	abs, err := filepath.Abs(dir)
 	if err != nil {
@@ -44,7 +45,7 @@ func Open(dir string, cfg *config.Config, now func() time.Time) (*Vault, error) 
 	}
 	if cfg == nil {
 		if cfg, err = config.Parse(nil); err != nil {
-			return nil, fmt.Errorf("empty default config: %w", err)
+			return nil, errors.Join(fmt.Errorf("empty default config: %w", err), root.Close())
 		}
 	}
 	if now == nil {
@@ -61,6 +62,15 @@ func (v *Vault) Now() time.Time { return v.now() }
 
 // Root returns the confining root. All file I/O must go through it.
 func (v *Vault) Root() *os.Root { return v.root }
+
+// Close releases the vault's directory handle. The vault must not be used
+// afterwards.
+func (v *Vault) Close() error {
+	if err := v.root.Close(); err != nil {
+		return fmt.Errorf("close vault %s: %w", v.dir, err)
+	}
+	return nil
+}
 
 // Access says what a path is about to be used for.
 type Access int
