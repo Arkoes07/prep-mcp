@@ -169,7 +169,7 @@ func (c *Config) Validate() error {
 	var errs []error
 	add := func(format string, args ...any) { errs = append(errs, fmt.Errorf(format, args...)) }
 
-	if c.Author != "" && !authorRE.MatchString(strings.TrimSpace(c.Author)) {
+	if _, _, ok := ParseAuthor(c.Author); c.Author != "" && !ok {
 		add(`author %q must look like "Name <email>"; fix it in the config`, c.Author)
 	}
 	if c.TagsFile != "" {
@@ -313,9 +313,17 @@ func (c *Config) TypeNames() []string {
 // AuthorIdent splits the author into name and email. Both are empty if the
 // author is malformed, which Validate rejects.
 func (c *Config) AuthorIdent() (name, email string) {
-	m := authorRE.FindStringSubmatch(strings.TrimSpace(c.Author))
+	name, email, _ = ParseAuthor(c.Author)
+	return name, email
+}
+
+// ParseAuthor splits "Name <email>" into its parts. ok is false when a does
+// not have that form. It is the one definition of a valid author, used by
+// Validate and by the git commit step.
+func ParseAuthor(a string) (name, email string, ok bool) {
+	m := authorRE.FindStringSubmatch(strings.TrimSpace(a))
 	if m == nil {
-		return "", ""
+		return "", "", false
 	}
-	return m[1], m[2]
+	return m[1], m[2], true
 }

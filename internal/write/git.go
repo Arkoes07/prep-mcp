@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 
@@ -25,8 +24,6 @@ const (
 	defaultGitTimeout = 10 * time.Second
 	maxOutputInWarn   = 400
 )
-
-var authorRE = regexp.MustCompile(`^\s*(.*?)\s*<([^<>]+)>\s*$`)
 
 // Commit commits rel (slash-separated, relative to dir) with message msg. It
 // only commits when dir is the root of its git repository, and only the one
@@ -61,7 +58,11 @@ func (g *Git) Commit(ctx context.Context, dir, rel, msg string) (hash, warning s
 	if _, err := exec.LookPath(bin); err != nil {
 		return fail("cannot run git (%v). Install git, fix the path %q, or set commit_on_write: false in the config", err, bin)
 	}
-	name, email, ok := splitAuthor(g.Author)
+	author := g.Author
+	if strings.TrimSpace(author) == "" {
+		author = config.DefaultAuthor
+	}
+	name, email, ok := config.ParseAuthor(author)
 	if !ok {
 		return fail("author %q must look like \"Name <email>\"; fix author in the config", g.Author)
 	}
@@ -139,17 +140,6 @@ func describe(out string, err error) string {
 		return err.Error()
 	}
 	return s
-}
-
-func splitAuthor(a string) (name, email string, ok bool) {
-	if strings.TrimSpace(a) == "" {
-		a = config.DefaultAuthor
-	}
-	m := authorRE.FindStringSubmatch(a)
-	if m == nil || m[1] == "" {
-		return "", "", false
-	}
-	return m[1], m[2], true
 }
 
 // samePath compares two directories after resolving symlinks (~/prep may be a
