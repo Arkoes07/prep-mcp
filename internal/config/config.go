@@ -56,6 +56,9 @@ type Query struct {
 // scalarOrList decodes a YAML scalar as one value and a sequence as many.
 type scalarOrList []string
 
+var _ yaml.Unmarshaler = (*scalarOrList)(nil)
+
+// UnmarshalYAML implements yaml.Unmarshaler.
 func (s *scalarOrList) UnmarshalYAML(n *yaml.Node) error {
 	switch n.Kind {
 	case yaml.ScalarNode:

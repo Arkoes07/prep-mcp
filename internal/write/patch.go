@@ -93,20 +93,20 @@ func (p Patch) hasTagOps() bool { return len(p.AddTags) > 0 || len(p.RemoveTags)
 
 // lineEdit is what happens to the lines of one key already in the block.
 type lineEdit struct {
-	replace []string // rendered lines, without line endings
-	drop    bool
+	replace   []string // rendered lines, without line endings
+	isDropped bool     // the key is removed; replace is empty
 }
 
 // patchPlan collects the line edits one Patch makes to one frontmatter block.
 type patchPlan struct {
-	patch       Patch
-	setKeys     []string
-	spans       map[string]span
-	edits       map[string]lineEdit // keys already in the block
-	appended    []string            // rendered lines of new keys, in order
-	touched     map[string]bool     // keys set, changed or removed
-	tagsTouched bool                // the patch sets or changes tags
-	wantTags    []string            // the normalised tags asked for, when tagsTouched
+	patch        Patch
+	setKeys      []string
+	spans        map[string]span
+	edits        map[string]lineEdit // keys already in the block
+	appended     []string            // rendered lines of new keys, in order
+	touched      map[string]bool     // keys set, changed or removed
+	hasTagChange bool                // the patch sets or changes tags
+	wantTags     []string            // the normalised tags asked for, when hasTagChange
 }
 
 // commentOf returns the line comment of an existing key, so a rewrite keeps it.
@@ -134,7 +134,7 @@ func (pl *patchPlan) put(k string, lines []string) {
 func (pl *patchPlan) unsetKeys() {
 	for _, k := range pl.patch.Unset {
 		if _, ok := pl.spans[k]; ok {
-			pl.edits[k] = lineEdit{drop: true}
+			pl.edits[k] = lineEdit{isDropped: true}
 			pl.touched[k] = true
 		}
 	}
@@ -163,7 +163,7 @@ func (pl *patchPlan) changeTags(m *yaml.Node) {
 	if !setTags && !p.hasTagOps() {
 		return
 	}
-	pl.tagsTouched = true
+	pl.hasTagChange = true
 	cur := vault.NormalizeTags(vault.Field(m, "tags"))
 	if setTags {
 		pl.wantTags = vault.NormalizeTags(vault.Field(p.Set, "tags"))
@@ -216,7 +216,9 @@ func (pl *patchPlan) rebuild(lines []string, eol string) string {
 			block.WriteString(lines[i])
 			continue
 		}
-		emit(pl.edits[k].replace)
+		if e := pl.edits[k]; !e.isDropped {
+			emit(e.replace)
+		}
 		i = pl.spans[k].to - 1
 	}
 	emit(pl.appended)
@@ -409,7 +411,7 @@ func verifyPatch(src, out []byte, old *vault.Frontmatter, pl *patchPlan) error {
 			return bug("%s is still present", k)
 		}
 	}
-	if pl.tagsTouched && !slices.Equal(vault.NormalizeTags(vault.Field(re.Map, "tags")), pl.wantTags) {
+	if pl.hasTagChange && !slices.Equal(vault.NormalizeTags(vault.Field(re.Map, "tags")), pl.wantTags) {
 		return bug("tags differ")
 	}
 	return nil

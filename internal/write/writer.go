@@ -47,6 +47,9 @@ type Result struct {
 // ExistsError means create_doc found the target file already there.
 type ExistsError struct{ Path string }
 
+var _ error = (*ExistsError)(nil)
+
+// Error names the file and says which tool to use instead.
 func (e *ExistsError) Error() string {
 	return fmt.Sprintf("file exists: %s (use append_section or update_frontmatter)", e.Path)
 }
@@ -54,6 +57,9 @@ func (e *ExistsError) Error() string {
 // ConflictError means replace_doc saw a file that changed since it was read.
 type ConflictError struct{ Path, Current string }
 
+var _ error = (*ConflictError)(nil)
+
+// Error gives the current hash and says how to retry.
 func (e *ConflictError) Error() string {
 	return fmt.Sprintf("%s changed since you read it; its current hash is %s. Nothing was written: "+
 		"re-read with read_doc, merge, retry with expected_hash set to the current hash", e.Path, e.Current)

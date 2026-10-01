@@ -162,7 +162,7 @@ func (v *Vault) weekSection(docs []*Doc, day time.Time) (string, []Problem) {
 }
 
 // queryBlock renders one configured query: a label line and one line per document.
-func queryBlock(docs []*Doc, q config.Query, recent bool) (string, error) {
+func queryBlock(docs []*Doc, q config.Query, isRecent bool) (string, error) {
 	got, err := Apply(docs, Filter{
 		Type:    q.Type,
 		Tags:    q.Tags,
@@ -183,7 +183,7 @@ func queryBlock(docs []*Doc, q config.Query, recent bool) (string, error) {
 	if len(q.AnyTags) > 0 {
 		parts = append(parts, "any_tags: "+strings.Join(q.AnyTags, ", "))
 	}
-	if recent {
+	if isRecent {
 		parts = append(parts, fmt.Sprintf("newest %d", q.Limit))
 	}
 	label := q.Type

@@ -89,6 +89,8 @@ type PathError struct {
 	Err       error
 }
 
+var _ error = (*PathError)(nil)
+
 // Error returns Msg, which already names the path.
 func (e *PathError) Error() string { return e.Msg }
 
