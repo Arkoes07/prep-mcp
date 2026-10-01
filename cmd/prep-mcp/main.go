@@ -3,6 +3,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"flag"
@@ -52,7 +53,7 @@ func run(ctx context.Context, args []string, getenv func(string) string, stderr 
 	log.SetOutput(stderr)
 	log.SetFlags(log.LstdFlags)
 
-	root := first(*rootFlag, getenv("PREP_ROOT"))
+	root := cmp.Or(*rootFlag, getenv("PREP_ROOT"))
 	if root == "" {
 		wd, err := os.Getwd()
 		if err != nil {
@@ -60,7 +61,7 @@ func run(ctx context.Context, args []string, getenv func(string) string, stderr 
 		}
 		root = wd
 	}
-	cfgPath := first(*configFlag, getenv("PREP_CONFIG"))
+	cfgPath := cmp.Or(*configFlag, getenv("PREP_CONFIG"))
 	explicit := cfgPath != ""
 	if !explicit {
 		cfgPath = filepath.Join(root, "prep.config.yaml")
@@ -89,13 +90,4 @@ func run(ctx context.Context, args []string, getenv func(string) string, stderr 
 		return err
 	}
 	return nil
-}
-
-func first(vals ...string) string {
-	for _, v := range vals {
-		if v != "" {
-			return v
-		}
-	}
-	return ""
 }

@@ -76,7 +76,7 @@ func placeholderValue(name string, fm *yaml.Node, slug string, today time.Time) 
 				return s, nil
 			}
 		}
-		return today.Format("2006-01-02"), nil
+		return today.Format(time.DateOnly), nil
 	}
 	n := vault.Field(fm, name)
 	switch {

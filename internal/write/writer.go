@@ -94,7 +94,7 @@ func (w *Writer) Create(ctx context.Context, typ string, fm *yaml.Node, body, sl
 		}
 	}
 	if !hasCreated {
-		doc.Content = append(doc.Content, keyNode("created"), strNode(day.Format("2006-01-02")))
+		doc.Content = append(doc.Content, keyNode("created"), strNode(day.Format(time.DateOnly)))
 	}
 	if missing := missingFields(spec.Required, doc); len(missing) > 0 {
 		return nil, fmt.Errorf("missing required fields for %s: %s; add them to frontmatter and retry", typ, strings.Join(missing, ", "))
@@ -156,7 +156,7 @@ func (w *Writer) UpdateFrontmatter(ctx context.Context, p string, patch Patch) (
 				warnings = append(warnings, fmt.Sprintf("tag %q is not on this document, so there was nothing to remove", t))
 			}
 		}
-		next, changed, err := ApplyPatch(old, patch, w.now().Format("2006-01-02"))
+		next, changed, err := ApplyPatch(old, patch, w.now().Format(time.DateOnly))
 		if err != nil || !changed {
 			return old, warnings, err
 		}

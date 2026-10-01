@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -127,12 +128,7 @@ func queryBlock(docs []*Doc, q config.Query, recent bool) (string, error) {
 		return "", err
 	}
 	var parts []string
-	keys := make([]string, 0, len(q.Where))
-	for k := range q.Where {
-		keys = append(keys, k)
-	}
-	slices.Sort(keys)
-	for _, k := range keys {
+	for _, k := range slices.Sorted(maps.Keys(q.Where)) {
 		parts = append(parts, k+": "+strings.Join(q.Where[k], ", "))
 	}
 	if len(q.Tags) > 0 {
@@ -165,7 +161,7 @@ func queryBlock(docs []*Doc, q config.Query, recent bool) (string, error) {
 func metaLine(d *Doc) string {
 	var attrs []string
 	if !d.DateFromMtime {
-		attrs = append(attrs, "date="+d.Date.Format("2006-01-02"))
+		attrs = append(attrs, "date="+d.Date.Format(time.DateOnly))
 	}
 	for _, k := range []string{"kind", "stage", "status"} {
 		if val := d.Text(k); val != "" {
@@ -183,7 +179,7 @@ func metaLine(d *Doc) string {
 }
 
 func tagLine(stats []TagCount, since time.Time) string {
-	head := fmt.Sprintf("Top tags, last %d days (since %s): ", ContextTagDays, since.Format("2006-01-02"))
+	head := fmt.Sprintf("Top tags, last %d days (since %s): ", ContextTagDays, since.Format(time.DateOnly))
 	if len(stats) == 0 {
 		return head + "none"
 	}

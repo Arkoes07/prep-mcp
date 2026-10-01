@@ -29,7 +29,7 @@ func ParseDate(s string) (time.Time, error) {
 		}
 		// The whole value must be a valid timestamp, but only its date counts.
 		ok := false
-		for _, layout := range []string{time.RFC3339, "2006-01-02T15:04:05", "2006-01-02 15:04:05", "2006-01-02T15:04", "2006-01-02 15:04"} {
+		for _, layout := range []string{time.RFC3339, "2006-01-02T15:04:05", time.DateTime, "2006-01-02T15:04", "2006-01-02 15:04"} {
 			if _, err := time.Parse(layout, s); err == nil {
 				ok = true
 				break
@@ -40,7 +40,7 @@ func ParseDate(s string) (time.Time, error) {
 		}
 		s = s[:10]
 	}
-	t, err := time.ParseInLocation("2006-01-02", s, time.Local)
+	t, err := time.ParseInLocation(time.DateOnly, s, time.Local)
 	if err != nil {
 		return bad()
 	}

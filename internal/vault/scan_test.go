@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"gopkg.in/yaml.v3"
 
@@ -82,8 +83,8 @@ func TestScan(t *testing.T) {
 				if !d.DateFromMtime || !d.Date.Equal(testvault.Mtime) {
 					t.Errorf("%s: Date = %v (from mtime %v), want mtime %v", w.Path, d.Date, d.DateFromMtime, testvault.Mtime)
 				}
-			} else if d.DateFromMtime || d.Date.Format("2006-01-02") != w.Date {
-				t.Errorf("%s: Date = %s (from mtime %v), want %s from the date field", w.Path, d.Date.Format("2006-01-02"), d.DateFromMtime, w.Date)
+			} else if d.DateFromMtime || d.Date.Format(time.DateOnly) != w.Date {
+				t.Errorf("%s: Date = %s (from mtime %v), want %s from the date field", w.Path, d.Date.Format(time.DateOnly), d.DateFromMtime, w.Date)
 			}
 			for k, wantVal := range w.Fields {
 				n := d.Fields[k]
@@ -223,8 +224,8 @@ func TestScan(t *testing.T) {
 			},
 			check: func(t *testing.T, _ string, _ *vault.Vault, docs []*vault.Doc, problems []vault.Problem) {
 				d := find(t, docs, "notes/q.md")
-				if d.DateFromMtime || d.Date.Format("2006-01-02") != "2026-01-12" {
-					t.Errorf("Date = %s (from mtime %v), want 2026-01-12 from the field", d.Date.Format("2006-01-02"), d.DateFromMtime)
+				if d.DateFromMtime || d.Date.Format(time.DateOnly) != "2026-01-12" {
+					t.Errorf("Date = %s (from mtime %v), want 2026-01-12 from the field", d.Date.Format(time.DateOnly), d.DateFromMtime)
 				}
 				if len(problems) != 0 {
 					t.Errorf("problems = %v, want none", problems)

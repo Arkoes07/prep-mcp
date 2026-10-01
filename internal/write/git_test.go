@@ -76,7 +76,7 @@ func gitFor(e *env, bin string, timeout time.Duration) *write.Git {
 	return &write.Git{Bin: bin, Author: e.cfg.Author, Timeout: timeout}
 }
 
-const tenSeconds = 10 * time.Second
+const gitTimeout = 10 * time.Second
 
 // createNote writes learning/ddia-ch5.md through the writer.
 func createNote(t *testing.T, e *env) *write.Result {
@@ -137,7 +137,7 @@ func wantCommitted(t *testing.T, e *env, res *write.Result, before, msg string, 
 }
 
 func TestGitNotRepo(t *testing.T) {
-	e := newGitEnv(t, tenSeconds)
+	e := newGitEnv(t, gitTimeout)
 
 	res := createNote(t, e)
 
@@ -154,7 +154,7 @@ func TestGitNotRepo(t *testing.T) {
 }
 
 func TestGitDisabled(t *testing.T) {
-	e := newGitEnv(t, tenSeconds)
+	e := newGitEnv(t, gitTimeout)
 	initRepo(t, e.root)
 	e.cfg.CommitOnWrite = false
 	before := commitCount(t, e.root)
@@ -171,7 +171,7 @@ func TestGitDisabled(t *testing.T) {
 }
 
 func TestGitCommit(t *testing.T) {
-	e := newGitEnv(t, tenSeconds)
+	e := newGitEnv(t, gitTimeout)
 	initRepo(t, e.root)
 	before := commitCount(t, e.root)
 
@@ -185,7 +185,7 @@ func TestGitCommit(t *testing.T) {
 }
 
 func TestGitEachTool(t *testing.T) {
-	e := newGitEnv(t, tenSeconds)
+	e := newGitEnv(t, gitTimeout)
 	initRepo(t, e.root)
 
 	steps := []struct {
@@ -222,7 +222,7 @@ func TestGitEachTool(t *testing.T) {
 // The human's staged work must neither be swept into the AI's commit nor lose
 // its place in the index.
 func TestGitHumanStaged(t *testing.T) {
-	e := newGitEnv(t, tenSeconds)
+	e := newGitEnv(t, gitTimeout)
 	initRepo(t, e.root)
 	testvault.Write(t, e.root, "other.md", "human draft\n")
 	testvault.Write(t, e.root, "tags.md", e.read(t, "tags.md")+"`extra/tag`\n")
@@ -240,7 +240,7 @@ func TestGitHumanStaged(t *testing.T) {
 
 // The vault is a folder inside a bigger repo: never commit there (PLAN.md open question 19).
 func TestGitSubdirOfRepo(t *testing.T) {
-	e := newGitEnv(t, tenSeconds)
+	e := newGitEnv(t, gitTimeout)
 	parent := filepath.Dir(e.root)
 	initRepo(t, parent)
 	before := commitCount(t, parent)
@@ -263,7 +263,7 @@ func TestGitSubdirOfRepo(t *testing.T) {
 // root must be compared after resolving symlinks, both through the writer and
 // when Git is handed the unresolved path directly.
 func TestGitRootViaSymlink(t *testing.T) {
-	e := newGitEnv(t, tenSeconds)
+	e := newGitEnv(t, gitTimeout)
 	initRepo(t, e.root)
 	link := filepath.Join(t.TempDir(), "prep")
 	if err := os.Symlink(e.root, link); err != nil {
@@ -275,7 +275,7 @@ func TestGitRootViaSymlink(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		w := write.New(v, e.cfg, gitFor(e, "git", tenSeconds), testvault.Clock())
+		w := write.New(v, e.cfg, gitFor(e, "git", gitTimeout), testvault.Clock())
 		before := commitCount(t, e.root)
 
 		res, err := w.Create(ctx, "learning", node(t, `{"title":"DDIA ch5","track":"ddia"}`), "x", "")
@@ -291,7 +291,7 @@ func TestGitRootViaSymlink(t *testing.T) {
 		testvault.Write(t, e.root, "direct.md", "x\n")
 		before := commitCount(t, e.root)
 
-		hash, warning := gitFor(e, "git", tenSeconds).Commit(ctx, link, "direct.md", "direct: direct.md")
+		hash, warning := gitFor(e, "git", gitTimeout).Commit(ctx, link, "direct.md", "direct: direct.md")
 
 		if warning != "" {
 			t.Fatalf("warning = %q, want none", warning)
@@ -313,7 +313,7 @@ func writeHook(t *testing.T, root, script string) {
 
 // A failing hook costs the commit, never the write, and the human sees why.
 func TestGitHookFails(t *testing.T) {
-	e := newGitEnv(t, tenSeconds)
+	e := newGitEnv(t, gitTimeout)
 	initRepo(t, e.root)
 	writeHook(t, e.root, "echo 'hook says no: lint failed' >&2\nexit 1")
 	before := commitCount(t, e.root)
@@ -359,7 +359,7 @@ func TestGitHookHangs(t *testing.T) {
 
 // A stale or concurrent index.lock is the human's to clear. Report it, keep the write, leave the lock.
 func TestGitIndexLock(t *testing.T) {
-	e := newGitEnv(t, tenSeconds)
+	e := newGitEnv(t, gitTimeout)
 	initRepo(t, e.root)
 	lock := filepath.Join(e.root, ".git", "index.lock")
 	if err := os.WriteFile(lock, nil, 0o644); err != nil {
@@ -382,9 +382,9 @@ func TestGitIndexLock(t *testing.T) {
 }
 
 func TestGitNoBinary(t *testing.T) {
-	e := newGitEnv(t, tenSeconds)
+	e := newGitEnv(t, gitTimeout)
 	initRepo(t, e.root)
-	e.w = write.New(e.v, e.cfg, gitFor(e, "/nonexistent/git", tenSeconds), testvault.Clock())
+	e.w = write.New(e.v, e.cfg, gitFor(e, "/nonexistent/git", gitTimeout), testvault.Clock())
 	before := commitCount(t, e.root)
 
 	res := createNote(t, e)
@@ -401,7 +401,7 @@ func TestGitNoBinary(t *testing.T) {
 // An update that changes nothing writes nothing, so there is nothing to commit
 // and nothing to warn about.
 func TestGitNoopUpdate(t *testing.T) {
-	e := newGitEnv(t, tenSeconds)
+	e := newGitEnv(t, gitTimeout)
 	initRepo(t, e.root)
 	before := commitCount(t, e.root)
 

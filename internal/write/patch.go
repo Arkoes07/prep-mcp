@@ -502,7 +502,7 @@ func isPlainDate(s string) bool {
 	if len(s) != 10 {
 		return false
 	}
-	_, err := time.Parse("2006-01-02", s)
+	_, err := time.Parse(time.DateOnly, s)
 	return err == nil
 }
 

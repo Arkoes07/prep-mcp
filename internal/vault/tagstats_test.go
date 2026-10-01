@@ -36,8 +36,8 @@ func checkRows(t *testing.T, got []vault.TagCount, want []tagRow) {
 	}
 	for i, w := range want {
 		g := got[i]
-		if g.Tag != w.tag || g.Count != w.count || g.Last.Format("2006-01-02") != w.last {
-			t.Errorf("row %d = {%s %d %s}, want {%s %d %s}", i, g.Tag, g.Count, g.Last.Format("2006-01-02"), w.tag, w.count, w.last)
+		if g.Tag != w.tag || g.Count != w.count || g.Last.Format(time.DateOnly) != w.last {
+			t.Errorf("row %d = {%s %d %s}, want {%s %d %s}", i, g.Tag, g.Count, g.Last.Format(time.DateOnly), w.tag, w.count, w.last)
 		}
 	}
 }

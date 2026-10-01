@@ -211,9 +211,9 @@ func (h *handlers) listDocs(_ context.Context, _ *mcp.CallToolRequest, in listDo
 		m := docMeta{Path: d.Path, Type: d.Type, Title: d.Title, Tags: append([]string{}, d.Tags...), Updated: d.Text("updated"),
 			Kind: d.Text("kind"), Stage: d.Text("stage"), Status: d.Text("status")}
 		if d.DateFromMtime {
-			m.Modified = d.Date.Format("2006-01-02")
+			m.Modified = d.Date.Format(time.DateOnly)
 		} else {
-			m.Date = d.Date.Format("2006-01-02")
+			m.Date = d.Date.Format(time.DateOnly)
 		}
 		out.Docs = append(out.Docs, m)
 	}
@@ -322,7 +322,7 @@ func (h *handlers) listTags(_ context.Context, _ *mcp.CallToolRequest, in listTa
 		Count int      `json:"count"`
 	}{Tags: []tagOut{}, Count: len(stats)}
 	for _, s := range stats {
-		out.Tags = append(out.Tags, tagOut{s.Tag, s.Count, s.Last.Format("2006-01-02"), s.Unknown})
+		out.Tags = append(out.Tags, tagOut{s.Tag, s.Count, s.Last.Format(time.DateOnly), s.Unknown})
 	}
 	return jsonResult(out)
 }

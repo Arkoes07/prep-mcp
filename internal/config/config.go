@@ -123,7 +123,7 @@ func Parse(data []byte) (*Config, error) {
 		c.Author = DefaultAuthor
 	}
 	for name, t := range raw.Types {
-		c.Types[name] = TypeSpec{Folder: t.Folder, Filename: t.Filename, Required: t.Required}
+		c.Types[name] = TypeSpec(t)
 	}
 	if err := c.Validate(); err != nil {
 		return nil, err

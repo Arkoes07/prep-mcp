@@ -23,13 +23,13 @@ func TestISOWeek(t *testing.T) {
 	for _, tc := range tests {
 		day := time.Date(tc.y, tc.m, tc.d, 9, 0, 0, 0, time.Local)
 		if got := vault.ISOWeek(day); got != tc.want {
-			t.Errorf("ISOWeek(%s) = %q, want %q", day.Format("2006-01-02"), got, tc.want)
+			t.Errorf("ISOWeek(%s) = %q, want %q", day.Format(time.DateOnly), got, tc.want)
 		}
 	}
 }
 
 // ParseDate returns the calendar date as written: whatever the input format,
-// Format("2006-01-02") of the result is the date in the input. Any time of day
+// Format(time.DateOnly) of the result is the date in the input. Any time of day
 // in the input is ignored.
 func TestParseDate(t *testing.T) {
 	// A YAML-quoted date reaches ParseDate already unquoted, so the quoted
@@ -41,7 +41,7 @@ func TestParseDate(t *testing.T) {
 			t.Errorf("ParseDate(%s): %v", in, err)
 			continue
 		}
-		if s := got.Format("2006-01-02"); s != "2026-01-12" {
+		if s := got.Format(time.DateOnly); s != "2026-01-12" {
 			t.Errorf("ParseDate(%s) = %s, want 2026-01-12", in, s)
 		}
 	}
