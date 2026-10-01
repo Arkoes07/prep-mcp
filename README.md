@@ -14,9 +14,12 @@ Most markdown MCP servers are read-only. This one is built for the harder case: 
 
 ```bash
 go install github.com/Arkoes07/prep-mcp/cmd/prep-mcp@latest
-cd examples/vault && git init && git add . && git commit -m init
-claude mcp add prep -- prep-mcp --root "$(pwd)"
+cp -R examples/vault ~/prep-demo
+git -C ~/prep-demo init -q && git -C ~/prep-demo add . && git -C ~/prep-demo commit -qm init
+claude mcp add prep -- prep-mcp --root ~/prep-demo
 ```
+
+Copy the vault out first: writes are only committed when the vault is the root of its own git repository, and `examples/vault` is a folder inside this one.
 
 Then ask: "What's on this week, and what should I work on first?"
 

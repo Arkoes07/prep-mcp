@@ -5,7 +5,7 @@ Each entry: the decision, what it replaced, why, and what it costs. Fill in as t
 ## Scan on every call, no persisted index
 - Instead of: an in-memory index built at startup plus a `rebuild` tool (lethain/library-mcp), or a stored index file.
 - Why: this server writes. A startup index is stale the moment the AI logs something; a stored index is a second copy of the frontmatter that can drift, which is a dual write.
-- Cost: a full scan per call. Measured at ___ ms for ___ files.
+- Cost: a full scan per call. Measured at 59 ms for 2,000 files (`go test -bench Scan -run ^$ ./internal/vault`, Apple M4, 25 MB and 234k allocations per scan; 20 folders, about 1.2 KB per file, half with a `date`). That is far below anything a person notices next to a model call, so no cache. Re-measure on the real vault, and add the mtime-keyed cache only if it is slow there.
 
 ## Partial writes by default
 - Instead of: a single write-file tool.
@@ -170,6 +170,17 @@ Each entry: the decision, what it replaced, why, and what it costs. Fill in as t
   - Never push.
 - Where the vault path lives: in the MCP registration (`claude mcp add --scope user prep -- prep-mcp --root ~/prep`), not in `prep.config.yaml`, which lives inside the vault.
 - Cost: a vault kept in a subfolder of a bigger repo gets no commits until an opt-in setting is added. An uncommitted human edit to the same file is included in the AI's commit, because a commit covers the whole file.
+
+## How the git step behaves (M3)
+Details the entry above leaves open. The tests are `internal/write/git_test.go`.
+- Steps, all inside one deadline (`Timeout`, 10 s by default, for the whole commit and not per command): find the binary, `git rev-parse --show-toplevel` and compare with the vault root after `EvalSymlinks`, `git add -- <path>`, `git diff --cached --quiet -- <path>`, `git commit --only -m <msg> --author=<author> -- <path>`, `git rev-parse --short HEAD`. Git runs with `GIT_TERMINAL_PROMPT=0`, `LC_ALL=C` and the author as committer (`GIT_COMMITTER_NAME/EMAIL`). Output is captured, never printed, because stdout is the protocol channel.
+- Every failure is a warning that starts with `not committed:` and says what to do: `git init` in the vault, fix the hook or lock, install git, or set `commit_on_write: false`. The text includes git's own output, joined onto one line and cut at 400 characters, so a hook's message reaches the human.
+- **A write that changes nothing in the committed file is not a commit and not a warning.** `git diff --cached --quiet` after the `add` finds that (for example a `replace_doc` that writes the same bytes as HEAD). Instead of: letting `git commit` fail with "nothing to commit" and reporting that as a warning. No-op `update_frontmatter` calls never reach git at all.
+- **On a timeout the whole process group gets SIGTERM, then SIGKILL after 2 s** (`git_unix.go`). Instead of: the standard library's default, which kills only git. Why: a hook runs as a child that holds git's output pipes open, so killing git alone made the call wait for the hook (30 s in the test) and a SIGKILL would leave `.git/index.lock` behind, which would break every later commit. With SIGTERM git removes its own lock; checked by hand: after a timeout there is no `index.lock` and the next write commits. Cost: Unix only. `git_other.go` falls back to the default kill, so on Windows a hung hook can outlive the call. Nobody runs this there yet.
+- **A failed commit leaves the path staged.** After a hook rejects a new file, `git add` has already run, so the file stays in the index until a later `commit --only` for the same path, or the human, commits it. Instead of: running `git reset` to undo the add. Why: that is one more git call that can fail, in a repo that is already in an odd state, and the file does belong in the next commit. Cost: `git status` shows it as staged.
+- `Result.Commit` is the abbreviated hash (`git rev-parse --short`), as it is easier to read in a chat. It is a prefix of the full hash.
+- `Git` resolves symlinks itself, although `vault.Open` already hands it a resolved path. Why: `Git.Commit` takes any directory, and the symlinked `~/prep` case is tested on its own. Cost: one redundant `EvalSymlinks`.
+- Not done: a hook that needs a terminal or a GPG pinentry will time out rather than prompt (that is the point of `GIT_TERMINAL_PROMPT=0` plus the deadline). `commit.gpgsign=true` in the user's config may therefore cost the full timeout on every write (not tested).
 
 ## No domain words in any Go file, tests included
 - Instead of: applying CLAUDE.md's rule to non-test code only.
