@@ -189,7 +189,7 @@ Details the entry above leaves open. The tests are `internal/write/git_test.go`.
 
 ## `internal/testvault`, a test-only helper package *(deviation from PRD section 7 layout)*
 - Instead of: repeating copy-and-setup code in each package's tests.
-- Why: every test uses a temp copy of `examples/vault` with fixed mtimes (git doesn't preserve them) and an isolated git environment, so golden output is deterministic and your git config never leaks in.
+- Why: every test uses a temp copy of `examples/vault` with fixed mtimes (git doesn't preserve them) and a frozen clock, so golden output is deterministic. The git tests also cut out your git config and environment, but that is `isolateGit` in `internal/write/git_test.go`, not this package: only they run git.
 - Cost: one extra package outside the PRD layout.
 
 ## `internal/read` split out of `internal/vault` *(deviation from PRD section 7 layout)*
