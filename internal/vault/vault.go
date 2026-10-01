@@ -69,10 +69,7 @@ const (
 )
 
 // PathError is a rejected path. Msg says what to do next.
-type PathError struct {
-	Path, Msg string
-	NotFound  bool
-}
+type PathError struct{ Path, Msg string }
 
 func (e *PathError) Error() string { return e.Msg }
 
@@ -122,7 +119,7 @@ func (v *Vault) Resolve(p string, a Access) (string, error) {
 			if a == Write {
 				return clean, nil
 			}
-			return "", &PathError{Path: p, NotFound: true, Msg: fmt.Sprintf("not found: %s (use list_docs or search_text)", clean)}
+			return "", &PathError{Path: p, Msg: fmt.Sprintf("not found: %s (use list_docs or search_text)", clean)}
 		}
 		if err != nil {
 			return fail("cannot access %q: %v", p, err)
@@ -161,7 +158,7 @@ func (v *Vault) Read(p string) (path string, content []byte, hash string, err er
 	content, err = v.root.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return "", nil, "", &PathError{Path: p, NotFound: true, Msg: fmt.Sprintf("not found: %s (use list_docs or search_text)", path)}
+			return "", nil, "", &PathError{Path: p, Msg: fmt.Sprintf("not found: %s (use list_docs or search_text)", path)}
 		}
 		return "", nil, "", fmt.Errorf("read %s: %w", path, err)
 	}

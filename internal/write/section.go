@@ -59,7 +59,7 @@ func InsertSection(src []byte, heading, content string) ([]byte, error) {
 
 	match, inFence := -1, false
 	for i, l := range lines {
-		if isFence(l.text) {
+		if isCodeFence(l.text) {
 			inFence = !inFence
 			continue
 		}
@@ -92,7 +92,7 @@ func InsertSection(src []byte, heading, content string) ([]byte, error) {
 	inFence = false
 	for ; end < len(lines); end++ {
 		l := lines[end]
-		if isFence(l.text) {
+		if isCodeFence(l.text) {
 			inFence = !inFence
 			continue
 		}
@@ -123,7 +123,7 @@ func InsertSection(src []byte, heading, content string) ([]byte, error) {
 	return []byte(text[:at] + b.String() + text[at:]), nil
 }
 
-func isFence(l string) bool {
+func isCodeFence(l string) bool {
 	t := strings.TrimLeft(l, " \t")
 	return strings.HasPrefix(t, "```") || strings.HasPrefix(t, "~~~")
 }

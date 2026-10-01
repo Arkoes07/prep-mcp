@@ -1,3 +1,5 @@
+// Package write changes files in a vault: create, append, patch frontmatter,
+// replace. Byte transforms are pure functions; Writer applies them safely.
 package write
 
 import (
