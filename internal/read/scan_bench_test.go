@@ -1,4 +1,4 @@
-package vault_test
+package read_test
 
 import (
 	"fmt"
@@ -33,9 +33,9 @@ func BenchmarkScan(b *testing.B) {
 	if err := os.MkdirAll(filepath.Join(dir, "templates"), 0o755); err != nil {
 		b.Fatal(err)
 	}
-	v := openAt(b, dir)
+	r := openAt(b, dir)
 
-	got, problems, err := v.Scan()
+	got, problems, err := r.Scan()
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -46,7 +46,7 @@ func BenchmarkScan(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for range b.N {
-		if _, _, err := v.Scan(); err != nil {
+		if _, _, err := r.Scan(); err != nil {
 			b.Fatal(err)
 		}
 	}

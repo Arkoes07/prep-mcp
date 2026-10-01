@@ -1,4 +1,4 @@
-package vault
+package read
 
 import (
 	"bytes"
@@ -30,7 +30,7 @@ type Line struct {
 // Search finds documents whose body or title field contains q, ignoring case.
 // Other frontmatter fields and file names are not searched. Hits are ordered
 // by path. typ, when set, limits the search to one type.
-func (v *Vault) Search(q, typ string, limit int) ([]Hit, error) {
+func (r *Reader) Search(q, typ string, limit int) ([]Hit, error) {
 	if strings.TrimSpace(q) == "" {
 		return nil, errors.New("query is empty; pass the text to search for")
 	}
@@ -40,7 +40,7 @@ func (v *Vault) Search(q, typ string, limit int) ([]Hit, error) {
 	limit = min(limit, MaxSearchLimit)
 	needle := []byte(strings.ToLower(q))
 
-	docs, _, err := v.Scan() // problems are reported by List and Context
+	docs, _, err := r.Scan() // problems are reported by List and Context
 	if err != nil {
 		return nil, err
 	}

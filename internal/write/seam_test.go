@@ -27,7 +27,7 @@ func seamEnv(t *testing.T) (string, *Writer) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	v, err := vault.Open(root, cfg, testvault.Clock())
+	v, err := vault.Open(root, cfg)
 	if err != nil {
 		t.Fatal(err)
 	}

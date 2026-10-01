@@ -37,7 +37,7 @@ func newEnv(t testing.TB) *env {
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}
-	v, err := vault.Open(root, cfg, testvault.Clock())
+	v, err := vault.Open(root, cfg)
 	if err != nil {
 		t.Fatalf("open vault: %v", err)
 	}

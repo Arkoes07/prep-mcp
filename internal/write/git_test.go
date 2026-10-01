@@ -271,7 +271,7 @@ func TestGitRootViaSymlink(t *testing.T) {
 	}
 
 	t.Run("writer", func(t *testing.T) {
-		v, err := vault.Open(link, e.cfg, testvault.Clock())
+		v, err := vault.Open(link, e.cfg)
 		if err != nil {
 			t.Fatal(err)
 		}

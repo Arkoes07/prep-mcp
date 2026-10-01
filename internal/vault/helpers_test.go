@@ -12,14 +12,14 @@ import (
 	"github.com/Arkoes07/prep-mcp/internal/vault"
 )
 
-// openAt opens the vault at dir with the config found in it and the frozen test clock.
+// openAt opens the vault at dir with the config found in it.
 func openAt(t testing.TB, dir string) *vault.Vault {
 	t.Helper()
 	cfg, err := config.Load(filepath.Join(dir, "prep.config.yaml"))
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}
-	v, err := vault.Open(dir, cfg, testvault.Clock())
+	v, err := vault.Open(dir, cfg)
 	if err != nil {
 		t.Fatalf("open vault: %v", err)
 	}
@@ -32,14 +32,6 @@ func copyOpen(t testing.TB) (string, *vault.Vault) {
 	t.Helper()
 	root := testvault.Copy(t)
 	return root, openAt(t, root)
-}
-
-func paths(docs []*vault.Doc) []string {
-	out := make([]string, 0, len(docs))
-	for _, d := range docs {
-		out = append(out, d.Path)
-	}
-	return out
 }
 
 // mapValue returns the scalar value of key in a mapping node, and whether it exists.

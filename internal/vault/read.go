@@ -8,21 +8,21 @@ import (
 	"io/fs"
 )
 
-// Read returns a file's cleaned path, bytes and hash. Any .md file in the
-// vault can be read, including templates/, but not dot-folders.
-func (v *Vault) Read(p string) (rel string, content []byte, hash string, err error) {
+// ReadFile returns a file's cleaned path and bytes. Any .md file in the vault
+// can be read, including templates/, but not dot-folders.
+func (v *Vault) ReadFile(p string) (rel string, content []byte, err error) {
 	rel, err = v.Resolve(p, AccessRead)
 	if err != nil {
-		return "", nil, "", err
+		return "", nil, err
 	}
 	content, err = v.root.ReadFile(rel)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return "", nil, "", notFound(p, rel)
+			return "", nil, notFound(p, rel)
 		}
-		return "", nil, "", fmt.Errorf("read %s: %w", rel, err)
+		return "", nil, fmt.Errorf("read %s: %w", rel, err)
 	}
-	return rel, content, Hash(content), nil
+	return rel, content, nil
 }
 
 // Hash is the lowercase hex sha256 of b. replace_doc compares it.

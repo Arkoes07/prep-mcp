@@ -1,10 +1,12 @@
-package vault
+package read
 
 import (
 	"cmp"
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/Arkoes07/prep-mcp/internal/vault"
 )
 
 // TagCount is one tag with its usage.
@@ -18,19 +20,19 @@ type TagCount struct {
 // TagStats counts tags over typed documents, most used first, then by name.
 // prefix limits it to tags starting with it; since drops documents dated
 // before that day.
-func (v *Vault) TagStats(prefix string, since *time.Time) ([]TagCount, error) {
-	docs, _, err := v.Scan() // problems are reported by List and Context
+func (r *Reader) TagStats(prefix string, since *time.Time) ([]TagCount, error) {
+	docs, _, err := r.Scan() // problems are reported by List and Context
 	if err != nil {
 		return nil, err
 	}
-	voc, err := v.Vocabulary()
+	voc, err := r.v.Vocabulary()
 	if err != nil {
 		return nil, err
 	}
 	return tagStats(docs, voc, prefix, since), nil
 }
 
-func tagStats(docs []*Doc, voc *Vocabulary, prefix string, since *time.Time) []TagCount {
+func tagStats(docs []*Doc, voc *vault.Vocabulary, prefix string, since *time.Time) []TagCount {
 	prefix = strings.ToLower(strings.TrimSpace(prefix))
 	byTag := map[string]*TagCount{}
 	for _, d := range docs {

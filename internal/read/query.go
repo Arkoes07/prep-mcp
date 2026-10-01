@@ -1,4 +1,4 @@
-package vault
+package read
 
 import (
 	"cmp"
@@ -36,7 +36,7 @@ type Filter struct {
 
 // Apply filters, sorts and limits docs. It does not touch the input slice.
 // Ties in every sort are broken by path, ascending.
-func Apply(docs []*Doc, f Filter) ([]*Doc, error) {
+func (f Filter) Apply(docs []*Doc) ([]*Doc, error) {
 	sortBy := f.Sort
 	switch sortBy {
 	case "":
@@ -124,13 +124,27 @@ func fieldMatches(n *yaml.Node, want []string) bool {
 	return false
 }
 
+// MatchTag reports whether tag matches pattern. A trailing "/" makes the
+// pattern a prefix ("issue/" matches "issue/x"); otherwise it is an exact match.
+func MatchTag(pattern, tag string) bool {
+	p := strings.ToLower(strings.TrimSpace(pattern))
+	t := strings.ToLower(strings.TrimSpace(tag))
+	if p == "" {
+		return false
+	}
+	if strings.HasSuffix(p, "/") {
+		return strings.HasPrefix(t, p)
+	}
+	return p == t
+}
+
 // List scans the vault and applies f. Problems are files the scan had to skip.
-func (v *Vault) List(f Filter) ([]*Doc, []Problem, error) {
-	docs, problems, err := v.Scan()
+func (r *Reader) List(f Filter) ([]*Doc, []Problem, error) {
+	docs, problems, err := r.Scan()
 	if err != nil {
 		return nil, nil, err
 	}
-	out, err := Apply(docs, f)
+	out, err := f.Apply(docs)
 	if err != nil {
 		return nil, nil, err
 	}

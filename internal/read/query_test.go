@@ -1,4 +1,4 @@
-package vault_test
+package read_test
 
 import (
 	"fmt"
@@ -10,7 +10,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/Arkoes07/prep-mcp/internal/vault"
+	"github.com/Arkoes07/prep-mcp/internal/read"
 )
 
 // scalarOrList decodes a YAML scalar as one value and a sequence as many.
@@ -60,10 +60,10 @@ func TestList(t *testing.T) {
 		t.Fatal("testdata/queries.yaml has no cases")
 	}
 
-	_, v := copyOpen(t)
+	_, r := copyOpen(t)
 	for _, tc := range f.Cases {
 		t.Run(tc.Name, func(t *testing.T) {
-			flt := vault.Filter{
+			flt := read.Filter{
 				Type:    tc.Type,
 				Tags:    tc.Tags,
 				AnyTags: tc.AnyTags,
@@ -77,7 +77,7 @@ func TestList(t *testing.T) {
 				}
 			}
 			if tc.Since != "" {
-				d, err := vault.ParseDate(tc.Since)
+				d, err := read.ParseDate(tc.Since)
 				if tc.ParseErr {
 					if err == nil {
 						t.Fatalf("ParseDate(%q) = %v, want an error", tc.Since, d)
@@ -90,14 +90,14 @@ func TestList(t *testing.T) {
 				flt.Since = &d
 			}
 			if tc.Until != "" {
-				d, err := vault.ParseDate(tc.Until)
+				d, err := read.ParseDate(tc.Until)
 				if err != nil {
 					t.Fatalf("ParseDate(until %q): %v", tc.Until, err)
 				}
 				flt.Until = &d
 			}
 
-			docs, problems, err := v.List(flt)
+			docs, problems, err := r.List(flt)
 			if len(tc.Err) > 0 {
 				if err == nil {
 					t.Fatalf("List = %v, want an error containing %q", paths(docs), tc.Err)
@@ -126,9 +126,9 @@ func TestList(t *testing.T) {
 // checked here on synthetic documents. Apply is pure and needs no vault.
 func TestApplyLimitCap(t *testing.T) {
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.Local)
-	docs := make([]*vault.Doc, 600)
+	docs := make([]*read.Doc, 600)
 	for i := range docs {
-		docs[i] = &vault.Doc{
+		docs[i] = &read.Doc{
 			Path: fmt.Sprintf("n/%04d.md", i),
 			Type: "note",
 			Date: base.Add(time.Duration(i) * time.Hour),
@@ -143,7 +143,7 @@ func TestApplyLimitCap(t *testing.T) {
 		{9999, 500},
 	}
 	for _, tc := range tests {
-		got, err := vault.Apply(docs, vault.Filter{Limit: tc.limit})
+		got, err := read.Filter{Limit: tc.limit}.Apply(docs)
 		if err != nil {
 			t.Fatalf("Apply(limit %d): %v", tc.limit, err)
 		}
@@ -152,8 +152,26 @@ func TestApplyLimitCap(t *testing.T) {
 		}
 	}
 	// Newest first by default: the last synthetic doc leads.
-	got, err := vault.Apply(docs, vault.Filter{Limit: 1})
+	got, err := read.Filter{Limit: 1}.Apply(docs)
 	if err != nil || len(got) != 1 || got[0].Path != "n/0599.md" {
 		t.Errorf("Apply(limit 1) = %v, %v; want n/0599.md", paths(got), err)
+	}
+}
+
+func TestMatchTag(t *testing.T) {
+	tests := []struct {
+		pattern, tag string
+		want         bool
+	}{
+		{"issue/", "issue/x", true},
+		{"issue/", "issues/x", false},
+		{"issue", "issue/x", false},
+		{"issue/x", "issue/x", true},
+		{"Issue/", "issue/x", true},
+	}
+	for _, tc := range tests {
+		if got := read.MatchTag(tc.pattern, tc.tag); got != tc.want {
+			t.Errorf("MatchTag(%q, %q) = %v, want %v", tc.pattern, tc.tag, got, tc.want)
+		}
 	}
 }

@@ -305,11 +305,11 @@ func TestWriterReplace(t *testing.T) {
 	// readHash returns the current content and its hash, as read_doc would.
 	readHash := func(t *testing.T, e *env) (string, string) {
 		t.Helper()
-		_, content, hash, err := e.v.Read(p)
+		_, content, err := e.v.ReadFile(p)
 		if err != nil {
 			t.Fatal(err)
 		}
-		return string(content), hash
+		return string(content), vault.Hash(content)
 	}
 
 	t.Run("happy", func(t *testing.T) {

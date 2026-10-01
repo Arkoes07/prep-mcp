@@ -1,5 +1,6 @@
-// Package server registers the MCP tools and turns vault results into text.
-// It holds glue only; the logic lives in internal/vault.
+// Package server registers the MCP tools and turns read and write results
+// into text. It holds glue only; the logic lives in internal/read and
+// internal/write.
 package server
 
 import (
@@ -12,7 +13,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/Arkoes07/prep-mcp/internal/config"
-	"github.com/Arkoes07/prep-mcp/internal/vault"
+	"github.com/Arkoes07/prep-mcp/internal/read"
 	"github.com/Arkoes07/prep-mcp/internal/write"
 )
 
@@ -39,7 +40,7 @@ func WithLogger(l *slog.Logger) Option {
 }
 
 // New builds the server with the read and write tools registered.
-func New(v *vault.Vault, w *write.Writer, cfg *config.Config, version string, opts ...Option) *mcp.Server {
+func New(r *read.Reader, w *write.Writer, cfg *config.Config, version string, opts ...Option) *mcp.Server {
 	o := options{logger: slog.Default()}
 	for _, opt := range opts {
 		opt(&o)
@@ -48,7 +49,7 @@ func New(v *vault.Vault, w *write.Writer, cfg *config.Config, version string, op
 		&mcp.Implementation{Name: "prep-mcp", Version: version},
 		&mcp.ServerOptions{Instructions: instructions},
 	)
-	h := &handlers{v: v, w: w, cfg: cfg, logger: o.logger}
+	h := &handlers{r: r, w: w, cfg: cfg, logger: o.logger}
 	registerReadTools(s, h)
 	registerWriteTools(s, h)
 	return s
@@ -74,7 +75,7 @@ func guard[In any](logger *slog.Logger, name string, h mcp.ToolHandlerFor[In, an
 }
 
 type handlers struct {
-	v      *vault.Vault
+	r      *read.Reader
 	w      *write.Writer
 	cfg    *config.Config
 	logger *slog.Logger

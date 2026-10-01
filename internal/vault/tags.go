@@ -58,20 +58,6 @@ func NormalizeTagList(in []string) []string {
 	return out
 }
 
-// MatchTag reports whether tag matches pattern. A trailing "/" makes the
-// pattern a prefix ("issue/" matches "issue/x"); otherwise it is an exact match.
-func MatchTag(pattern, tag string) bool {
-	p := strings.ToLower(strings.TrimSpace(pattern))
-	t := strings.ToLower(strings.TrimSpace(tag))
-	if p == "" {
-		return false
-	}
-	if strings.HasSuffix(p, "/") {
-		return strings.HasPrefix(t, p)
-	}
-	return p == t
-}
-
 // Vocabulary is the controlled tag list from the tags file.
 type Vocabulary struct {
 	set  map[string]bool

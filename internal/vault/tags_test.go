@@ -151,21 +151,3 @@ func TestClosest(t *testing.T) {
 		}
 	})
 }
-
-func TestMatchTag(t *testing.T) {
-	tests := []struct {
-		pattern, tag string
-		want         bool
-	}{
-		{"issue/", "issue/x", true},
-		{"issue/", "issues/x", false},
-		{"issue", "issue/x", false},
-		{"issue/x", "issue/x", true},
-		{"Issue/", "issue/x", true},
-	}
-	for _, tc := range tests {
-		if got := vault.MatchTag(tc.pattern, tc.tag); got != tc.want {
-			t.Errorf("MatchTag(%q, %q) = %v, want %v", tc.pattern, tc.tag, got, tc.want)
-		}
-	}
-}

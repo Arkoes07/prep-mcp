@@ -1,4 +1,4 @@
-package vault_test
+package read_test
 
 import (
 	"os"
@@ -47,10 +47,10 @@ func TestSearch(t *testing.T) {
 		t.Fatal("testdata/search.yaml has no cases")
 	}
 
-	_, v := copyOpen(t)
+	_, r := copyOpen(t)
 	for _, tc := range f.Cases {
 		t.Run(tc.Name, func(t *testing.T) {
-			hits, err := v.Search(tc.Query, tc.Type, tc.Limit)
+			hits, err := r.Search(tc.Query, tc.Type, tc.Limit)
 			if len(tc.Err) > 0 {
 				if err == nil {
 					t.Fatalf("Search(%q) returned %d hits, want an error containing %q", tc.Query, len(hits), tc.Err)
@@ -108,9 +108,9 @@ func TestSearchLineCap(t *testing.T) {
 	testvault.Write(t, root, "notes/many.md",
 		"---\ntype: learning\ntitle: Many\ntrack: t\n---\n"+
 			"needle one\nfiller\nneedle two\nneedle three\nneedle four\nneedle five\n")
-	v := openAt(t, root)
+	r := openAt(t, root)
 
-	hits, err := v.Search("needle", "", 0)
+	hits, err := r.Search("needle", "", 0)
 	if err != nil {
 		t.Fatalf("Search: %v", err)
 	}

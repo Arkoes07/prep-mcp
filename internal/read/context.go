@@ -1,4 +1,4 @@
-package vault
+package read
 
 import (
 	"errors"
@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Arkoes07/prep-mcp/internal/config"
+	"github.com/Arkoes07/prep-mcp/internal/vault"
 )
 
 const (
@@ -25,14 +26,14 @@ const (
 // queries as metadata lines, and the most used recent tags. Sections are
 // introduced by "==== name ====" lines. It is deterministic for a given day
 // and vault content.
-func (v *Vault) Context(day time.Time) (string, error) {
-	docs, problems, err := v.Scan()
+func (r *Reader) Context(day time.Time) (string, error) {
+	docs, problems, err := r.Scan()
 	if err != nil {
 		return "", err
 	}
 	var sections []string
 
-	rules, err := v.rulesSection()
+	rules, err := r.rulesSection()
 	if err != nil {
 		return "", err
 	}
@@ -40,19 +41,19 @@ func (v *Vault) Context(day time.Time) (string, error) {
 		sections = append(sections, rules)
 	}
 
-	if v.cfg.Context.CurrentWeekType != "" {
-		sec, weekProblems := v.weekSection(docs, day)
+	if r.cfg.Context.CurrentWeekType != "" {
+		sec, weekProblems := r.weekSection(docs, day)
 		sections = append(sections, sec)
 		problems = append(problems, weekProblems...)
 	}
 
-	queries, err := v.querySections(docs)
+	queries, err := r.querySections(docs)
 	if err != nil {
 		return "", err
 	}
 	sections = append(sections, queries...)
 
-	voc, err := v.Vocabulary()
+	voc, err := r.v.Vocabulary()
 	if err != nil {
 		return "", err
 	}
@@ -66,8 +67,8 @@ func (v *Vault) Context(day time.Time) (string, error) {
 }
 
 // rulesSection renders the working rules file, or "" when there is none.
-func (v *Vault) rulesSection() (string, error) {
-	rules, err := v.root.ReadFile(rulesFile)
+func (r *Reader) rulesSection() (string, error) {
+	rules, err := r.v.Root().ReadFile(rulesFile)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
 		return "", nil
@@ -79,15 +80,15 @@ func (v *Vault) rulesSection() (string, error) {
 
 // querySections renders the configured open-item and recent queries, one
 // section per group that has any.
-func (v *Vault) querySections(docs []*Doc) ([]string, error) {
+func (r *Reader) querySections(docs []*Doc) ([]string, error) {
 	var sections []string
 	for _, group := range []struct {
 		name     string
 		qs       []config.Query
 		isRecent bool
 	}{
-		{name: "Open items", qs: v.cfg.Context.OpenItems},
-		{name: "Recent", qs: v.cfg.Context.Recent, isRecent: true},
+		{name: "Open items", qs: r.cfg.Context.OpenItems},
+		{name: "Recent", qs: r.cfg.Context.Recent, isRecent: true},
 	} {
 		if len(group.qs) == 0 {
 			continue
@@ -126,8 +127,8 @@ func section(name, content string) string {
 
 // weekSection finds the week document for day by field value (not by file
 // name) and renders it in full, as scanned, or says how to create it.
-func (v *Vault) weekSection(docs []*Doc, day time.Time) (string, []Problem) {
-	cs := v.cfg.Context
+func (r *Reader) weekSection(docs []*Doc, day time.Time) (string, []Problem) {
+	cs := r.cfg.Context
 	week := ISOWeek(day)
 	title := "Current week: " + week
 
@@ -157,19 +158,20 @@ func (v *Vault) weekSection(docs []*Doc, day time.Time) (string, []Problem) {
 		})
 	}
 	doc := found[0]
-	body := fmt.Sprintf("path: %s\nhash: %s\n\n%s", doc.Path, Hash(doc.src), doc.src)
+	body := fmt.Sprintf("path: %s\nhash: %s\n\n%s", doc.Path, vault.Hash(doc.src), doc.src)
 	return section(title, body), problems
 }
 
 // queryBlock renders one configured query: a label line and one line per document.
 func queryBlock(docs []*Doc, q config.Query, isRecent bool) (string, error) {
-	got, err := Apply(docs, Filter{
+	f := Filter{
 		Type:    q.Type,
 		Tags:    q.Tags,
 		AnyTags: q.AnyTags,
 		Where:   q.Where,
 		Limit:   q.Limit,
-	})
+	}
+	got, err := f.Apply(docs)
 	if err != nil {
 		return "", err
 	}

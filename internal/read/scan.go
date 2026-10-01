@@ -1,4 +1,4 @@
-package vault
+package read
 
 import (
 	"fmt"
@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/Arkoes07/prep-mcp/internal/vault"
 )
 
 // Doc is one typed document: a .md file whose frontmatter has a type.
@@ -32,11 +34,11 @@ type Problem struct{ Path, Msg string }
 // dot-folders and dot-files, the root templates/ folder, symlinks, and files
 // without frontmatter or without a type. A file with broken frontmatter is
 // skipped and reported as a Problem.
-func (v *Vault) Scan() ([]*Doc, []Problem, error) {
+func (r *Reader) Scan() ([]*Doc, []Problem, error) {
 	var docs []*Doc
 	var problems []Problem
 
-	err := fs.WalkDir(v.root.FS(), ".", func(p string, d fs.DirEntry, err error) error {
+	err := fs.WalkDir(r.v.Root().FS(), ".", func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			if p == "." {
 				return err
@@ -60,7 +62,7 @@ func (v *Vault) Scan() ([]*Doc, []Problem, error) {
 		if !isMarkdownFile(d) {
 			return nil
 		}
-		src, err := v.root.ReadFile(p)
+		src, err := r.v.Root().ReadFile(p)
 		if err != nil {
 			problems = append(problems, Problem{
 				Path: p,
@@ -101,14 +103,14 @@ func isMarkdownFile(d fs.DirEntry) bool {
 // without frontmatter or without a type, and problems for what it could not
 // use: broken frontmatter (no Doc) or an unparseable date (a Doc dated by mtime).
 func parseDoc(p string, d fs.DirEntry, src []byte) (*Doc, []Problem) {
-	fm, err := SplitFrontmatter(src)
+	fm, err := vault.SplitFrontmatter(src)
 	if err != nil {
 		return nil, []Problem{{Path: p, Msg: err.Error()}}
 	}
 	if fm == nil {
 		return nil, nil
 	}
-	typ := FieldText(fm.Map, "type")
+	typ := vault.FieldText(fm.Map, "type")
 	if typ == "" {
 		return nil, nil
 	}
@@ -129,46 +131,38 @@ func parseDoc(p string, d fs.DirEntry, src []byte) (*Doc, []Problem) {
 		Body:          src[fm.BodyOffset:],
 		src:           src,
 		BodyLine:      fm.BodyLine,
-		Tags:          NormalizeTags(Field(fm.Map, "tags")),
+		Tags:          vault.NormalizeTags(vault.Field(fm.Map, "tags")),
 		Date:          info.ModTime(),
 		DateFromMtime: true,
 	}
-	for k, val := range Pairs(fm.Map) {
+	for k, val := range vault.Pairs(fm.Map) {
 		doc.Fields[k.Value] = val
 	}
-	if tn := Field(fm.Map, "title"); tn != nil {
-		if t := strings.TrimSpace(scalar(tn)); t != "" {
+	if tn := vault.Field(fm.Map, "title"); tn != nil {
+		if t := strings.TrimSpace(vault.Scalar(tn)); t != "" {
 			doc.Title = t
 			doc.titleLine = tn.Line + 1
 		}
 	}
-	dn := Field(fm.Map, "date")
-	if dn == nil || strings.TrimSpace(scalar(dn)) == "" {
+	dn := vault.Field(fm.Map, "date")
+	if dn == nil || strings.TrimSpace(vault.Scalar(dn)) == "" {
 		return doc, nil
 	}
-	t, err := ParseDate(scalar(dn))
+	t, err := ParseDate(vault.Scalar(dn))
 	if err != nil {
 		return doc, []Problem{{
 			Path: p,
 			Msg: fmt.Sprintf("line %d: date %q is not a date; "+
 				"use YYYY-MM-DD (using the file's modification time meanwhile)",
-				dn.Line+1, scalar(dn)),
+				dn.Line+1, vault.Scalar(dn)),
 		}}
 	}
 	doc.Date, doc.DateFromMtime = t, false
 	return doc, nil
 }
 
-// scalar returns the text of a scalar node, or "" for anything else.
-func scalar(n *yaml.Node) string {
-	if n == nil || n.Kind != yaml.ScalarNode || n.Tag == "!!null" {
-		return ""
-	}
-	return n.Value
-}
-
 // Text returns the trimmed text of a scalar frontmatter field, or "" if the
 // field is missing, null or not a scalar.
 func (d *Doc) Text(key string) string {
-	return strings.TrimSpace(scalar(d.Fields[key]))
+	return strings.TrimSpace(vault.Scalar(d.Fields[key]))
 }

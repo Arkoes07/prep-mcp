@@ -50,7 +50,7 @@ func TestOpenViaSymlinkedRoot(t *testing.T) {
 	if _, err := v.Resolve("weeks/2026-w03.md", vault.AccessWrite); err != nil {
 		t.Errorf("Resolve through a symlinked root: %v", err)
 	}
-	if _, content, _, err := v.Read("CLAUDE.md"); err != nil || len(content) == 0 {
-		t.Errorf("Read through a symlinked root: %v (%d bytes)", err, len(content))
+	if _, content, err := v.ReadFile("CLAUDE.md"); err != nil || len(content) == 0 {
+		t.Errorf("ReadFile through a symlinked root: %v (%d bytes)", err, len(content))
 	}
 }

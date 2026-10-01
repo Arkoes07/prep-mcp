@@ -1,4 +1,4 @@
-package vault_test
+package read_test
 
 import (
 	"os"
@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Arkoes07/prep-mcp/internal/read"
 	"github.com/Arkoes07/prep-mcp/internal/testvault"
-	"github.com/Arkoes07/prep-mcp/internal/vault"
 )
 
 type tagRow struct {
@@ -29,7 +29,7 @@ var exampleTagRows = []tagRow{
 	{"skill/trade-off", 1, "2026-01-10"},
 }
 
-func checkRows(t *testing.T, got []vault.TagCount, want []tagRow) {
+func checkRows(t *testing.T, got []read.TagCount, want []tagRow) {
 	t.Helper()
 	if len(got) != len(want) {
 		t.Fatalf("got %d rows %v, want %d %v", len(got), got, len(want), want)
@@ -44,8 +44,8 @@ func checkRows(t *testing.T, got []vault.TagCount, want []tagRow) {
 
 func TestTagStats(t *testing.T) {
 	t.Run("no_prefix_sorted_by_count_then_name", func(t *testing.T) {
-		_, v := copyOpen(t)
-		got, err := v.TagStats("", nil)
+		_, r := copyOpen(t)
+		got, err := r.TagStats("", nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -58,8 +58,8 @@ func TestTagStats(t *testing.T) {
 	})
 
 	t.Run("prefix", func(t *testing.T) {
-		_, v := copyOpen(t)
-		got, err := v.TagStats("issue/", nil)
+		_, r := copyOpen(t)
+		got, err := r.TagStats("issue/", nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -70,9 +70,9 @@ func TestTagStats(t *testing.T) {
 	})
 
 	t.Run("since_window", func(t *testing.T) {
-		_, v := copyOpen(t)
+		_, r := copyOpen(t)
 		since := time.Date(2026, 1, 12, 0, 0, 0, 0, time.Local)
-		got, err := v.TagStats("", &since)
+		got, err := r.TagStats("", &since)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -85,9 +85,9 @@ func TestTagStats(t *testing.T) {
 	})
 
 	t.Run("since_after_everything", func(t *testing.T) {
-		_, v := copyOpen(t)
+		_, r := copyOpen(t)
 		since := time.Date(2026, 3, 1, 0, 0, 0, 0, time.Local).AddDate(0, 0, -30)
-		got, err := v.TagStats("", &since)
+		got, err := r.TagStats("", &since)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -101,8 +101,8 @@ func TestTagStats(t *testing.T) {
 	t.Run("unknown_tag_marked", func(t *testing.T) {
 		root := testvault.Copy(t)
 		testvault.Write(t, root, "notes/typo.md", typo)
-		v := openAt(t, root)
-		got, err := v.TagStats("issue/", nil)
+		r := openAt(t, root)
+		got, err := r.TagStats("issue/", nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -121,8 +121,8 @@ func TestTagStats(t *testing.T) {
 		if err := os.Remove(filepath.Join(root, "tags.md")); err != nil {
 			t.Fatal(err)
 		}
-		v := openAt(t, root)
-		got, err := v.TagStats("", nil)
+		r := openAt(t, root)
+		got, err := r.TagStats("", nil)
 		if err != nil {
 			t.Fatal(err)
 		}

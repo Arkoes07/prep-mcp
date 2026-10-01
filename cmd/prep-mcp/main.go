@@ -20,6 +20,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/Arkoes07/prep-mcp/internal/config"
+	"github.com/Arkoes07/prep-mcp/internal/read"
 	"github.com/Arkoes07/prep-mcp/internal/server"
 	"github.com/Arkoes07/prep-mcp/internal/vault"
 	"github.com/Arkoes07/prep-mcp/internal/write"
@@ -65,7 +66,7 @@ func run(ctx context.Context, args []string, getenv func(string) string, stderr 
 		return err
 	}
 
-	v, err := vault.Open(root, cfg, time.Now)
+	v, err := vault.Open(root, cfg)
 	if err != nil {
 		return err
 	}
@@ -75,8 +76,9 @@ func run(ctx context.Context, args []string, getenv func(string) string, stderr 
 		}
 	}()
 	logger.Info("serving vault", slog.String("root", v.Dir()), slog.Int("types", len(cfg.Types)))
+	r := read.New(v, cfg, time.Now)
 	w := write.New(v, cfg, &write.Git{Bin: "git", Author: cfg.Author, Timeout: 10 * time.Second}, time.Now)
-	err = server.New(v, w, cfg, version, server.WithLogger(logger)).Run(ctx, &mcp.StdioTransport{})
+	err = server.New(r, w, cfg, version, server.WithLogger(logger)).Run(ctx, &mcp.StdioTransport{})
 	if err != nil && ctx.Err() == nil && !errors.Is(err, io.EOF) {
 		return err
 	}

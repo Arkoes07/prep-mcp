@@ -14,6 +14,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/Arkoes07/prep-mcp/internal/config"
+	"github.com/Arkoes07/prep-mcp/internal/read"
 	"github.com/Arkoes07/prep-mcp/internal/testvault"
 	"github.com/Arkoes07/prep-mcp/internal/vault"
 	"github.com/Arkoes07/prep-mcp/internal/write"
@@ -40,13 +41,14 @@ func connectAt(t *testing.T, root string) *mcp.ClientSession {
 	if err != nil {
 		t.Fatal(err)
 	}
-	v, err := vault.Open(root, cfg, testvault.Clock())
+	v, err := vault.Open(root, cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
 	testvault.CloseOnCleanup(t, v)
+	r := read.New(v, cfg, testvault.Clock())
 	// A nil Git: the server tests do not commit.
-	return serve(t, New(v, write.New(v, cfg, nil, testvault.Clock()), cfg, "test"))
+	return serve(t, New(r, write.New(v, cfg, nil, testvault.Clock()), cfg, "test"))
 }
 
 func serve(t *testing.T, s *mcp.Server) *mcp.ClientSession {

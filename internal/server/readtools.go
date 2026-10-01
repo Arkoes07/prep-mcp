@@ -9,10 +9,10 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/Arkoes07/prep-mcp/internal/vault"
+	"github.com/Arkoes07/prep-mcp/internal/read"
 )
 
-// registerReadTools adds the five read tools. None of them changes the vault.
+// registerReadTools adds the five read tools. None of them changes the read.
 func registerReadTools(s *mcp.Server, h *handlers) {
 	readOnly := &mcp.ToolAnnotations{ReadOnlyHint: true}
 
@@ -75,7 +75,7 @@ func parseDay(name, s string) (*time.Time, error) {
 	if strings.TrimSpace(s) == "" {
 		return nil, nil
 	}
-	t, err := vault.ParseDate(s)
+	t, err := read.ParseDate(s)
 	if err != nil {
 		return nil, fmt.Errorf("%s: use YYYY-MM-DD (got %q)", name, s)
 	}
@@ -96,10 +96,10 @@ func (h *handlers) getContext(
 		return nil, nil, err
 	}
 	if day == nil {
-		now := h.v.Now()
+		now := h.r.Now()
 		day = &now
 	}
-	out, err := h.v.Context(*day)
+	out, err := h.r.Context(*day)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -137,7 +137,7 @@ type problemOut struct {
 	Msg  string `json:"msg"`
 }
 
-func problemsOut(ps []vault.Problem) []problemOut {
+func problemsOut(ps []read.Problem) []problemOut {
 	out := make([]problemOut, 0, len(ps))
 	for _, p := range ps {
 		out = append(out, problemOut{Path: p.Path, Msg: p.Msg})
@@ -154,7 +154,7 @@ func (h *handlers) listDocs(
 	if err != nil {
 		return nil, nil, err
 	}
-	docs, problems, err := h.v.List(f)
+	docs, problems, err := h.r.List(f)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -177,20 +177,20 @@ func (h *handlers) listDocs(
 }
 
 // filter checks the arguments and turns them into a vault filter.
-func (in listDocsIn) filter() (vault.Filter, error) {
-	f := vault.Filter{Type: in.Type, Tags: in.Tags, AnyTags: in.AnyTags, Sort: in.Sort, Limit: in.Limit}
+func (in listDocsIn) filter() (read.Filter, error) {
+	f := read.Filter{Type: in.Type, Tags: in.Tags, AnyTags: in.AnyTags, Sort: in.Sort, Limit: in.Limit}
 	var err error
 	if f.Since, err = parseDay("since", in.Since); err != nil {
-		return vault.Filter{}, err
+		return read.Filter{}, err
 	}
 	if f.Until, err = parseDay("until", in.Until); err != nil {
-		return vault.Filter{}, err
+		return read.Filter{}, err
 	}
 	if len(in.Where) > 0 {
 		f.Where = make(map[string][]string, len(in.Where))
 		for k, val := range in.Where {
 			if f.Where[k], err = whereValues(k, val); err != nil {
-				return vault.Filter{}, err
+				return read.Filter{}, err
 			}
 		}
 	}
@@ -199,7 +199,7 @@ func (in listDocsIn) filter() (vault.Filter, error) {
 
 // metaOf is the list_docs entry for d: its date field as date, or its file
 // modification day as modified when it has none.
-func metaOf(d *vault.Doc) docMeta {
+func metaOf(d *read.Doc) docMeta {
 	m := docMeta{
 		Path:    d.Path,
 		Type:    d.Type,
@@ -253,7 +253,7 @@ type readDocIn struct {
 }
 
 func (h *handlers) readDoc(_ context.Context, _ *mcp.CallToolRequest, in readDocIn) (*mcp.CallToolResult, any, error) {
-	p, content, hash, err := h.v.Read(in.Path)
+	p, content, hash, err := h.r.ReadDoc(in.Path)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -271,7 +271,7 @@ func (h *handlers) searchText(
 	_ *mcp.CallToolRequest,
 	in searchTextIn,
 ) (*mcp.CallToolResult, any, error) {
-	hits, err := h.v.Search(in.Query, in.Type, in.Limit)
+	hits, err := h.r.Search(in.Query, in.Type, in.Limit)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -308,7 +308,7 @@ func (h *handlers) listTags(
 	_ *mcp.CallToolRequest,
 	in listTagsIn,
 ) (*mcp.CallToolResult, any, error) {
-	stats, err := h.v.TagStats(in.Prefix, nil)
+	stats, err := h.r.TagStats(in.Prefix, nil)
 	if err != nil {
 		return nil, nil, err
 	}

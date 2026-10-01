@@ -158,5 +158,13 @@ func Field(m *yaml.Node, key string) *yaml.Node {
 // FieldText returns the trimmed text of a scalar field of a mapping node, or
 // "" if the field is missing, null or not a scalar.
 func FieldText(m *yaml.Node, key string) string {
-	return strings.TrimSpace(scalar(Field(m, key)))
+	return strings.TrimSpace(Scalar(Field(m, key)))
+}
+
+// Scalar returns the text of a scalar node, or "" for anything else.
+func Scalar(n *yaml.Node) string {
+	if n == nil || n.Kind != yaml.ScalarNode || n.Tag == "!!null" {
+		return ""
+	}
+	return n.Value
 }

@@ -1,4 +1,4 @@
-package vault_test
+package read_test
 
 import (
 	"flag"
@@ -42,14 +42,14 @@ func golden(t *testing.T, name, got string) {
 
 func TestContextGolden(t *testing.T) {
 	t.Run("with_week", func(t *testing.T) {
-		_, v := copyOpen(t)
-		got, err := v.Context(day)
+		_, r := copyOpen(t)
+		got, err := r.Context(day)
 		if err != nil {
 			t.Fatalf("Context: %v", err)
 		}
 		golden(t, "context.golden", got)
 
-		again, err := v.Context(day)
+		again, err := r.Context(day)
 		if err != nil || again != got {
 			t.Errorf("a second run differs from the first (err %v)", err)
 		}
@@ -70,8 +70,8 @@ func TestContextGolden(t *testing.T) {
 	})
 
 	t.Run("no_week_doc", func(t *testing.T) {
-		_, v := copyOpen(t)
-		got, err := v.Context(dayNoWeek)
+		_, r := copyOpen(t)
+		got, err := r.Context(dayNoWeek)
 		if err != nil {
 			t.Fatalf("Context: %v", err)
 		}
@@ -79,11 +79,11 @@ func TestContextGolden(t *testing.T) {
 	})
 
 	t.Run("without_rules_file", func(t *testing.T) {
-		root, v := copyOpen(t)
+		root, r := copyOpen(t)
 		if err := os.Remove(filepath.Join(root, "CLAUDE.md")); err != nil {
 			t.Fatal(err)
 		}
-		got, err := v.Context(day)
+		got, err := r.Context(day)
 		if err != nil {
 			t.Fatalf("Context without CLAUDE.md: %v", err)
 		}
@@ -183,8 +183,8 @@ func TestCurrentWeek(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			root := testvault.Copy(t)
 			tc.setup(t, root)
-			v := openAt(t, root)
-			got, err := v.Context(tc.day)
+			r := openAt(t, root)
+			got, err := r.Context(tc.day)
 			if err != nil {
 				t.Fatalf("Context: %v", err)
 			}

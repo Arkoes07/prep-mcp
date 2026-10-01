@@ -5,7 +5,7 @@ Each entry: the decision, what it replaced, why, and what it costs. Fill in as t
 ## Scan on every call, no persisted index
 - Instead of: an in-memory index built at startup plus a `rebuild` tool (lethain/library-mcp), or a stored index file.
 - Why: this server writes. A startup index is stale the moment the AI logs something; a stored index is a second copy of the frontmatter that can drift, which is a dual write.
-- Cost: a full scan per call. Measured at 59 ms for 2,000 files (`go test -bench Scan -run ^$ ./internal/vault`, Apple M4, 25 MB and 234k allocations per scan; 20 folders, about 1.2 KB per file, half with a `date`). That is far below anything a person notices next to a model call, so no cache. Re-measure on the real vault, and add the mtime-keyed cache only if it is slow there.
+- Cost: a full scan per call. Measured at 59 ms for 2,000 files (`go test -bench Scan -run ^$ ./internal/read`, Apple M4, 25 MB and 234k allocations per scan; 20 folders, about 1.2 KB per file, half with a `date`). That is far below anything a person notices next to a model call, so no cache. Re-measure on the real vault, and add the mtime-keyed cache only if it is slow there.
 
 ## Partial writes by default
 - Instead of: a single write-file tool.
@@ -192,9 +192,16 @@ Details the entry above leaves open. The tests are `internal/write/git_test.go`.
 - Why: every test uses a temp copy of `examples/vault` with fixed mtimes (git doesn't preserve them) and an isolated git environment, so golden output is deterministic and your git config never leaks in.
 - Cost: one extra package outside the PRD layout.
 
+## `internal/read` split out of `internal/vault` *(deviation from PRD section 7 layout)*
+- Instead of: one `vault` package holding both the shared core and every query (scan, filter, search, tag counts, `get_context`).
+- Layout: `server -> read -> vault` and `server -> write -> vault`. `vault` keeps what both sides need: `Open`, path confinement (`Resolve`, `Root`, `ReadFile`), `Hash`, frontmatter parsing and tag normalisation and vocabulary. `read` holds `Reader` (`List`, `Search`, `TagStats`, `Context`, `ReadDoc`, `Now`), `Scan`, `Filter`, and the date helpers. `write` is unchanged.
+- Why: `write` never used the query code, and nothing in the query code uses `write`; the package boundary now says so, and `server` imports `read` and `write` only. `vault` loses its clock and the query code, and stays the small part both sides must trust. The planned scan cache is keyed by mtime, so it can live in `read` without `write` having to invalidate it.
+- Names: `read.Reader` and `read.New` mirror `write.Writer` and `write.New`. The single-file read is `ReadDoc`, not `Read`, because `Read` on a type named `Reader` suggests `io.Reader`. `vault.Read` became `vault.ReadFile` (no hash; `ReadDoc` adds it). `vault.Apply(docs, f)` became `Filter.Apply(docs)`. `scalar` is exported as `vault.Scalar` because both packages need it.
+- Cost: one more package outside the PRD layout, and `vault` exports `ReadFile` and `Scalar` for `read`.
+
 ## `get_context` output format (M1)
 - Instead of: JSON, or Markdown headings for the sections. PRD 5.1 lists the content but not the format.
-- Format: plain text in sections introduced by `==== name ====` lines, in PRD order: `CLAUDE.md`, `Current week: <week>`, `Open items`, `Recent`, `Tags`, and a final `Problems` section only when there are any. The hand-written `internal/vault/testdata/context.golden` is the specification.
+- Format: plain text in sections introduced by `==== name ====` lines, in PRD order: `CLAUDE.md`, `Current week: <week>`, `Open items`, `Recent`, `Tags`, and a final `Problems` section only when there are any. The hand-written `internal/read/testdata/context.golden` is the specification.
 - Why:
   - `==== ... ====` cannot be confused with the `##` headings inside the embedded week document, which Markdown headings would be.
   - Text costs fewer tokens than JSON and reads well in a chat.
@@ -236,8 +243,8 @@ Details the entry above leaves open. The tests are `internal/write/git_test.go`.
 - Cost: a client that wants one sort key must read either field.
 
 ## Server clock
-- `vault.Vault.Now()` is the one clock. Production passes `time.Now`, tests pass a fixed day. `get_context` uses it only when the caller gives no `date`.
-- `server.New(v, w, cfg, version)` takes the `*write.Writer` (M2). The writer has its own clock, injected the same way, and uses it for `created`, `updated` and the `{date}` default.
+- `read.Reader.Now()` is the read side's clock. Production passes `time.Now`, tests pass a fixed day. `get_context` uses it only when the caller gives no `date`.
+- `server.New(r, w, cfg, version)` takes the `*read.Reader` and the `*write.Writer`. The writer has its own clock, injected the same way, and uses it for `created`, `updated` and the `{date}` default.
 
 ## What changed after using it for N weeks
 - ___
