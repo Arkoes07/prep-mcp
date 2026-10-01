@@ -5,12 +5,8 @@ package write
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
-	"io/fs"
-	"os"
 	"path"
 	"slices"
 	"strings"
@@ -221,12 +217,8 @@ func (w *Writer) Replace(ctx context.Context, p, content, expectedHash string) (
 	}
 	warnings = append(warnings, w.tagWarnings(newTags(tagsOf(old), tagsOf(data)))...)
 
-	stale, cur, err := w.replaceFile(rel, data, expected)
-	if err != nil {
+	if err := w.replaceFile(rel, data, expected); err != nil {
 		return nil, err
-	}
-	if stale {
-		return nil, &ConflictError{Path: rel, Current: cur}
 	}
 	res := &Result{Path: rel, Hash: vault.Hash(data), Warnings: warnings}
 	w.commit(ctx, "replace_doc", res)
@@ -252,29 +244,17 @@ func (w *Writer) modify(ctx context.Context, tool, rel string, transform func(ol
 		if bytes.Equal(next, old) {
 			return &Result{Path: rel, Hash: vault.Hash(old), Warnings: warnings}, nil
 		}
-		stale, _, err := w.replaceFile(rel, next, vault.Hash(old))
-		if err != nil {
-			return nil, err
-		}
-		if stale {
+		var conflict *ConflictError
+		if err := w.replaceFile(rel, next, vault.Hash(old)); errors.As(err, &conflict) {
 			continue
+		} else if err != nil {
+			return nil, err
 		}
 		res := &Result{Path: rel, Hash: vault.Hash(next), Warnings: warnings}
 		w.commit(ctx, tool, res)
 		return res, nil
 	}
 	return nil, fmt.Errorf("%s changed again while it was being edited, twice in a row. Nothing was written: re-read it with read_doc and retry", rel)
-}
-
-func (w *Writer) readExisting(rel string) ([]byte, error) {
-	b, err := w.v.Root().ReadFile(rel)
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil, fmt.Errorf("not found: %s (use create_doc to make a new document)", rel)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", rel, err)
-	}
-	return b, nil
 }
 
 func (w *Writer) commit(ctx context.Context, tool string, res *Result) {
@@ -334,119 +314,4 @@ func missingFields(required []string, m *yaml.Node) []string {
 		}
 	}
 	return out
-}
-
-// ---- atomic file writes ----
-
-// beforeRename is a test seam: it runs after the temp file is written and
-// before it is renamed into place. Production leaves it nil.
-var beforeRename func(tmp string) error
-
-// stage writes data to a new temp file next to rel and returns its name. The
-// temp file gets the final mode, so nothing is ever group- or world-writable by accident.
-func (w *Writer) stage(rel string, data []byte, mode fs.FileMode) (string, error) {
-	root := w.v.Root()
-	dir := path.Dir(rel)
-	if dir != "." {
-		if err := root.MkdirAll(dir, 0o755); err != nil {
-			return "", fmt.Errorf("cannot create the folder for %s: %w; check permissions", rel, err)
-		}
-	}
-	var suffix [6]byte
-	if _, err := rand.Read(suffix[:]); err != nil {
-		return "", fmt.Errorf("cannot write %s: %w", rel, err)
-	}
-	tmp := path.Join(dir, ".prep-tmp-"+hex.EncodeToString(suffix[:]))
-	f, err := root.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
-	if err != nil {
-		return "", fmt.Errorf("cannot write %s: %w; check the folder's permissions", rel, err)
-	}
-	_, werr := f.Write(data)
-	if werr == nil {
-		werr = f.Sync()
-	}
-	if cerr := f.Close(); werr == nil {
-		werr = cerr
-	}
-	if werr == nil {
-		werr = root.Chmod(tmp, mode)
-	}
-	if werr != nil {
-		root.Remove(tmp)
-		return "", fmt.Errorf("cannot write %s: %w", rel, werr)
-	}
-	return tmp, nil
-}
-
-// finish runs the test seam, then renames tmp over rel. On any failure the
-// temp file is removed.
-func (w *Writer) finish(rel, tmp string, check func() (stale bool, cur string, err error)) (bool, string, error) {
-	root := w.v.Root()
-	if beforeRename != nil {
-		if err := beforeRename(tmp); err != nil {
-			root.Remove(tmp)
-			return false, "", fmt.Errorf("cannot write %s: %w", rel, err)
-		}
-	}
-	if stale, cur, err := check(); stale || err != nil {
-		root.Remove(tmp)
-		return stale, cur, err
-	}
-	if err := root.Rename(tmp, rel); err != nil {
-		root.Remove(tmp)
-		return false, "", fmt.Errorf("cannot write %s: %w", rel, err)
-	}
-	return false, "", nil
-}
-
-// replaceFile atomically replaces an existing file, provided it still has the
-// content with hash oldHash. stale reports that it did not; cur is its new hash.
-func (w *Writer) replaceFile(rel string, data []byte, oldHash string) (stale bool, cur string, err error) {
-	mode := fs.FileMode(0o644)
-	if fi, err := w.v.Root().Stat(rel); err == nil {
-		mode = fi.Mode().Perm()
-	}
-	tmp, err := w.stage(rel, data, mode)
-	if err != nil {
-		return false, "", err
-	}
-	return w.finish(rel, tmp, func() (bool, string, error) {
-		now, err := w.v.Root().ReadFile(rel)
-		if err != nil {
-			return false, "", fmt.Errorf("cannot write %s: it disappeared while it was being edited (%w); re-read it and retry", rel, err)
-		}
-		h := vault.Hash(now)
-		return h != oldHash, h, nil
-	})
-}
-
-// createFile writes a new file and refuses to replace an existing one.
-func (w *Writer) createFile(rel string, data []byte) error {
-	exists := func() (bool, error) {
-		_, err := w.v.Root().Lstat(rel)
-		if errors.Is(err, fs.ErrNotExist) {
-			return false, nil
-		}
-		return err == nil, err
-	}
-	if ok, err := exists(); err != nil {
-		return fmt.Errorf("cannot check %s: %w", rel, err)
-	} else if ok {
-		return &ExistsError{Path: rel}
-	}
-	tmp, err := w.stage(rel, data, 0o644)
-	if err != nil {
-		return err
-	}
-	var existsErr error
-	_, _, err = w.finish(rel, tmp, func() (bool, string, error) {
-		if ok, _ := exists(); ok {
-			existsErr = &ExistsError{Path: rel}
-		}
-		return false, "", existsErr
-	})
-	if existsErr != nil {
-		return existsErr
-	}
-	return err
 }
