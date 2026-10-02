@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/Arkoes07/prep-mcp/internal/testvault"
+	"github.com/Arkoes07/prep-mcp/internal/vault"
 	"github.com/Arkoes07/prep-mcp/internal/write"
 )
 
@@ -144,5 +145,177 @@ func TestWriteErrorsAreToolResultsWithHints(t *testing.T) {
 	after, _ := os.ReadFile(filepath.Join(root, "weeks/2026-w03.md"))
 	if string(after) != string(before) {
 		t.Error("a failed write changed the file")
+	}
+}
+
+// batchOp is one entry of batch's ops argument.
+func batchOp(tool string, args any) map[string]any {
+	return map[string]any{"tool": tool, "args": args}
+}
+
+// batch takes the single tools' arguments, keeps frontmatter key order, and
+// returns a result per op plus the commit fields, with lists never null.
+func TestBatchTool(t *testing.T) {
+	root, cs := connectRoot(t)
+	ops := []any{
+		batchOp("create_doc", map[string]any{
+			"type":        "learning",
+			"frontmatter": json.RawMessage(`{"track":"ddia","title":"DDIA ch5","tags":["issue/buries-headlin"]}`),
+			"body":        "notes",
+		}),
+		batchOp("append_section", map[string]any{"path": "weeks/2026-w03.md", "heading": "Log", "content": "- Tue: x"}),
+		batchOp("update_frontmatter", map[string]any{
+			"path": "improvements/buries-headline.md",
+			"set":  map[string]any{"status": "improving"},
+		}),
+	}
+
+	out, isErr := call(t, cs, "batch", map[string]any{"ops": ops})
+
+	if isErr {
+		t.Fatalf("IsError: %s", out)
+	}
+	var got struct {
+		Results []struct {
+			Path     string   `json:"path"`
+			Hash     string   `json:"hash"`
+			Warnings []string `json:"warnings"`
+		} `json:"results"`
+		Warnings []string `json:"warnings"`
+	}
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("result is not JSON: %v\n%s", err, out)
+	}
+	wantPaths := []string{"learning/ddia-ch5.md", "weeks/2026-w03.md", "improvements/buries-headline.md"}
+	if len(got.Results) != len(wantPaths) {
+		t.Fatalf("results = %d, want %d:\n%s", len(got.Results), len(wantPaths), out)
+	}
+	for i, r := range got.Results {
+		b, err := os.ReadFile(filepath.Join(root, r.Path))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if r.Path != wantPaths[i] || r.Hash != vault.Hash(b) {
+			t.Errorf("result %d = %s %s, want %s with the hash of the file", i, r.Path, r.Hash, wantPaths[i])
+		}
+		if r.Warnings == nil {
+			t.Errorf("result %d: warnings must be a list, not null:\n%s", i, out)
+		}
+	}
+	if got.Warnings == nil || strings.Contains(out, `"commit"`) {
+		t.Errorf("want warnings [] and no commit without git:\n%s", out)
+	}
+	if w := got.Results[0].Warnings; len(w) != 1 || !strings.Contains(w[0], "issue/buries-headline") {
+		t.Errorf("create_doc op warnings = %q, want one naming issue/buries-headline", w)
+	}
+	created, err := os.ReadFile(filepath.Join(root, "learning/ddia-ch5.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantCreated := "---\ntype: learning\ntrack: ddia\ntitle: DDIA ch5\ntags: [issue/buries-headlin]\n" +
+		"created: 2026-01-14\n---\nnotes\n"
+	if string(created) != wantCreated {
+		t.Errorf("created file:\n%q\nwant (frontmatter keys in the order sent):\n%q", created, wantCreated)
+	}
+}
+
+// Ops that do not decode and ops that fail their checks come back together,
+// as one tool error, and nothing is written.
+func TestBatchToolErrors(t *testing.T) {
+	root, cs := connectRoot(t)
+	files := []string{"weeks/2026-w03.md", "improvements/buries-headline.md"}
+	before := map[string]string{}
+	for _, f := range files {
+		b, err := os.ReadFile(filepath.Join(root, f))
+		if err != nil {
+			t.Fatal(err)
+		}
+		before[f] = string(b)
+	}
+	appendLog := map[string]any{"path": "weeks/2026-w03.md", "heading": "Log", "content": "- Tue: x"}
+	tooMany := make([]any, 201)
+	for i := range tooMany {
+		tooMany[i] = batchOp("append_section", appendLog)
+	}
+	tests := []struct {
+		name string
+		args map[string]any
+		want []string
+	}{
+		{
+			name: "unknown_tool",
+			args: map[string]any{"ops": []any{
+				batchOp("append_section", appendLog),
+				batchOp("delete_doc", map[string]any{"path": "weeks/2026-w03.md"}),
+			}},
+			want: []string{
+				"1 of 2 ops failed",
+				`op 2 (delete_doc): unknown tool "delete_doc"`,
+				"create_doc, append_section, update_frontmatter or replace_doc",
+			},
+		},
+		{
+			name: "unknown_argument",
+			args: map[string]any{"ops": []any{
+				batchOp("append_section", map[string]any{
+					"path":    "weeks/2026-w03.md",
+					"heading": "Log",
+					"contnet": "x",
+				}),
+			}},
+			want: []string{"op 1 (append_section)", `unknown field "contnet"`, "append_section's own arguments"},
+		},
+		{
+			name: "decode_and_check_failures_together",
+			args: map[string]any{"ops": []any{
+				batchOp("update_frontmatter", map[string]any{"path": "improvements/buries-headline.md", "set": "open"}),
+				batchOp("append_section", map[string]any{"path": "nope.md", "heading": "Log", "content": "x"}),
+				batchOp("append_section", appendLog),
+			}},
+			want: []string{
+				"2 of 3 ops failed",
+				"op 1 (update_frontmatter): args.set has the wrong type (a string)",
+				"op 2 (append_section nope.md): not found",
+			},
+		},
+		{
+			name: "templates_read_only",
+			args: map[string]any{"ops": []any{
+				batchOp("append_section", map[string]any{
+					"path":    "templates/week.md",
+					"heading": "Log",
+					"content": "x",
+				}),
+			}},
+			want: []string{"op 1 (append_section templates/week.md): templates/ is read-only"},
+		},
+		{
+			name: "empty",
+			args: map[string]any{"ops": []any{}},
+			want: []string{"pass at least one op"},
+		},
+		{
+			name: "too_many",
+			args: map[string]any{"ops": tooMany},
+			want: []string{"201 ops", "at most 200 per call"},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			out, isErr := call(t, cs, "batch", tc.args)
+			if !isErr {
+				t.Fatalf("want IsError, got: %s", out)
+			}
+			for _, w := range tc.want {
+				if !strings.Contains(out, w) {
+					t.Errorf("error %q lacks %q", out, w)
+				}
+			}
+		})
+	}
+	for _, f := range files {
+		if b, _ := os.ReadFile(filepath.Join(root, f)); string(b) != before[f] {
+			t.Errorf("a failed batch changed %s", f)
+		}
 	}
 }

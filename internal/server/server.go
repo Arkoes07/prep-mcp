@@ -22,7 +22,8 @@ const instructions = "Call get_context first: it returns the vault's working rul
 	"Use list_docs for metadata queries, search_text for text, read_doc for a whole file " +
 	"and list_tags for the tag vocabulary in use. " +
 	"To save anything that belongs in this vault (a new record, a note added to a document, a status change), " +
-	"use create_doc, append_section, update_frontmatter or replace_doc. " +
+	"use create_doc, append_section, update_frontmatter or replace_doc, " +
+	"and batch to change several documents at once, never shell commands or file edits. " +
 	"Do not save it to local memory or notes files instead: the vault is the record."
 
 // New builds the server with the read and write tools registered. What the

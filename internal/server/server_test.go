@@ -55,6 +55,22 @@ func serve(t *testing.T, s *mcp.Server) *mcp.ClientSession {
 	return cs
 }
 
+// toolDescription returns the description of the named tool.
+func toolDescription(t *testing.T, cs *mcp.ClientSession, name string) string {
+	t.Helper()
+	res, err := cs.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tool := range res.Tools {
+		if tool.Name == name {
+			return tool.Description
+		}
+	}
+	t.Fatalf("no %s tool", name)
+	return ""
+}
+
 func call(t *testing.T, cs *mcp.ClientSession, name string, args any) (string, bool) {
 	t.Helper()
 	res, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: name, Arguments: args})
@@ -81,7 +97,18 @@ func TestToolSet(t *testing.T) {
 		got = append(got, tool.Name)
 	}
 	slices.Sort(got)
-	want := []string{"append_section", "create_doc", "get_context", "list_docs", "list_tags", "read_doc", "replace_doc", "search_text", "update_frontmatter"}
+	want := []string{
+		"append_section",
+		"batch",
+		"create_doc",
+		"get_context",
+		"list_docs",
+		"list_tags",
+		"read_doc",
+		"replace_doc",
+		"search_text",
+		"update_frontmatter",
+	}
 	if !slices.Equal(got, want) {
 		t.Errorf("tools = %v, want %v", got, want)
 	}
@@ -154,6 +181,13 @@ func TestTextSteersWritesToTheVault(t *testing.T) {
 	init := cs.InitializeResult()
 	if init == nil || !strings.Contains(init.Instructions, "memory") {
 		t.Errorf("server instructions should say to use the write tools instead of local memory or notes:\n%v", init)
+	}
+	// A bulk change made with shell commands or file edits skips the checks and the commit author.
+	if init == nil || !strings.Contains(init.Instructions, "batch") {
+		t.Errorf("server instructions should name batch for changes to several documents:\n%v", init)
+	}
+	if d := toolDescription(t, cs, "batch"); !strings.Contains(d, "not shell commands or file edits") {
+		t.Errorf("batch description should say to use it instead of editing the files directly:\n%s", d)
 	}
 	for _, tool := range []string{"create_doc", "append_section"} {
 		res, err := cs.ListTools(context.Background(), nil)
