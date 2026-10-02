@@ -2,7 +2,6 @@ package read
 
 import (
 	"fmt"
-	"slices"
 	"strings"
 	"time"
 )
@@ -13,43 +12,17 @@ func ISOWeek(t time.Time) string {
 	return fmt.Sprintf("%d-W%02d", y, w)
 }
 
-// timestampLayouts are the forms a date field may take when it carries a time of day.
-var timestampLayouts = []string{
-	time.RFC3339,
-	"2006-01-02T15:04:05",
-	time.DateTime,
-	"2006-01-02T15:04",
-	"2006-01-02 15:04",
-}
-
 // ParseDate parses YYYY-MM-DD, or a timestamp starting with one. It returns
-// the calendar date as written, at local midnight; any time of day is dropped.
+// the calendar date as written, at local midnight; anything after the date
+// (a time of day, a zone) is dropped unread.
 func ParseDate(s string) (time.Time, error) {
-	orig := s
-	s = strings.TrimSpace(s)
-	if len(s) >= 2 && (s[0] == '"' || s[0] == '\'') && s[len(s)-1] == s[0] {
-		s = s[1 : len(s)-1]
+	d := strings.TrimSpace(s)
+	if len(d) > 10 && (d[10] == 'T' || d[10] == ' ') {
+		d = d[:10]
 	}
-	bad := func() (time.Time, error) {
-		return time.Time{}, fmt.Errorf("%q is not a date; use YYYY-MM-DD", orig)
-	}
-	if len(s) > 10 {
-		if s[10] != 'T' && s[10] != ' ' {
-			return bad()
-		}
-		// The whole value must be a valid timestamp, but only its date counts.
-		valid := slices.ContainsFunc(timestampLayouts, func(layout string) bool {
-			_, err := time.Parse(layout, s)
-			return err == nil
-		})
-		if !valid {
-			return bad()
-		}
-		s = s[:10]
-	}
-	t, err := time.ParseInLocation(time.DateOnly, s, time.Local)
+	t, err := time.ParseInLocation(time.DateOnly, d, time.Local)
 	if err != nil {
-		return bad()
+		return time.Time{}, fmt.Errorf("%q is not a date; use YYYY-MM-DD", s)
 	}
 	return t, nil
 }

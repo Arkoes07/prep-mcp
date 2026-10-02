@@ -34,7 +34,7 @@ func TestISOWeek(t *testing.T) {
 func TestParseDate(t *testing.T) {
 	// A YAML-quoted date reaches ParseDate already unquoted, so the quoted
 	// form is covered by TestScan (date: "2026-01-12").
-	ok := []string{"2026-01-12", "2026-01-12T09:30:00Z"}
+	ok := []string{"2026-01-12", "2026-01-12T09:30:00Z", " 2026-01-12 09:30 "}
 	for _, in := range ok {
 		got, err := read.ParseDate(in)
 		if err != nil {
