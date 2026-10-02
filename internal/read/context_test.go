@@ -136,6 +136,39 @@ func TestContextSummaryFields(t *testing.T) {
 	}
 }
 
+// A type's show list replaces summary_fields on its lines, in its own order;
+// an empty one shows only the date.
+func TestContextShowFields(t *testing.T) {
+	const line = "- improvements/missing-tradeoff.md | Trade-off not stated | date=2026-01-10 date_source=mtime "
+	const criteria = "exit_criteria=Cost stated in 5 project answers in a row"
+	tests := []struct {
+		name, show, want string
+	}{
+		{name: "replaces_summary_fields", show: "[exit_criteria]", want: line + criteria + " | -"},
+		{name: "own_order", show: "[status, exit_criteria]", want: line + "status=improving " + criteria + " | -"},
+		{name: "empty_hides", show: "[]", want: line + "| -"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			root, _ := copyOpen(t)
+			replaceInFile(
+				t,
+				root,
+				"prep.config.yaml",
+				"required: [status, exit_criteria]",
+				"required: [status, exit_criteria]\n    show: "+tc.show,
+			)
+			got, err := openAt(t, root).Context(day)
+			if err != nil {
+				t.Fatalf("Context: %v", err)
+			}
+			if !strings.Contains(got, tc.want+"\n") {
+				t.Errorf("output lacks the line\n%s\n--- got ---\n%s", tc.want, got)
+			}
+		})
+	}
+}
+
 // TestCurrentWeek checks how the current week doc is found. The vault API has
 // no separate accessor, so it looks at the "path:" line of the week section
 // of Context, and at the Problems section.

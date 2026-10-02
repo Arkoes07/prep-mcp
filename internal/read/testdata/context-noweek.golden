@@ -12,7 +12,7 @@ improvement (status: open, improving):
 - improvements/missing-tradeoff.md | Trade-off not stated | date=2026-01-10 date_source=mtime status=improving | -
 
 application (status: active):
-- applications/acme-backend.md | acme-backend | date=2026-01-05 stage=interview status=active | company/acme
+- applications/acme-backend.md | acme-backend | date=2026-01-05 stage=interview status=active next_action=Send thank-you note next_action_date=2026-01-16 | company/acme
 
 ==== Recent ====
 session (newest 5):

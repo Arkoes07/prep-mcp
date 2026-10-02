@@ -200,7 +200,7 @@ func (r *Reader) queryBlock(docs []*Doc, q config.Query, isRecent bool) (string,
 		b.WriteString("(none)\n")
 	}
 	for _, d := range got {
-		b.WriteString(metaLine(d, r.cfg.SummaryFields))
+		b.WriteString(metaLine(d, r.cfg.ShowFields(d.Type)))
 		b.WriteByte('\n')
 	}
 	return b.String(), nil

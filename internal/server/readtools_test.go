@@ -3,11 +3,15 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"maps"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/Arkoes07/prep-mcp/internal/testvault"
 )
 
 func TestEachReadToolAnswers(t *testing.T) {
@@ -185,10 +189,10 @@ func TestUnknownTypeNamesTheConfiguredOnes(t *testing.T) {
 	}
 }
 
-// list_docs's description names the configured summary fields, and leaves the
-// clause out when there are none.
-func TestListDocsDescriptionNamesSummaryFields(t *testing.T) {
-	const clause = "and under fields the ones of"
+// list_docs's description names the fields shown under fields: the summary
+// fields by default, then each type with its own show list. It also explains
+// the fields argument.
+func TestListDocsDescriptionNamesShownFields(t *testing.T) {
 	description := func(t *testing.T, cs *mcp.ClientSession) string {
 		t.Helper()
 		res, err := cs.ListTools(context.Background(), nil)
@@ -204,10 +208,117 @@ func TestListDocsDescriptionNamesSummaryFields(t *testing.T) {
 		return ""
 	}
 
-	if got := description(t, connect(t)); !strings.Contains(got, clause+" kind, stage, status that are set") {
-		t.Errorf("example vault: description lacks the summary fields:\n%s", got)
+	root := t.TempDir()
+	testvault.Write(
+		t,
+		root,
+		"prep.config.yaml",
+		"summary_fields: [status]\ntypes:\n"+
+			"  note: {folder: notes, filename: \"{slug}.md\", show: [priority, owner]}\n"+
+			"  log: {folder: logs, filename: \"{slug}.md\"}\n"+
+			"  memo: {folder: memos, filename: \"{slug}.md\", show: []}\n",
+	)
+	tests := []struct {
+		name          string
+		root          string
+		want, notWant []string
+	}{
+		{
+			name:    "show_lists",
+			root:    root,
+			want:    []string{"by default status; for memo none; for note priority, owner)", "fields: field names"},
+			notWant: []string{"for log"},
+		},
+		{
+			name: "nothing_configured",
+			root: neutralVault(t),
+			want: []string{"by default none)", "fields: field names"},
+		},
 	}
-	if got := description(t, connectAt(t, neutralVault(t))); strings.Contains(got, clause) {
-		t.Errorf("vault without summary_fields: description still names fields:\n%s", got)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := description(t, connectAt(t, tc.root))
+			for _, s := range tc.want {
+				if !strings.Contains(got, s) {
+					t.Errorf("description lacks %q:\n%s", s, got)
+				}
+			}
+			for _, s := range tc.notWant {
+				if strings.Contains(got, s) {
+					t.Errorf("description has %q:\n%s", s, got)
+				}
+			}
+		})
+	}
+}
+
+// fields comes from each document's type (its show list, else
+// summary_fields); the fields argument replaces it for every document.
+func TestListDocsFields(t *testing.T) {
+	cs := connect(t)
+	tests := []struct {
+		name     string
+		args     map[string]any
+		wantKeys []string          // the keys of the fields object of the one document returned
+		wantVals map[string]string // some of its values
+	}{
+		{
+			name:     "type_show_list",
+			args:     map[string]any{"tags": []string{"company/"}},
+			wantKeys: []string{"next_action", "next_action_date", "stage", "status"},
+			wantVals: map[string]string{"next_action": "Send thank-you note", "next_action_date": "2026-01-16"},
+		},
+		{
+			name:     "summary_fields",
+			args:     map[string]any{"where": map[string]any{"status": "open"}},
+			wantKeys: []string{"status"},
+		},
+		{
+			name:     "argument_overrides",
+			args:     map[string]any{"tags": []string{"company/"}, "fields": []string{"next_action"}},
+			wantKeys: []string{"next_action"},
+		},
+		{
+			name: "argument_overrides_every_type",
+			args: map[string]any{
+				"where":  map[string]any{"status": "improving"},
+				"fields": []string{"exit_criteria"},
+			},
+			wantKeys: []string{"exit_criteria"},
+			wantVals: map[string]string{"exit_criteria": "Cost stated in 5 project answers in a row"},
+		},
+		{
+			name:     "empty_argument_shows_none",
+			args:     map[string]any{"tags": []string{"company/"}, "fields": []string{}},
+			wantKeys: []string{},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			out, isErr := call(t, cs, "list_docs", tc.args)
+			if isErr {
+				t.Fatal(out)
+			}
+			var got struct {
+				Docs []struct {
+					Fields map[string]string `json:"fields"`
+				} `json:"docs"`
+			}
+			if err := json.Unmarshal([]byte(out), &got); err != nil {
+				t.Fatalf("result is not JSON: %v\n%s", err, out)
+			}
+			if len(got.Docs) != 1 {
+				t.Fatalf("docs = %d, want 1:\n%s", len(got.Docs), out)
+			}
+			fields := got.Docs[0].Fields
+			if keys := slices.Sorted(maps.Keys(fields)); !slices.Equal(keys, tc.wantKeys) {
+				t.Errorf("fields keys = %q, want %q", keys, tc.wantKeys)
+			}
+			for k, want := range tc.wantVals {
+				if fields[k] != want {
+					t.Errorf("fields[%s] = %q, want %q", k, fields[k], want)
+				}
+			}
+		})
 	}
 }

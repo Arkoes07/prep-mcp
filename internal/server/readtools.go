@@ -65,14 +65,18 @@ func registerReadTools(s *mcp.Server, h *handlers) {
 	}, guard("list_tags", h.listTags))
 }
 
-// listDocsDescription names the configured summary fields, so the model knows
-// what fields holds without reading the config.
+// listDocsDescription names the fields each type shows under fields, so the
+// model knows what fields holds without reading the config.
 func listDocsDescription(cfg *config.Config) string {
-	shown := "path, type, title, tags, date, date_source (field or mtime) and updated"
-	if len(cfg.SummaryFields) > 0 {
-		shown += ", and under fields the ones of " + strings.Join(cfg.SummaryFields, ", ") + " that are set"
+	shown := []string{"by default " + listOrNone(cfg.SummaryFields)}
+	for _, name := range cfg.TypeNames() {
+		if show := cfg.Types[name].Show; show != nil {
+			shown = append(shown, "for "+name+" "+listOrNone(show))
+		}
 	}
-	return "List document metadata (" + shown + "), never bodies. " +
+	return "List document metadata (path, type, title, tags, date, date_source (field or mtime), updated, " +
+		"and under fields the configured fields each document sets: " + strings.Join(shown, "; ") + "), " +
+		"never bodies. fields: field names to show instead, for this call; [] shows none. " +
 		"All filters combine with AND. tags: every tag must match; any_tags: at least one; " +
 		"a trailing / matches a prefix (issue/ matches every issue tag). " +
 		"where: frontmatter equality such as {\"status\": [\"open\", \"improving\"]}; a list means any of. " +
@@ -80,6 +84,13 @@ func listDocsDescription(cfg *config.Config) string {
 		"else the file modification time, which date_source then says. " +
 		"since/until: inclusive YYYY-MM-DD. " +
 		"sort: date_desc (default), date_asc or title. limit: default 50, at most 500."
+}
+
+func listOrNone(fields []string) string {
+	if len(fields) == 0 {
+		return "none"
+	}
+	return strings.Join(fields, ", ")
 }
 
 // parseDay parses an optional YYYY-MM-DD argument.
@@ -129,6 +140,7 @@ type listDocsIn struct {
 	Until   string         `json:"until,omitempty" jsonschema:"Inclusive upper date bound, YYYY-MM-DD."`
 	Sort    string         `json:"sort,omitempty" jsonschema:"date_desc (default), date_asc or title."`
 	Limit   int            `json:"limit,omitempty" jsonschema:"Maximum results. Default 50, at most 500."`
+	Fields  []string       `json:"fields,omitempty" jsonschema:"Field names to show under fields for every document, instead of each type's configured ones. [] shows none."`
 }
 
 type docMeta struct {
@@ -139,7 +151,7 @@ type docMeta struct {
 	Date       string            `json:"date"`
 	DateSource string            `json:"date_source"` // field (the type's date field) or mtime
 	Updated    string            `json:"updated,omitempty"`
-	Fields     map[string]string `json:"fields,omitempty"` // the configured summary fields the document sets
+	Fields     map[string]string `json:"fields,omitempty"` // the shown fields the document sets
 }
 
 func (h *handlers) listDocs(
@@ -163,7 +175,11 @@ func (h *handlers) listDocs(
 		Problems []read.Problem `json:"problems,omitempty"`
 	}{Docs: make([]docMeta, 0, len(docs)), Count: len(docs), Problems: problems}
 	for _, d := range docs {
-		out.Docs = append(out.Docs, metaOf(d, h.cfg.SummaryFields))
+		fields := in.Fields
+		if fields == nil {
+			fields = h.cfg.ShowFields(d.Type)
+		}
+		out.Docs = append(out.Docs, metaOf(d, fields))
 	}
 	if in.Type != "" {
 		if _, ok := h.cfg.Types[in.Type]; !ok && len(docs) == 0 {

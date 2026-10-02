@@ -1,7 +1,8 @@
 tags_file: tags.md
 commit_on_write: true
 author: "Claude <claude@local>"
-# Frontmatter fields shown next to each document in list_docs and get_context.
+# Frontmatter fields shown next to each document in list_docs and get_context,
+# unless its type has its own show list.
 summary_fields: [kind, stage, status]
 
 types:
@@ -26,6 +27,7 @@ types:
     filename: "{slug}.md"
     required: [company, role, stage, status]
     date_field: applied    # dates, since/until and sorting use this field instead of date
+    show: [stage, status, next_action, next_action_date]
   learning:
     folder: learning
     filename: "{slug}.md"

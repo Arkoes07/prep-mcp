@@ -234,6 +234,77 @@ summary_fields: [priority, owner]
 			wantErr: []string{"owner is listed twice", "remove one"},
 		},
 		{
+			// A type's show list replaces summary_fields for that type only.
+			name: "show",
+			yaml: `
+summary_fields: [status]
+types:
+  note: {folder: notes, filename: "{slug}.md", show: [priority, owner]}
+  log: {folder: logs, filename: "{slug}.md"}
+`,
+			check: func(t *testing.T, c *config.Config) {
+				tests := []struct {
+					typ  string
+					want []string
+				}{
+					{typ: "note", want: []string{"priority", "owner"}},
+					{typ: "log", want: []string{"status"}},
+					{typ: "nope", want: []string{"status"}},
+				}
+				for _, tc := range tests {
+					if got := c.ShowFields(tc.typ); !slices.Equal(got, tc.want) {
+						t.Errorf("ShowFields(%s) = %q, want %q", tc.typ, got, tc.want)
+					}
+				}
+			},
+		},
+		{
+			name: "show_empty_hides",
+			yaml: `
+summary_fields: [status]
+types:
+  note: {folder: notes, filename: "{slug}.md", show: []}
+`,
+			check: func(t *testing.T, c *config.Config) {
+				if got := c.ShowFields("note"); len(got) != 0 {
+					t.Errorf("ShowFields(note) = %q, want none: an empty show list hides summary_fields", got)
+				}
+			},
+		},
+		{
+			name: "show_field_empty",
+			yaml: `
+types:
+  note: {folder: notes, filename: "{slug}.md", show: [priority, ""]}
+`,
+			wantErr: []string{"type note: show[1] is empty", "remove the entry"},
+		},
+		{
+			name: "show_always_shown",
+			yaml: `
+types:
+  note: {folder: notes, filename: "{slug}.md", show: [title]}
+`,
+			wantErr: []string{"type note: show: title is always shown", "remove it"},
+		},
+		{
+			// The date field is shown as date already.
+			name: "show_date_field",
+			yaml: `
+types:
+  note: {folder: notes, filename: "{slug}.md", date_field: finished, show: [finished]}
+`,
+			wantErr: []string{"type note: show: finished is always shown", "remove it"},
+		},
+		{
+			name: "show_twice",
+			yaml: `
+types:
+  note: {folder: notes, filename: "{slug}.md", show: [owner, owner]}
+`,
+			wantErr: []string{"type note: show: owner is listed twice", "remove one"},
+		},
+		{
 			name: "field_placeholder_not_required",
 			yaml: `
 types:

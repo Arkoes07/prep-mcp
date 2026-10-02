@@ -32,7 +32,7 @@ type Config struct {
 	CommitOnWrite bool   `yaml:"commit_on_write"`
 	Author        string `yaml:"author"`
 	// SummaryFields are the frontmatter fields shown, in this order, next to
-	// each document in list_docs and get_context.
+	// each document in list_docs and get_context, unless its type has a show list.
 	SummaryFields []string            `yaml:"summary_fields"`
 	Types         map[string]TypeSpec `yaml:"types"`
 	Context       ContextSpec         `yaml:"context"`
@@ -48,6 +48,9 @@ type TypeSpec struct {
 	// since/until, date sorting and {date} in the filename use it. Never
 	// empty after Parse.
 	DateField string `yaml:"date_field"`
+	// Show replaces SummaryFields for documents of this type. nil means not
+	// set; an empty list shows no fields.
+	Show []string `yaml:"show"`
 }
 
 // ContextSpec says what get_context returns besides the working rules.
@@ -164,7 +167,7 @@ func (c *Config) Validate() error {
 			errs = append(errs, fmt.Errorf("tags_file %q: %w", c.TagsFile, err))
 		}
 	}
-	errs = append(errs, c.summaryErrors()...)
+	errs = append(errs, fieldListErrors("summary_fields", c.SummaryFields, alwaysShown)...)
 	errs = append(errs, c.typeErrors()...)
 	errs = append(errs, c.weekErrors()...)
 	errs = append(errs, c.queryErrors()...)
@@ -175,30 +178,33 @@ func (c *Config) Validate() error {
 // they cannot be summary fields as well.
 var alwaysShown = []string{"type", "title", "tags", "date", "updated"}
 
-// summaryErrors checks summary_fields for empty, always-shown and repeated names.
-func (c *Config) summaryErrors() []error {
+// fieldListErrors checks a list of fields to show, named label in the
+// messages, for empty names, names in shown and repeats.
+func fieldListErrors(label string, fields, shown []string) []error {
 	var errs []error
 	seen := map[string]bool{}
-	for i, f := range c.SummaryFields {
+	for i, f := range fields {
 		switch {
 		case strings.TrimSpace(f) == "":
-			errs = append(errs, fmt.Errorf(
-				"summary_fields[%d] is empty; name a frontmatter field or remove the entry", i))
-		case slices.Contains(alwaysShown, f):
-			errs = append(errs, fmt.Errorf("summary_fields: %s is always shown; remove it from the list", f))
+			errs = append(errs, fmt.Errorf("%s[%d] is empty; name a frontmatter field or remove the entry", label, i))
+		case slices.Contains(shown, f):
+			errs = append(errs, fmt.Errorf("%s: %s is always shown; remove it from the list", label, f))
 		case seen[f]:
-			errs = append(errs, fmt.Errorf("summary_fields: %s is listed twice; remove one", f))
+			errs = append(errs, fmt.Errorf("%s: %s is listed twice; remove one", label, f))
 		}
 		seen[f] = true
 	}
 	return errs
 }
 
-// typeErrors checks every type's folder and filename pattern.
+// typeErrors checks every type's folder, filename pattern and show list.
 func (c *Config) typeErrors() []error {
 	var errs []error
 	for _, name := range c.TypeNames() {
 		t := c.Types[name]
+		// The type's date field is shown as date already.
+		shown := append(slices.Clone(alwaysShown), t.DateField)
+		errs = append(errs, fieldListErrors("type "+name+": show", t.Show, shown)...)
 		if t.Folder == "" {
 			errs = append(errs, fmt.Errorf("type %s: folder is required (for example folder: notes)", name))
 		} else if err := checkFolder(t.Folder); err != nil {
@@ -349,6 +355,15 @@ func (c *Config) TypeNames() []string {
 // date_field, or DefaultDateField for a type that is not configured.
 func (c *Config) DateField(typ string) string {
 	return cmp.Or(c.Types[typ].DateField, DefaultDateField)
+}
+
+// ShowFields are the fields shown next to documents of type typ: the type's
+// show list when it sets one, else SummaryFields.
+func (c *Config) ShowFields(typ string) []string {
+	if show := c.Types[typ].Show; show != nil {
+		return show
+	}
+	return c.SummaryFields
 }
 
 // ParseAuthor splits "Name <email>" into its parts. ok is false when a does
