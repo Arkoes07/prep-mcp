@@ -1,5 +1,6 @@
 // Package testvault is a test-only helper. It gives each test a private,
-// deterministic copy of examples/vault so tests never touch real data.
+// deterministic copy of examples/vault so tests never touch real data, and
+// holds the forbidden word list that keeps Go code domain-neutral.
 package testvault
 
 import (

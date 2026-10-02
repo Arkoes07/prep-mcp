@@ -4,9 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
-	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -114,20 +112,7 @@ func neutralVault(t *testing.T) string {
 // Tool descriptions and schemas are shown to the model; they must stay
 // domain-neutral like the rest of the Go code.
 func TestDescriptionsAreDomainNeutral(t *testing.T) {
-	b, err := os.ReadFile("../../cmd/prep-mcp/testdata/forbidden-words.txt")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var words []string
-	for line := range strings.SplitSeq(string(b), "\n") {
-		if line = strings.TrimSpace(line); line != "" && !strings.HasPrefix(line, "#") {
-			words = append(words, regexp.QuoteMeta(line))
-		}
-	}
-	if len(words) == 0 {
-		t.Fatal("no forbidden words loaded")
-	}
-	re := regexp.MustCompile(`(?i)\b(` + strings.Join(words, "|") + `)\b`)
+	re := testvault.ForbiddenWords(t)
 
 	cs := connectAt(t, neutralVault(t))
 	res, err := cs.ListTools(context.Background(), nil)

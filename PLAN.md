@@ -383,7 +383,7 @@ Variants:
 | a doc of another type with `week: 2026-W03` | ignored |
 | day 2026-01-19 | none |
 
-**`TestNoDomainWords`** (in cmd/prep-mcp): walks all `*.go` files including tests. There must be no whole-word match of the words in `testdata/forbidden-words.txt`.
+**`TestNoDomainWords`** (in internal/testvault, next to `ForbiddenWords`): walks all `*.go` files including tests. There must be no whole-word match of the words in `internal/testvault/testdata/forbidden-words.txt` (loaded via `testvault.ForbiddenWords`).
 
 ### 4.3 internal/write
 

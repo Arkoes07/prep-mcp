@@ -184,12 +184,13 @@ Details the entry above leaves open. The tests are `internal/write/git_test.go`.
 
 ## No domain words in any Go file, tests included
 - Instead of: applying CLAUDE.md's rule to non-test code only.
-- Why: Acceptance 7 says "nothing in the Go code". Expectations that name example-specific types or paths live in `testdata/*.yaml` and golden files, which are data. `TestNoDomainWords` enforces the rule using a word list kept in testdata. Tool descriptions avoid the words too.
+- Why: Acceptance 7 says "nothing in the Go code". Expectations that name example-specific types or paths live in `testdata/*.yaml` and golden files, which are data. `TestNoDomainWords` enforces the rule using a word list kept in `internal/testvault/testdata`. Tool descriptions avoid the words too, which `TestDescriptionsAreDomainNeutral` checks with the same list through `testvault.ForbiddenWords`.
 - Cost: example-specific assertions are one step removed from the test code.
 
 ## `internal/testvault`, a test-only helper package *(deviation from PRD section 7 layout)*
 - Instead of: repeating copy-and-setup code in each package's tests.
 - Why: every test uses a temp copy of `examples/vault` with fixed mtimes (git doesn't preserve them) and a frozen clock, so golden output is deterministic. The git tests also cut out your git config and environment, but that is `isolateGit` in `internal/write/git_test.go`, not this package: only they run git.
+- It also owns the forbidden word list and its matcher (`ForbiddenWords`), because two packages check against it. Instead of: each test reading `cmd/prep-mcp/testdata` with its own parser, which let the two checks drift apart.
 - Cost: one extra package outside the PRD layout.
 
 ## `internal/read` split out of `internal/vault` *(deviation from PRD section 7 layout)*
