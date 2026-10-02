@@ -222,7 +222,7 @@ go build -ldflags "-X main.version=v0.1.0" ./cmd/prep-mcp
 | `internal/config` | Parsing and validating `prep.config.yaml` |
 | `internal/vault` | Confined file access through `os.Root`, frontmatter, tags |
 | `internal/read` | Scan, filters, search, tag counts, `get_context` |
-| `internal/write` | Create, append, frontmatter patch, replace, atomic writes, git |
+| `internal/write` | The four writes as ops, the all-or-nothing batch engine they all run through, atomic writes, git |
 | `internal/server` | MCP tool registration and descriptions |
 | `internal/testvault` | Test helpers: a temp copy of the example vault, a frozen clock |
 | `examples/vault` | The fictional vault the tests and the quick start use |
