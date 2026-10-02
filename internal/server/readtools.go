@@ -68,7 +68,7 @@ func registerReadTools(s *mcp.Server, h *handlers) {
 // listDocsDescription names the configured summary fields, so the model knows
 // what fields holds without reading the config.
 func listDocsDescription(cfg *config.Config) string {
-	shown := "path, type, title, tags, date and updated"
+	shown := "path, type, title, tags, date, date_source (field or mtime) and updated"
 	if len(cfg.SummaryFields) > 0 {
 		shown += ", and under fields the ones of " + strings.Join(cfg.SummaryFields, ", ") + " that are set"
 	}
@@ -76,7 +76,9 @@ func listDocsDescription(cfg *config.Config) string {
 		"All filters combine with AND. tags: every tag must match; any_tags: at least one; " +
 		"a trailing / matches a prefix (issue/ matches every issue tag). " +
 		"where: frontmatter equality such as {\"status\": [\"open\", \"improving\"]}; a list means any of. " +
-		"since/until: inclusive YYYY-MM-DD against the date field, else file modification time. " +
+		"date and since/until use each type's date field (date unless the config names another), " +
+		"else the file modification time, which date_source then says. " +
+		"since/until: inclusive YYYY-MM-DD. " +
 		"sort: date_desc (default), date_asc or title. limit: default 50, at most 500."
 }
 
@@ -130,14 +132,14 @@ type listDocsIn struct {
 }
 
 type docMeta struct {
-	Path     string            `json:"path"`
-	Type     string            `json:"type"`
-	Title    string            `json:"title"`
-	Tags     []string          `json:"tags"`
-	Date     string            `json:"date,omitempty"`     // the date field
-	Modified string            `json:"modified,omitempty"` // file modification day, when there is no date field
-	Updated  string            `json:"updated,omitempty"`
-	Fields   map[string]string `json:"fields,omitempty"` // the configured summary fields the document sets
+	Path       string            `json:"path"`
+	Type       string            `json:"type"`
+	Title      string            `json:"title"`
+	Tags       []string          `json:"tags"`
+	Date       string            `json:"date"`
+	DateSource string            `json:"date_source"` // field (the type's date field) or mtime
+	Updated    string            `json:"updated,omitempty"`
+	Fields     map[string]string `json:"fields,omitempty"` // the configured summary fields the document sets
 }
 
 func (h *handlers) listDocs(
@@ -192,26 +194,23 @@ func (in listDocsIn) filter() (read.Filter, error) {
 	return f, nil
 }
 
-// metaOf is the list_docs entry for d: its date field as date, or its file
-// modification day as modified when it has none, and each of fields it sets.
+// metaOf is the list_docs entry for d: its date with where it came from, and
+// each of fields it sets.
 func metaOf(d *read.Doc, fields []string) docMeta {
 	m := docMeta{
-		Path:    d.Path,
-		Type:    d.Type,
-		Title:   d.Title,
-		Tags:    append([]string{}, d.Tags...),
-		Updated: d.Text("updated"),
-		Fields:  map[string]string{},
+		Path:       d.Path,
+		Type:       d.Type,
+		Title:      d.Title,
+		Tags:       append([]string{}, d.Tags...),
+		Date:       d.Date.Format(time.DateOnly),
+		DateSource: d.DateSource(),
+		Updated:    d.Text("updated"),
+		Fields:     map[string]string{},
 	}
 	for _, k := range fields {
 		if v := d.Text(k); v != "" {
 			m.Fields[k] = v
 		}
-	}
-	if d.DateFromMtime {
-		m.Modified = d.Date.Format(time.DateOnly)
-	} else {
-		m.Date = d.Date.Format(time.DateOnly)
 	}
 	return m
 }

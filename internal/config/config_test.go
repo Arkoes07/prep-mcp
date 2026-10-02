@@ -53,6 +53,12 @@ types:
 				if !ok || ts.Folder != "notes" || ts.Filename != "{slug}.md" || len(ts.Required) != 0 {
 					t.Errorf("Type(note) = %+v, %v", ts, ok)
 				}
+				if ts.DateField != "date" || c.DateField("note") != "date" {
+					t.Errorf("date field = %q / %q, want the default date", ts.DateField, c.DateField("note"))
+				}
+				if got := c.DateField("nope"); got != "date" {
+					t.Errorf("DateField(nope) = %q, want date for a type that is not configured", got)
+				}
 				if _, ok := c.Types["nope"]; ok {
 					t.Error("Type(nope) should not exist")
 				}
@@ -188,6 +194,18 @@ types:
   note: {folder: notes, filename: "{slug.md"}
 `,
 			wantErr: []string{"type note", "filename"},
+		},
+		{
+			name: "date_field",
+			yaml: `
+types:
+  note: {folder: notes, filename: "{slug}.md", date_field: finished}
+`,
+			check: func(t *testing.T, c *config.Config) {
+				if got := c.DateField("note"); got != "finished" {
+					t.Errorf("DateField(note) = %q, want finished", got)
+				}
+			},
 		},
 		{
 			name: "summary_fields",

@@ -102,8 +102,8 @@ func TestContextGolden(t *testing.T) {
 	})
 }
 
-// The attributes after the title are the configured summary fields, in config
-// order; a vault without summary_fields shows only the date.
+// The attributes after the title are the date, marked when it is the file's
+// modification time, then the configured summary fields in config order.
 func TestContextSummaryFields(t *testing.T) {
 	const line = "- improvements/missing-tradeoff.md | Trade-off not stated | "
 	tests := []struct {
@@ -112,12 +112,13 @@ func TestContextSummaryFields(t *testing.T) {
 		{
 			name:   "configured",
 			fields: "summary_fields: [exit_criteria, status]",
-			want:   line + "exit_criteria=Cost stated in 5 project answers in a row status=improving | -",
+			want: line + "date=2026-01-10 date_source=mtime " +
+				"exit_criteria=Cost stated in 5 project answers in a row status=improving | -",
 		},
 		{
 			name:   "none",
 			fields: "",
-			want:   line + "- | -",
+			want:   line + "date=2026-01-10 date_source=mtime | -",
 		},
 	}
 	for _, tc := range tests {

@@ -22,6 +22,8 @@ const (
 	DefaultAuthor = "Claude <claude@local>"
 	// DefaultQueryLimit is the limit of a context query that sets none.
 	DefaultQueryLimit = 20
+	// DefaultDateField dates the documents of a type that sets no date_field.
+	DefaultDateField = "date"
 )
 
 // Config is a validated prep.config.yaml with its defaults applied.
@@ -42,6 +44,10 @@ type TypeSpec struct {
 	Folder   string   `yaml:"folder"`
 	Filename string   `yaml:"filename"`
 	Required []string `yaml:"required"`
+	// DateField is the frontmatter field that dates documents of this type:
+	// since/until, date sorting and {date} in the filename use it. Never
+	// empty after Parse.
+	DateField string `yaml:"date_field"`
 }
 
 // ContextSpec says what get_context returns besides the working rules.
@@ -116,6 +122,10 @@ func Parse(data []byte) (*Config, error) {
 	}
 
 	c.Author = cmp.Or(c.Author, DefaultAuthor)
+	for name, t := range c.Types {
+		t.DateField = cmp.Or(t.DateField, DefaultDateField)
+		c.Types[name] = t
+	}
 	for _, qs := range [][]Query{c.Context.OpenItems, c.Context.Recent} {
 		for i := range qs {
 			qs[i].Limit = cmp.Or(qs[i].Limit, DefaultQueryLimit)
@@ -333,6 +343,12 @@ func (c *Config) TypeList() string {
 // TypeNames returns the configured type names, sorted.
 func (c *Config) TypeNames() []string {
 	return slices.Sorted(maps.Keys(c.Types))
+}
+
+// DateField is the field that dates documents of type typ: the type's
+// date_field, or DefaultDateField for a type that is not configured.
+func (c *Config) DateField(typ string) string {
+	return cmp.Or(c.Types[typ].DateField, DefaultDateField)
 }
 
 // ParseAuthor splits "Name <email>" into its parts. ok is false when a does

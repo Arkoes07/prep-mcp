@@ -1,11 +1,13 @@
 package write_test
 
 import (
+	"cmp"
 	"testing"
 	"time"
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/Arkoes07/prep-mcp/internal/config"
 	"github.com/Arkoes07/prep-mcp/internal/write"
 )
 
@@ -34,6 +36,7 @@ func TestRenderFilename(t *testing.T) {
 	sep29 := time.Date(2026, 9, 29, 10, 0, 0, 0, time.Local)
 	tests := []struct {
 		name, pattern, fm, slug string
+		dateField               string // empty means date
 		today                   time.Time
 		want, wantErr           string
 	}{
@@ -43,6 +46,23 @@ func TestRenderFilename(t *testing.T) {
 		{name: "no_slug_no_title", pattern: "{slug}.md", fm: "a: 1", wantErr: "pass slug or set title"},
 		{name: "field_and_date", pattern: "{date}-{kind}-{slug}.md", fm: "kind: Deep Dive\ndate: 2026-01-12", slug: "x", want: "2026-01-12-deep-dive-x.md"},
 		{name: "date_default_today", pattern: "{date}-{slug}.md", fm: "a: 1", slug: "x", today: sep29, want: "2026-09-29-x.md"},
+		{
+			name:      "date_from_date_field",
+			pattern:   "{date}-{slug}.md",
+			fm:        "finished: 2026-01-08\ndate: 2026-01-12",
+			slug:      "x",
+			dateField: "finished",
+			want:      "2026-01-08-x.md",
+		},
+		{
+			name:      "date_field_missing_today",
+			pattern:   "{date}-{slug}.md",
+			fm:        "date: 2026-01-12",
+			slug:      "x",
+			dateField: "finished",
+			today:     sep29,
+			want:      "2026-09-29-x.md",
+		},
 		{name: "week_upper", pattern: "{week}.md", fm: "week: 2026-W41", want: "2026-w41.md"},
 		{name: "week_lower", pattern: "{week}.md", fm: "week: 2026-w41", want: "2026-w41.md"},
 		{name: "week_missing", pattern: "{week}.md", fm: "a: 1", wantErr: "week is required to build the filename"},
@@ -65,7 +85,13 @@ func TestRenderFilename(t *testing.T) {
 			if day.IsZero() {
 				day = time.Date(2026, 1, 14, 9, 0, 0, 0, time.Local)
 			}
-			got, err := write.RenderFilename(tc.pattern, fm, tc.slug, day)
+			spec := config.TypeSpec{Filename: tc.pattern, DateField: cmp.Or(tc.dateField, "date")}
+			got, err := write.RenderFilename(
+				spec,
+				fm,
+				tc.slug,
+				day,
+			)
 			if tc.wantErr != "" {
 				mustContain(t, err, tc.wantErr)
 				return

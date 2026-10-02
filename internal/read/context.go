@@ -207,12 +207,12 @@ func (r *Reader) queryBlock(docs []*Doc, q config.Query, isRecent bool) (string,
 }
 
 // metaLine is "- path | title | attributes | tags". The attributes are the
-// date, shown only when the document has a date field (file modification time
-// is for ordering), then each of fields that the document sets.
+// date, followed by date_source=mtime when it is the file's modification time,
+// then each of fields that the document sets.
 func metaLine(d *Doc, fields []string) string {
-	var attrs []string
-	if !d.DateFromMtime {
-		attrs = append(attrs, "date="+d.Date.Format(time.DateOnly))
+	attrs := []string{"date=" + d.Date.Format(time.DateOnly)}
+	if d.DateFromMtime {
+		attrs = append(attrs, "date_source="+d.DateSource())
 	}
 	for _, k := range fields {
 		if val := d.Text(k); val != "" {
@@ -220,9 +220,6 @@ func metaLine(d *Doc, fields []string) string {
 		}
 	}
 	a, tags := strings.Join(attrs, " "), strings.Join(d.Tags, ", ")
-	if a == "" {
-		a = "-"
-	}
 	if tags == "" {
 		tags = "-"
 	}

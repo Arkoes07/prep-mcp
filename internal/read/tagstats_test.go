@@ -17,11 +17,12 @@ type tagRow struct {
 }
 
 // Tag counts on the example: each document counts once per tag. Documents
-// without a date field are dated by mtime (2026-01-10).
+// without their type's date field are dated by mtime (2026-01-10); the one
+// company/acme document is dated by its type's date field (2026-01-05).
 var exampleTagRows = []tagRow{
 	{"q/hardest-project", 3, "2026-01-14"},
 	{"issue/missing-tradeoff", 2, "2026-01-14"},
-	{"company/acme", 1, "2026-01-10"},
+	{"company/acme", 1, "2026-01-05"},
 	{"domain/payments", 1, "2026-01-10"},
 	{"issue/buries-headline", 1, "2026-01-12"},
 	{"meta/plan", 1, "2026-01-10"},

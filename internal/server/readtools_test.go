@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -54,7 +55,7 @@ func TestListDocsIsMetadataOnly(t *testing.T) {
 	if len(got.Docs) != 2 {
 		t.Fatalf("docs = %d, want 2", len(got.Docs))
 	}
-	for _, key := range []string{"path", "type", "title", "tags", "date", "fields"} {
+	for _, key := range []string{"path", "type", "title", "tags", "date", "date_source", "fields"} {
 		if _, ok := got.Docs[0][key]; !ok {
 			t.Errorf("doc lacks %q: %v", key, got.Docs[0])
 		}
@@ -67,6 +68,78 @@ func TestListDocsIsMetadataOnly(t *testing.T) {
 		if _, ok := got.Docs[0][key]; ok {
 			t.Errorf("doc has %q; list_docs must return metadata only", key)
 		}
+	}
+}
+
+// Every entry has a date and says where it came from: the type's date field, or
+// the file's modification time. There is no separate modified key.
+func TestListDocsDateAndSource(t *testing.T) {
+	cs := connect(t)
+	tests := []struct {
+		name   string
+		args   map[string]any
+		want   map[string]string // path -> date
+		source string
+	}{
+		{
+			name:   "date_field",
+			args:   map[string]any{"tags": []string{"issue/"}},
+			source: "field",
+		},
+		{
+			name: "mtime",
+			args: map[string]any{"where": map[string]any{"status": []string{"open", "improving"}}},
+			want: map[string]string{
+				"improvements/buries-headline.md":  "2026-01-10",
+				"improvements/missing-tradeoff.md": "2026-01-10",
+			},
+			source: "mtime",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			out, isErr := call(t, cs, "list_docs", tc.args)
+			if isErr {
+				t.Fatal(out)
+			}
+			if strings.Contains(out, `"modified"`) {
+				t.Errorf("result has a modified key:\n%s", out)
+			}
+			var got struct {
+				Docs []struct {
+					Path       string `json:"path"`
+					Date       string `json:"date"`
+					DateSource string `json:"date_source"`
+				} `json:"docs"`
+			}
+			if err := json.Unmarshal([]byte(out), &got); err != nil {
+				t.Fatalf("result is not JSON: %v\n%s", err, out)
+			}
+			if len(got.Docs) == 0 {
+				t.Fatalf("no docs:\n%s", out)
+			}
+			for _, d := range got.Docs {
+				if d.DateSource != tc.source {
+					t.Errorf(
+						"%s: date_source = %q, want %q",
+						d.Path,
+						d.DateSource,
+						tc.source,
+					)
+				}
+				if _, err := time.Parse(time.DateOnly, d.Date); err != nil {
+					t.Errorf("%s: date = %q, want YYYY-MM-DD", d.Path, d.Date)
+				}
+				if want, ok := tc.want[d.Path]; ok && d.Date != want {
+					t.Errorf(
+						"%s: date = %q, want %q",
+						d.Path,
+						d.Date,
+						want,
+					)
+				}
+			}
+		})
 	}
 }
 

@@ -4,17 +4,18 @@
 #   prep.config.yaml   not markdown
 #   templates/*        skipped folder
 #
-# date: the value of the `date` field, or "" when the document has none and
-#       Date falls back to file mtime (DateFromMtime true).
+# date: the value of the type's date field (date_field in the config, `date`
+#       by default), or "" when the document has none and Date falls back to
+#       file mtime (DateFromMtime true).
 # body_line: 1-based file line where the body starts. Omitted when the body is empty.
 docs:
   - path: applications/acme-backend.md
     type: application
     title: acme-backend            # no title field: the filename stem
-    date: ""
+    date: "2026-01-05"             # from applied, the type's date_field
     tags: [company/acme]
-    body_line: 10
-    fields: {company: Acme Pay, role: Senior Backend Engineer, stage: interview, status: active}
+    body_line: 11
+    fields: {company: Acme Pay, role: Senior Backend Engineer, applied: "2026-01-05", stage: interview, status: active}
 
   - path: improvements/buries-headline.md
     type: improvement

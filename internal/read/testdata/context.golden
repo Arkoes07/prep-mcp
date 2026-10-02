@@ -24,11 +24,11 @@ tags: [meta/plan]
 
 ==== Open items ====
 improvement (status: open, improving):
-- improvements/buries-headline.md | Buries the headline | status=open | -
-- improvements/missing-tradeoff.md | Trade-off not stated | status=improving | -
+- improvements/buries-headline.md | Buries the headline | date=2026-01-10 date_source=mtime status=open | -
+- improvements/missing-tradeoff.md | Trade-off not stated | date=2026-01-10 date_source=mtime status=improving | -
 
 application (status: active):
-- applications/acme-backend.md | acme-backend | stage=interview status=active | company/acme
+- applications/acme-backend.md | acme-backend | date=2026-01-05 stage=interview status=active | company/acme
 
 ==== Recent ====
 session (newest 5):

@@ -3,7 +3,9 @@
 # Setup facts the expectations rely on:
 #   - the test day is 2026-01-14;
 #   - every file has mtime 2026-01-10 12:00 local, so undated documents sort
-#     below the two dated ones;
+#     below the two dated sessions;
+#   - the application is dated 2026-01-05 by its `applied` field (the type's
+#     date_field), so it sorts below everything else;
 #   - the default sort is date_desc; ties are broken by path, ascending.
 #
 # Fields
@@ -27,7 +29,7 @@ paths:
 
 cases:
   - name: all
-    want: [*s14, *s12, *app, *bh, *mt, *story, *tags, *week]
+    want: [*s14, *s12, *bh, *mt, *story, *tags, *week, *app]
 
   - name: by_type
     type: session
@@ -56,7 +58,7 @@ cases:
 
   - name: prefix_any
     any_tags: [company/, domain/]
-    want: [*app, *story]
+    want: [*story, *app]
 
   - name: tag_case
     tags: [Issue/Missing-Tradeoff]
@@ -109,6 +111,22 @@ cases:
     since: "2026-01-11"
     want: []
 
+  # The application's date is its applied field (2026-01-05), not its mtime
+  # (2026-01-10), and it has a date key it does not use.
+  - name: since_date_field_included
+    type: application
+    since: "2026-01-05"
+    want: [*app]
+
+  - name: since_date_field_excluded
+    type: application
+    since: "2026-01-06"
+    want: []
+
+  - name: until_date_field
+    until: "2026-01-09"
+    want: [*app]
+
   - name: since_bad
     since: "13-01-2026"
     parse_err: true
@@ -137,12 +155,12 @@ cases:
 
   - name: limit_zero_uses_default
     limit: 0
-    want: [*s14, *s12, *app, *bh, *mt, *story, *tags, *week]
+    want: [*s14, *s12, *bh, *mt, *story, *tags, *week, *app]
 
   # The 500 cap cannot be seen on 8 documents; TestApplyLimitCap covers it.
   - name: limit_huge
     limit: 9999
-    want: [*s14, *s12, *app, *bh, *mt, *story, *tags, *week]
+    want: [*s14, *s12, *bh, *mt, *story, *tags, *week, *app]
 
   - name: unknown_type
     type: nope

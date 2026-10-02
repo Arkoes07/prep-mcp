@@ -17,7 +17,7 @@ import (
 type Doc struct {
 	Path, Type, Title string
 	Tags              []string
-	Date              time.Time // the date field, else the file's modification time
+	Date              time.Time // the type's date field, else the file's modification time
 	DateFromMtime     bool
 	Fields            map[string]*yaml.Node
 	Body              []byte
@@ -73,7 +73,7 @@ func (r *Reader) Scan() ([]*Doc, []Problem, error) {
 			})
 			return nil
 		}
-		doc, docProblems := parseDoc(p, d, src)
+		doc, docProblems := r.parseDoc(p, d, src)
 		problems = append(problems, docProblems...)
 		if doc != nil {
 			docs = append(docs, doc)
@@ -104,8 +104,9 @@ func isMarkdownFile(d fs.DirEntry) bool {
 
 // parseDoc turns the file at p into a Doc. It returns a nil Doc for a file
 // without frontmatter or without a type, and problems for what it could not
-// use: broken frontmatter (no Doc) or an unparseable date (a Doc dated by mtime).
-func parseDoc(p string, d fs.DirEntry, src []byte) (*Doc, []Problem) {
+// use: broken frontmatter (no Doc) or an unparseable date (a Doc dated by
+// mtime). The date comes from the type's date field.
+func (r *Reader) parseDoc(p string, d fs.DirEntry, src []byte) (*Doc, []Problem) {
 	fm, err := vault.SplitFrontmatter(src)
 	if err != nil {
 		return nil, []Problem{{Path: p, Msg: err.Error()}}
@@ -147,7 +148,8 @@ func parseDoc(p string, d fs.DirEntry, src []byte) (*Doc, []Problem) {
 			doc.titleLine = tn.Line + 1
 		}
 	}
-	dn := vault.Field(fm.Map, "date")
+	field := r.cfg.DateField(typ)
+	dn := vault.Field(fm.Map, field)
 	if dn == nil || strings.TrimSpace(vault.Scalar(dn)) == "" {
 		return doc, nil
 	}
@@ -155,13 +157,25 @@ func parseDoc(p string, d fs.DirEntry, src []byte) (*Doc, []Problem) {
 	if err != nil {
 		return doc, []Problem{{
 			Path: p,
-			Msg: fmt.Sprintf("line %d: date %q is not a date; "+
-				"use YYYY-MM-DD (using the file's modification time meanwhile)",
-				dn.Line+1, vault.Scalar(dn)),
+			Msg: fmt.Sprintf(
+				"line %d: %s %q is not a date; use YYYY-MM-DD (using the file's modification time meanwhile)",
+				dn.Line+1,
+				field,
+				vault.Scalar(dn),
+			),
 		}}
 	}
 	doc.Date, doc.DateFromMtime = t, false
 	return doc, nil
+}
+
+// DateSource says where Date came from: "field" for the type's date field,
+// "mtime" for the file's modification time.
+func (d *Doc) DateSource() string {
+	if d.DateFromMtime {
+		return "mtime"
+	}
+	return "field"
 }
 
 // Text returns the trimmed text of a scalar frontmatter field, or "" if the

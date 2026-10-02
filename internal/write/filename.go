@@ -10,6 +10,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/Arkoes07/prep-mcp/internal/config"
 	"github.com/Arkoes07/prep-mcp/internal/vault"
 )
 
@@ -35,15 +36,19 @@ func Slugify(s string) string {
 
 var placeholderRE = regexp.MustCompile(`\{([^{}]+)\}`)
 
-// RenderFilename fills a config filename pattern. {slug} comes from the slug
-// argument, else the title field; {date} from the date field, else today; any
-// other placeholder from the field of that name. Every value is slugified, so
-// the result can never contain a path separator.
-func RenderFilename(pattern string, fm *yaml.Node, slug string, today time.Time) (string, error) {
+// RenderFilename fills the filename pattern of type spec. {slug} comes from
+// the slug argument, else the title field; {date} from the type's date field,
+// else today; any other placeholder from the field of that name. Every value
+// is slugified, so the result can never contain a path separator.
+func RenderFilename(spec config.TypeSpec, fm *yaml.Node, slug string, today time.Time) (string, error) {
+	date := today.Format(time.DateOnly)
+	if d := Slugify(vault.FieldText(fm, spec.DateField)); d != "" {
+		date = d
+	}
 	var firstErr error
-	out := placeholderRE.ReplaceAllStringFunc(pattern, func(m string) string {
+	out := placeholderRE.ReplaceAllStringFunc(spec.Filename, func(m string) string {
 		name := m[1 : len(m)-1]
-		val, err := placeholderValue(name, fm, slug, today)
+		val, err := placeholderValue(name, fm, slug, date)
 		if err != nil && firstErr == nil {
 			firstErr = err
 		}
@@ -55,7 +60,9 @@ func RenderFilename(pattern string, fm *yaml.Node, slug string, today time.Time)
 	return out, nil
 }
 
-func placeholderValue(name string, fm *yaml.Node, slug string, today time.Time) (string, error) {
+// placeholderValue is the value of one {name} placeholder; date is the
+// already resolved {date}.
+func placeholderValue(name string, fm *yaml.Node, slug, date string) (string, error) {
 	switch name {
 	case "slug":
 		if strings.TrimSpace(slug) != "" {
@@ -72,12 +79,7 @@ func placeholderValue(name string, fm *yaml.Node, slug string, today time.Time) 
 		}
 		return "", errors.New("no name for the file: pass slug or set title")
 	case "date":
-		if d := vault.FieldText(fm, "date"); d != "" {
-			if s := Slugify(d); s != "" {
-				return s, nil
-			}
-		}
-		return today.Format(time.DateOnly), nil
+		return date, nil
 	}
 	n := vault.Field(fm, name)
 	switch {

@@ -2,6 +2,7 @@
 type: application
 company: Acme Pay
 role: Senior Backend Engineer
+applied: 2026-01-05
 stage: interview
 status: active
 next_action: Send thank-you note

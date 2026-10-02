@@ -91,7 +91,8 @@ func createDocDescription(cfg *config.Config) string {
 		fmt.Fprintf(&b, "- %s: %s/%s; required: %s\n", name, t.Folder, t.Filename, required)
 	}
 	b.WriteString("In a pattern, {slug} is the slug argument, else the title field; " +
-		"{date} is the date field, else today; any other {name} is the frontmatter field of that name. " +
+		"{date} is the type's date field (date unless the config names another), else today; " +
+		"any other {name} is the frontmatter field of that name. " +
 		"Every value becomes lowercase kebab-case.")
 	return b.String()
 }

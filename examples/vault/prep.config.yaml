@@ -25,6 +25,7 @@ types:
     folder: applications
     filename: "{slug}.md"
     required: [company, role, stage, status]
+    date_field: applied    # dates, since/until and sorting use this field instead of date
   learning:
     folder: learning
     filename: "{slug}.md"

@@ -111,6 +111,28 @@ func TestScan(t *testing.T) {
 	})
 
 	const learning = "---\ntype: learning\ntitle: T\ntrack: t\n---\nbody\n"
+	// finishedDate makes finished the learning type's date field.
+	finishedDate := func(t *testing.T, root string) {
+		replaceInFile(
+			t,
+			root,
+			"prep.config.yaml",
+			"required: [title, track]",
+			"required: [title, track]\n    date_field: finished",
+		)
+	}
+	// wantMtime checks that d fell back to the file's modification time.
+	wantMtime := func(t *testing.T, d *read.Doc) {
+		t.Helper()
+		if !d.DateFromMtime || !d.Date.Equal(testvault.Mtime) {
+			t.Errorf(
+				"Date = %v (from mtime %v), want mtime %v",
+				d.Date,
+				d.DateFromMtime,
+				testvault.Mtime,
+			)
+		}
+	}
 	extra := []struct {
 		name  string
 		setup func(t *testing.T, root string)
@@ -266,6 +288,66 @@ func TestScan(t *testing.T) {
 				}
 				if len(problems) != 1 || problems[0].Path != "notes/d.md" || !strings.Contains(problems[0].Msg, "date") {
 					t.Errorf("problems = %+v, want one for notes/d.md mentioning date", problems)
+				}
+			},
+		},
+		{
+			name: "date_field_used",
+			setup: func(t *testing.T, root string) {
+				finishedDate(t, root)
+				testvault.Write(
+					t,
+					root,
+					"notes/f.md",
+					"---\ntype: learning\ntitle: T\ntrack: t\nfinished: 2026-01-08\ndate: 2026-01-12\n---\nb\n",
+				)
+			},
+			check: func(t *testing.T, _ string, _ *read.Reader, docs []*read.Doc, problems []read.Problem) {
+				d := find(t, docs, "notes/f.md")
+				if got := d.Date.Format(time.DateOnly); d.DateFromMtime || got != "2026-01-08" {
+					t.Errorf("Date = %s (from mtime %v), want 2026-01-08 from finished", got, d.DateFromMtime)
+				}
+				if len(problems) != 0 {
+					t.Errorf("problems = %v, want none", problems)
+				}
+			},
+		},
+		{
+			// date is just another field once the type names a different date field.
+			name: "date_field_missing_falls_back",
+			setup: func(t *testing.T, root string) {
+				finishedDate(t, root)
+				testvault.Write(
+					t,
+					root,
+					"notes/f.md",
+					"---\ntype: learning\ntitle: T\ntrack: t\ndate: 2026-01-12\n---\nb\n",
+				)
+			},
+			check: func(t *testing.T, _ string, _ *read.Reader, docs []*read.Doc, problems []read.Problem) {
+				wantMtime(t, find(t, docs, "notes/f.md"))
+				if len(problems) != 0 {
+					t.Errorf("problems = %v, want none", problems)
+				}
+			},
+		},
+		{
+			name: "date_field_unparseable_names_the_field",
+			setup: func(t *testing.T, root string) {
+				finishedDate(t, root)
+				testvault.Write(
+					t,
+					root,
+					"notes/f.md",
+					"---\ntype: learning\ntitle: T\ntrack: t\nfinished: soon\n---\nb\n",
+				)
+			},
+			check: func(t *testing.T, _ string, _ *read.Reader, docs []*read.Doc, problems []read.Problem) {
+				wantMtime(t, find(t, docs, "notes/f.md"))
+				isOne := len(problems) == 1 && problems[0].Path == "notes/f.md"
+				namesField := isOne && strings.Contains(problems[0].Msg, `finished "soon" is not a date`)
+				if !namesField {
+					t.Errorf("problems = %+v, want one for notes/f.md naming finished", problems)
 				}
 			},
 		},

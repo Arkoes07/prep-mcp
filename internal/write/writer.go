@@ -79,7 +79,12 @@ func (w *Writer) Create(ctx context.Context, d Draft) (*Result, error) {
 			d.Type, strings.Join(missing, ", "))
 	}
 
-	name, err := RenderFilename(spec.Filename, doc, d.Slug, day)
+	name, err := RenderFilename(
+		spec,
+		doc,
+		d.Slug,
+		day,
+	)
 	if err != nil {
 		return nil, err
 	}
