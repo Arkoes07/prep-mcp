@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -51,9 +49,6 @@ func TestReadFile(t *testing.T) {
 		want := "not found: x.md (use list_docs or search_text)"
 		if err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("error = %v, want it to contain %q", err, want)
-		}
-		if !errors.Is(err, fs.ErrNotExist) {
-			t.Errorf("error = %v, want it to wrap fs.ErrNotExist", err)
 		}
 	})
 

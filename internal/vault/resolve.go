@@ -19,28 +19,14 @@ const (
 	AccessWrite
 )
 
-// PathError is a rejected path. Msg names the path and says what to do next.
-// Err is the file system error behind it, if any, so errors.Is(err,
-// fs.ErrNotExist) works.
-type PathError struct {
-	Msg string
-	Err error
+// fail rejects a path. The message names the path and says what to do next.
+func fail(format string, args ...any) (string, error) {
+	return "", fmt.Errorf(format, args...)
 }
-
-var _ error = (*PathError)(nil)
-
-// Error returns Msg, which already names the path.
-func (e *PathError) Error() string { return e.Msg }
-
-// Unwrap returns the file system error behind the rejection, or nil.
-func (e *PathError) Unwrap() error { return e.Err }
 
 // notFound is the error for a document path that does not exist.
 func notFound(clean string) error {
-	return &PathError{
-		Msg: fmt.Sprintf("not found: %s (use list_docs or search_text)", clean),
-		Err: fs.ErrNotExist,
-	}
+	return fmt.Errorf("not found: %s (use list_docs or search_text)", clean)
 }
 
 // Resolve checks a vault-relative path and returns it cleaned, with "/"
@@ -50,9 +36,6 @@ func (v *Vault) Resolve(p string, a Access) (string, error) {
 	clean, err := checkPathText(p, a)
 	if err != nil {
 		return "", err
-	}
-	fail := func(format string, args ...any) (string, error) {
-		return "", &PathError{Msg: fmt.Sprintf(format, args...)}
 	}
 	parts := strings.Split(clean, "/")
 
@@ -68,14 +51,12 @@ func (v *Vault) Resolve(p string, a Access) (string, error) {
 			return "", notFound(clean)
 		}
 		if err != nil {
-			return "", &PathError{Msg: fmt.Sprintf("cannot access %q: %v", p, err), Err: err}
+			return fail("cannot access %q: %w", p, err)
 		}
 		if fi.Mode()&fs.ModeSymlink != 0 {
 			target, err := filepath.EvalSymlinks(filepath.Join(v.dir, filepath.FromSlash(prefix)))
 			if err != nil {
-				msg := fmt.Sprintf("%q goes through a broken symlink (%s); remove the link or fix its target",
-					p, prefix)
-				return "", &PathError{Msg: msg, Err: err}
+				return fail("%q goes through a broken symlink (%s); remove the link or fix its target", p, prefix)
 			}
 			rel, err := filepath.Rel(v.dir, target)
 			if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
@@ -99,9 +80,6 @@ func (v *Vault) Resolve(p string, a Access) (string, error) {
 // checkPathText rejects a path by its text alone and returns it cleaned. The
 // file system is not touched; Resolve does that next.
 func checkPathText(p string, a Access) (string, error) {
-	fail := func(format string, args ...any) (string, error) {
-		return "", &PathError{Msg: fmt.Sprintf(format, args...)}
-	}
 	switch {
 	case p == "":
 		return fail("empty path; pass a vault-relative path such as notes/x.md")
