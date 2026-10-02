@@ -19,7 +19,7 @@ func TestApplyPatch(t *testing.T) {
 		unset    []string
 		add, rem []string
 		want     string // exact output; for a no-op it is ignored and out must equal src
-		noop     bool   // changed must be false and out must equal src
+		noop     bool   // the frontmatter must be nil and out must equal src
 		squeeze  bool   // compare with runs of spaces before "#" collapsed (comment spacing is not pinned)
 		wantErr  string
 	}{
@@ -84,7 +84,7 @@ func TestApplyPatch(t *testing.T) {
 			if tc.set != "" {
 				p.Set = node(t, tc.set)
 			}
-			out, changed, err := write.ApplyPatch([]byte(tc.src), p, today)
+			out, fm, err := write.ApplyPatch([]byte(tc.src), p, today)
 			if tc.wantErr != "" {
 				mustContain(t, err, tc.wantErr)
 				if tc.name == "no_frontmatter" {
@@ -97,16 +97,16 @@ func TestApplyPatch(t *testing.T) {
 			}
 			got := string(out)
 			if tc.noop {
-				if changed {
-					t.Error("changed = true, want false for a no-op")
+				if fm != nil {
+					t.Error("frontmatter returned for a no-op, want nil")
 				}
 				if got != tc.src {
 					t.Errorf("no-op changed the bytes:\n%q\nwant\n%q", got, tc.src)
 				}
 				return
 			}
-			if !changed {
-				t.Error("changed = false, want true")
+			if fm == nil {
+				t.Fatal("no frontmatter returned, want the patched one")
 			}
 			want := tc.want
 			if tc.squeeze {

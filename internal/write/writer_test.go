@@ -137,7 +137,7 @@ func TestWriterCreate(t *testing.T) {
 		name, typ, fm, body, slug string
 		wantErr                   []string
 		listTypes                 bool   // the error must name every configured type
-		wantExists                string // the error must be an *ExistsError for this path
+		wantExists                string // the error must say this file exists
 	}{
 		{name: "missing_required", typ: "learning", fm: `{"title":"T"}`, wantErr: []string{"missing required fields for learning: track"}},
 		{name: "empty_required_string", typ: "learning", fm: `{"title":"T","track":""}`, wantErr: []string{"missing required fields for learning: track"}},
@@ -160,13 +160,6 @@ func TestWriterCreate(t *testing.T) {
 				mustContain(t, err, e.cfg.TypeNames()...)
 			}
 			if tc.wantExists != "" {
-				var ee *write.ExistsError
-				if !errors.As(err, &ee) {
-					t.Fatalf("error %T (%v), want *write.ExistsError", err, err)
-				}
-				if ee.Path != tc.wantExists {
-					t.Errorf("ExistsError.Path = %q, want %q", ee.Path, tc.wantExists)
-				}
 				want := fmt.Sprintf("file exists: %s (use append_section or update_frontmatter)", tc.wantExists)
 				if err.Error() != want {
 					t.Errorf("message = %q, want %q", err, want)

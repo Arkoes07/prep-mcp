@@ -15,7 +15,7 @@ import (
 // Atomic file writes: every change is staged in a temp file next to its
 // target and renamed into place, after a last check that the target is still
 // what the caller expects. A check that refuses returns the error the caller
-// acts on (*ConflictError or *ExistsError), and nothing is written.
+// acts on (a *ConflictError, or "file exists"), and nothing is written.
 
 // beforeRename is a test seam: it runs after the temp file is written and
 // before it is renamed into place. Production leaves it nil.
@@ -57,14 +57,13 @@ func (w *Writer) replaceFile(rel string, data []byte, oldHash string) error {
 	})
 }
 
-// createFile writes a new file and refuses, with an *ExistsError, to replace
-// an existing one.
+// createFile writes a new file and refuses to replace an existing one.
 func (w *Writer) createFile(rel string, data []byte) error {
 	absent := func() error {
 		_, err := w.v.Root().Lstat(rel)
 		switch {
 		case err == nil:
-			return &ExistsError{Path: rel}
+			return fmt.Errorf("file exists: %s (use append_section or update_frontmatter)", rel)
 		case errors.Is(err, fs.ErrNotExist):
 			return nil
 		}

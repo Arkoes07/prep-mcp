@@ -42,20 +42,8 @@ type Result struct {
 	Commit   string   `json:"commit,omitempty"`
 }
 
-// ExistsError means create_doc found the target file already there.
-type ExistsError struct{ Path string }
-
-var _ error = (*ExistsError)(nil)
-
-// Error names the file and says which tool to use instead.
-func (e *ExistsError) Error() string {
-	return fmt.Sprintf("file exists: %s (use append_section or update_frontmatter)", e.Path)
-}
-
 // ConflictError means replace_doc saw a file that changed since it was read.
 type ConflictError struct{ Path, Current string }
-
-var _ error = (*ConflictError)(nil)
 
 // Error gives the current hash and says how to retry.
 func (e *ConflictError) Error() string {
@@ -184,14 +172,9 @@ func (w *Writer) UpdateFrontmatter(ctx context.Context, p string, patch Patch) (
 					fmt.Sprintf("tag %q is not on this document, so there was nothing to remove", t))
 			}
 		}
-		next, changed, err := ApplyPatch(old, patch, w.now().Format(time.DateOnly))
-		if err != nil || !changed {
+		next, fm, err := ApplyPatch(old, patch, w.now().Format(time.DateOnly))
+		if err != nil || fm == nil {
 			return old, warnings, err
-		}
-		fm, err := reread(next)
-		if err != nil {
-			return nil, nil, fmt.Errorf("internal error: the patched file did not re-read (%w); nothing was written. "+
-				"Report this as a bug", err)
 		}
 		if spec, ok := w.cfg.Types[vault.FieldText(fm.Map, "type")]; ok {
 			if missing := missingFields(spec.Required, fm.Map); len(missing) > 0 {

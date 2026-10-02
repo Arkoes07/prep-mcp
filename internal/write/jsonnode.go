@@ -24,7 +24,7 @@ func JSONToNode(raw json.RawMessage) (*yaml.Node, error) {
 		return nil, fmt.Errorf("invalid JSON: %w; %s", err, want)
 	}
 	if d, ok := tok.(json.Delim); !ok || d != '{' {
-		return nil, fmt.Errorf("%s, got %s", want, describeToken(tok))
+		return nil, fmt.Errorf("%s, got %v", want, tok)
 	}
 	n, err := decodeObject(dec)
 	if err != nil {
@@ -34,23 +34,6 @@ func JSONToNode(raw json.RawMessage) (*yaml.Node, error) {
 		return nil, errors.New("unexpected text after the JSON object; pass one object")
 	}
 	return n, nil
-}
-
-func describeToken(t json.Token) string {
-	switch v := t.(type) {
-	case json.Delim:
-		return "an array"
-	case string:
-		return "a string"
-	case json.Number:
-		return "a number"
-	case bool:
-		return "a boolean"
-	case nil:
-		return "null"
-	default:
-		return fmt.Sprintf("%T", v)
-	}
 }
 
 func decodeObject(dec *json.Decoder) (*yaml.Node, error) {

@@ -19,20 +19,21 @@ type Patch struct {
 }
 
 // ApplyPatch changes only the affected top-level keys of src's frontmatter and
-// returns the new file. Untouched lines and the whole body keep their exact
-// bytes. changed is false, and out is src, when the patch changes nothing.
-// Any real change also sets updated to today, unless the patch sets or unsets it.
-func ApplyPatch(src []byte, p Patch, today string) (out []byte, changed bool, err error) {
+// returns the new file with its frontmatter, re-read. Untouched lines and the
+// whole body keep their exact bytes. newFM is nil, and out is src, when the
+// patch changes nothing. Any real change also sets updated to today, unless
+// the patch sets or unsets it.
+func ApplyPatch(src []byte, p Patch, today string) (out []byte, newFM *vault.Frontmatter, err error) {
 	fm, err := vault.SplitFrontmatter(src)
 	if err != nil {
-		return nil, false, err
+		return nil, nil, err
 	}
 	if fm == nil {
-		return nil, false, errors.New("no frontmatter to patch; use replace_doc to give this file frontmatter")
+		return nil, nil, errors.New("no frontmatter to patch; use replace_doc to give this file frontmatter")
 	}
 	setKeys, err := checkPatch(p)
 	if err != nil {
-		return nil, false, err
+		return nil, nil, err
 	}
 
 	lines := slices.Collect(strings.Lines(string(src[fm.Start:fm.End])))
@@ -47,7 +48,7 @@ func ApplyPatch(src []byte, p Patch, today string) (out []byte, changed bool, er
 	pl.setValues()
 	pl.changeTags(fm.Map)
 	if len(pl.touched) == 0 {
-		return src, false, nil
+		return src, nil, nil
 	}
 	pl.stampUpdated(today)
 
@@ -56,10 +57,11 @@ func ApplyPatch(src []byte, p Patch, today string) (out []byte, changed bool, er
 		eol = "\r\n"
 	}
 	out = slices.Concat(src[:fm.Start], []byte(pl.rebuild(lines, eol)), src[fm.End:])
-	if err := verifyPatch(src, out, fm, pl); err != nil {
-		return nil, false, err
+	newFM, err = verifyPatch(src, out, fm, pl)
+	if err != nil {
+		return nil, nil, err
 	}
-	return out, true, nil
+	return out, newFM, nil
 }
 
 // checkPatch rejects a patch that contradicts itself and returns the keys of
@@ -360,8 +362,8 @@ func nodeEqual(a, b *yaml.Node) bool {
 func isNull(n *yaml.Node) bool { return n.Kind == yaml.ScalarNode && n.Tag == "!!null" }
 
 // verifyPatch is the safety net: the result must re-read as the patch intended,
-// with every untouched key and the body unchanged.
-func verifyPatch(src, out []byte, old *vault.Frontmatter, pl *patchPlan) error {
+// with every untouched key and the body unchanged. It returns what it re-read.
+func verifyPatch(src, out []byte, old *vault.Frontmatter, pl *patchPlan) (*vault.Frontmatter, error) {
 	const failed = "internal error: the patched frontmatter did not re-read as intended (%w); " +
 		"nothing was written. Report this as a bug and use replace_doc instead"
 	bug := func(format string, args ...any) error {
@@ -369,11 +371,11 @@ func verifyPatch(src, out []byte, old *vault.Frontmatter, pl *patchPlan) error {
 	}
 	re, err := reread(out)
 	if err != nil {
-		return fmt.Errorf(failed, err)
+		return nil, fmt.Errorf(failed, err)
 	}
 	p, touched := pl.patch, pl.touched
 	if !bytes.Equal(out[re.BodyOffset:], src[old.BodyOffset:]) {
-		return bug("the body changed")
+		return nil, bug("the body changed")
 	}
 	var oldOrder, newOrder []string
 	for key, val := range vault.Pairs(old.Map) {
@@ -383,7 +385,7 @@ func verifyPatch(src, out []byte, old *vault.Frontmatter, pl *patchPlan) error {
 		}
 		oldOrder = append(oldOrder, k)
 		if !nodeEqual(val, vault.Field(re.Map, k)) {
-			return bug("%s changed", k)
+			return nil, bug("%s changed", k)
 		}
 	}
 	for key := range vault.Pairs(re.Map) {
@@ -392,23 +394,23 @@ func verifyPatch(src, out []byte, old *vault.Frontmatter, pl *patchPlan) error {
 		}
 	}
 	if !slices.Equal(oldOrder, newOrder) {
-		return bug("key order changed")
+		return nil, bug("key order changed")
 	}
 	for _, k := range pl.setKeys {
 		if k == "tags" {
 			continue
 		}
 		if !nodeEqual(vault.Field(p.Set, k), vault.Field(re.Map, k)) {
-			return bug("%s was not written as given", k)
+			return nil, bug("%s was not written as given", k)
 		}
 	}
 	for _, k := range p.Unset {
 		if vault.Field(re.Map, k) != nil {
-			return bug("%s is still present", k)
+			return nil, bug("%s is still present", k)
 		}
 	}
 	if pl.hasTagChange && !slices.Equal(vault.NormalizeTags(vault.Field(re.Map, "tags")), pl.wantTags) {
-		return bug("tags differ")
+		return nil, bug("tags differ")
 	}
-	return nil
+	return re, nil
 }
