@@ -1,6 +1,6 @@
 # Design decisions
 
-Each entry: the decision, what it replaced, why, and what it costs. Fill in as they are made; PRD section 6 is the starting list. Entries marked *(deviation)* differ from PRD.md; PRD.md itself is left as written. PLAN.md has the full reasoning for each open question referenced here (#n).
+Each entry: the decision, what it replaced, why, and what it costs. Fill in as they are made; PRD section 6 is the starting list. Entries marked *(deviation)* differ from PRD.md; PRD.md itself is left as written.
 
 ## Scan on every call, no persisted index
 - Instead of: an in-memory index built at startup plus a `rebuild` tool (lethain/library-mcp), or a stored index file.
@@ -113,7 +113,7 @@ Each entry: the decision, what it replaced, why, and what it costs. Fill in as t
 ## Writes: serialised, one retry, and a seam for the moment between write and rename (M2)
 - Instead of: unlocked writes, or a lock file.
 - Why: the server may get overlapping tool calls, so one mutex per `Writer` serialises them. A human can still save the file at any time, so `append_section` and `update_frontmatter` re-hash the file after staging the temp file and just before the rename. If it changed, they start over once from the new content, so the human's save is kept. If it changes twice in a row they stop with a "re-read and retry" error and write nothing. `replace_doc` never retries: a change after the hash check is a `ConflictError`, because the caller's content was based on the old version.
-- Test seam: an unexported `beforeRename` hook runs after the temp file is written and before the rename. `internal/write/seam_test.go` (package `write`) uses it to inject a failure, to simulate a human save in that window, and to check that no `.prep-tmp-*` file survives either. PLAN.md asked for an "injected failure" test without saying how; this is the least invasive way, and production code never sets it.
+- Test seam: an unexported `beforeRename` hook runs after the temp file is written and before the rename. `internal/write/seam_test.go` (package `write`) uses it to inject a failure, to simulate a human save in that window, and to check that no `.prep-tmp-*` file survives either. An injected-failure test needs some way in; this is the least invasive one, and production code never sets it.
 - Cost: a package-level variable that exists only for tests. `create_doc` checks that the file does not exist, stages, and checks again before the rename, but a rename cannot refuse to overwrite, so a file created in those microseconds would be replaced. Accepted: a human creating the same filename at that instant is not a case worth a hard-link dance that some filesystems lack.
 
 ## A nil `Git` means "do not commit, do not warn" (M2)
@@ -145,7 +145,7 @@ Each entry: the decision, what it replaced, why, and what it costs. Fill in as t
 
 ## `create_doc`'s description names the configured types; the description test uses a neutral config (M2)
 - Instead of: a static description, or checking descriptions against the example config.
-- Why: PLAN.md wants the description generated from the config so the model never reads the config file, and also wants descriptions free of domain words. The example config's type names are domain words by design, so both cannot hold for the example vault. The Go code only ever adds words that come from the config; `TestDescriptionsAreDomainNeutral` therefore runs against a vault whose config uses neutral names, and a separate test checks that the description lists the example vault's types, patterns and required fields.
+- Why: the description is generated from the config so the model never reads the config file, and descriptions must also be free of domain words. The example config's type names are domain words by design, so both cannot hold for the example vault. The Go code only ever adds words that come from the config; `TestDescriptionsAreDomainNeutral` therefore runs against a vault whose config uses neutral names, and a separate test checks that the description lists the example vault's types, patterns and required fields.
 - Cost: the neutrality check does not see what a real config puts into the description. That text is data the owner chose.
 
 ## The server's text tells the model to write to the vault, not to its own memory (M2)
@@ -235,7 +235,7 @@ Details the entry above leaves open. The tests are `internal/write/git_test.go`.
 - Every sort breaks ties by path, ascending, so output is deterministic.
 - `list_tags` treats `prefix` as a plain string prefix, so `issue` and `issue/` both work.
 - The default commit author is `Claude <claude@local>`. PRD 4.3 shows it only as an example value.
-- Why: PLAN.md open question 23, plus the small gaps the tests exposed.
+- Why: the PRD sets only `list_docs`' default of 50. The caps, the other defaults, inclusive date bounds and exact `where` matching (a list field matches if any element does) had to be chosen, and the tests exposed the small gaps.
 - Cost: no truncation. A vault with hundreds of open items produces a long `get_context`.
 
 ## `list_docs` returns `date` or `modified`, never a body

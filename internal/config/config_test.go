@@ -12,8 +12,8 @@ import (
 	"github.com/Arkoes07/prep-mcp/internal/testvault"
 )
 
-// The default author is not stated in PLAN.md; these tests assume it equals
-// the example config's author.
+// The PRD shows the author only as an example value; these tests assume the
+// default equals the example config's author.
 const defaultAuthor = "Claude <claude@local>"
 
 func TestParse(t *testing.T) {
@@ -502,7 +502,7 @@ func TestLoadExample(t *testing.T) {
 		t.Errorf("open_items[0].where.status = %v, want [open improving]", got)
 	}
 
-	// Example-data changes from PLAN.md M1.a.
+	// current_week_field is this project's addition to the PRD's example config.
 	if c.Context.CurrentWeekType != "week" || c.Context.CurrentWeekField != "week" {
 		t.Errorf("current week = %q / %q, want week / week", c.Context.CurrentWeekType, c.Context.CurrentWeekField)
 	}

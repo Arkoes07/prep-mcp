@@ -56,7 +56,7 @@ func TestResolve(t *testing.T) {
 		{".GIT/x.md", bad(""), bad("")},
 
 		{"templates/week.md", good("templates/week.md"), bad("templates/ is read-only")},
-		// Templates/x.md does not exist, so a read reports "not found" (PLAN.md lists it as ok).
+		// Templates/x.md does not exist, so a read reports "not found".
 		{"Templates/x.md", bad("not found"), bad("templates/ is read-only")},
 
 		{"weeks/2026-w03.txt", bad(".md only"), bad(".md only")},

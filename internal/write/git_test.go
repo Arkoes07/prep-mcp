@@ -15,7 +15,7 @@ import (
 )
 
 // These tests shell out to git. Each one isolates itself from the developer's
-// git setup (PLAN.md 4.3): no global or system config, no identity from the
+// git setup: no global or system config, no identity from the
 // environment, no GIT_DIR left over from a hook that launched `go test`.
 
 // isolateGit skips the test when git is missing and cuts every outside
@@ -238,7 +238,7 @@ func TestGitHumanStaged(t *testing.T) {
 	}
 }
 
-// The vault is a folder inside a bigger repo: never commit there (PLAN.md open question 19).
+// The vault is a folder inside a bigger repo: never commit there.
 func TestGitSubdirOfRepo(t *testing.T) {
 	e := newGitEnv(t, gitTimeout)
 	parent := filepath.Dir(e.root)

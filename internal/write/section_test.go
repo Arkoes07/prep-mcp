@@ -18,7 +18,7 @@ func TestInsertSection(t *testing.T) {
 		{name: "new_no_trailing_nl", src: "a", heading: "H", content: "c", want: "a\n\n## H\n\nc\n"},
 		{name: "existing_prose", src: "## H\nold\n", heading: "H", content: "new", want: "## H\nold\n\nnew\n"},
 		{name: "existing_list", src: "## Log\n- a\n", heading: "Log", content: "- b", want: "## Log\n- a\n- b\n"},
-		// Not in the plan table; both are the other half of the rule in PLAN.md #16.
+		// The other half of the rule: only a list after a list skips the blank line.
 		{name: "prose_after_list", src: "## Log\n- a\n", heading: "Log", content: "note", want: "## Log\n- a\n\nnote\n"},
 		{name: "list_after_prose", src: "## Log\nintro\n", heading: "Log", content: "- a", want: "## Log\nintro\n\n- a\n"},
 		{name: "before_next_section", src: "## A\nx\n\n## B\ny\n", heading: "A", content: "z", want: "## A\nx\n\nz\n\n## B\ny\n"},
