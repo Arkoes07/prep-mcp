@@ -25,7 +25,7 @@ func (r *Reader) TagStats(prefix string, since *time.Time) ([]TagCount, error) {
 	if err != nil {
 		return nil, err
 	}
-	voc, err := r.v.Vocabulary()
+	voc, err := r.v.Vocabulary(r.cfg.TagsFile)
 	if err != nil {
 		return nil, err
 	}

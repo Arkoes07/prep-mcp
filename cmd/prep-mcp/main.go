@@ -68,7 +68,7 @@ func run(ctx context.Context, args []string, getenv func(string) string, stderr 
 		return err
 	}
 
-	v, err := vault.Open(root, cfg)
+	v, err := vault.Open(root)
 	if err != nil {
 		return err
 	}

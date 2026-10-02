@@ -308,7 +308,7 @@ func (w *Writer) commit(ctx context.Context, tool string, res *Result) {
 // tagWarnings names the closest known tag for each added tag that is not in
 // the vocabulary. Without a vocabulary there is nothing to check against.
 func (w *Writer) tagWarnings(added []string) []string {
-	voc, err := w.v.Vocabulary()
+	voc, err := w.v.Vocabulary(w.cfg.TagsFile)
 	if err != nil {
 		return []string{fmt.Sprintf("could not read the tag vocabulary, so tags were not checked: %v", err)}
 	}

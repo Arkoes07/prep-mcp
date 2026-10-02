@@ -53,7 +53,7 @@ func (r *Reader) Context(day time.Time) (string, error) {
 	}
 	sections = append(sections, queries...)
 
-	voc, err := r.v.Vocabulary()
+	voc, err := r.v.Vocabulary(r.cfg.TagsFile)
 	if err != nil {
 		return "", err
 	}

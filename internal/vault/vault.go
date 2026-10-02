@@ -9,20 +9,17 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-
-	"github.com/Arkoes07/prep-mcp/internal/config"
 )
 
 // Vault is one root directory of markdown files.
 type Vault struct {
 	dir  string
 	root *os.Root
-	cfg  *config.Config
 }
 
 // Open opens the vault at dir. The directory is resolved through symlinks once.
 // The caller must Close the vault when done with it.
-func Open(dir string, cfg *config.Config) (*Vault, error) {
+func Open(dir string) (*Vault, error) {
 	abs, err := filepath.Abs(dir)
 	if err != nil {
 		return nil, fmt.Errorf("vault root %q: %w (pass an absolute --root)", dir, err)
@@ -35,7 +32,7 @@ func Open(dir string, cfg *config.Config) (*Vault, error) {
 	if err != nil {
 		return nil, fmt.Errorf("vault root %q: %w (check --root or PREP_ROOT)", dir, err)
 	}
-	return &Vault{dir: resolved, root: root, cfg: cfg}, nil
+	return &Vault{dir: resolved, root: root}, nil
 }
 
 // Dir returns the vault's absolute directory, resolved through symlinks.

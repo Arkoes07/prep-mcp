@@ -83,19 +83,19 @@ func ParseVocabulary(src []byte) *Vocabulary {
 	return voc
 }
 
-// Vocabulary loads the tags file named in the config. It returns nil, nil
-// when no tags file is configured or the file does not exist.
-func (v *Vault) Vocabulary() (*Vocabulary, error) {
-	if v.cfg.TagsFile == "" {
+// Vocabulary loads the vault-relative tags file. It returns nil, nil when
+// tagsFile is empty or the file does not exist.
+func (v *Vault) Vocabulary(tagsFile string) (*Vocabulary, error) {
+	if tagsFile == "" {
 		return nil, nil
 	}
-	src, err := v.root.ReadFile(v.cfg.TagsFile)
+	src, err := v.root.ReadFile(tagsFile)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("read tags file %s: %w; check its permissions or fix tags_file in the config",
-			v.cfg.TagsFile, err)
+			tagsFile, err)
 	}
 	return ParseVocabulary(src), nil
 }

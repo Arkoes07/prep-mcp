@@ -94,7 +94,7 @@ func Open(t testing.TB, dir string) (*config.Config, *vault.Vault) {
 	if err != nil {
 		t.Fatalf("testvault.Open: %v", err)
 	}
-	v, err := vault.Open(dir, cfg)
+	v, err := vault.Open(dir)
 	if err != nil {
 		t.Fatalf("testvault.Open: %v", err)
 	}
