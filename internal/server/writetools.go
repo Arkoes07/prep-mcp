@@ -14,7 +14,8 @@ import (
 	"github.com/Arkoes07/prep-mcp/internal/write"
 )
 
-// registerWriteTools adds the four write tools and batch. Their descriptions
+// registerWriteTools adds the four write tools and batch. Each write tool is a
+// batch of one: buildOp turns its arguments into the op. Their descriptions
 // are what the model sees, so create_doc's is generated from the config: the
 // model never has to read the config file.
 func registerWriteTools(s *mcp.Server, h *handlers) {
@@ -22,14 +23,14 @@ func registerWriteTools(s *mcp.Server, h *handlers) {
 	additive := &mcp.ToolAnnotations{DestructiveHint: &no, OpenWorldHint: &no}
 
 	mcp.AddTool(s, &mcp.Tool{
-		Name:        "create_doc",
+		Name:        write.ToolCreate,
 		Title:       "Create a document",
 		Description: createDocDescription(h.cfg),
 		Annotations: additive,
-	}, guard("create_doc", h.createDoc))
+	}, writeTool[createDocIn](h, write.ToolCreate))
 
 	mcp.AddTool(s, &mcp.Tool{
-		Name:  "append_section",
+		Name:  write.ToolAppend,
 		Title: "Append to a section",
 		Description: "Add text to a living document without touching the rest of it. " +
 			"Use this, not local memory or notes files, to add to a record that belongs in the vault. " +
@@ -39,10 +40,10 @@ func registerWriteTools(s *mcp.Server, h *handlers) {
 			"Frontmatter and all existing text stay byte for byte. Returns path, new hash, warnings and commit. " +
 			"This is the default way to add to a document.",
 		Annotations: additive,
-	}, guard("append_section", h.appendSection))
+	}, writeTool[appendSectionIn](h, write.ToolAppend))
 
 	mcp.AddTool(s, &mcp.Tool{
-		Name:  "update_frontmatter",
+		Name:  write.ToolPatch,
 		Title: "Update frontmatter",
 		Description: "Change frontmatter only; the body stays byte for byte and so do untouched keys. " +
 			"set: object of top-level keys to set (new keys are added at the end); unset: keys to remove; " +
@@ -51,10 +52,10 @@ func registerWriteTools(s *mcp.Server, h *handlers) {
 			"set.tags cannot be combined with add_tags/remove_tags. " +
 			"A patch that changes nothing writes nothing. Returns path, new hash and warnings such as unknown tags.",
 		Annotations: additive,
-	}, guard("update_frontmatter", h.updateFrontmatter))
+	}, writeTool[updateFrontmatterIn](h, write.ToolPatch))
 
 	mcp.AddTool(s, &mcp.Tool{
-		Name:  "replace_doc",
+		Name:  write.ToolReplace,
 		Title: "Replace a whole document",
 		Description: "Rewrite a whole file. Pass expected_hash from read_doc. " +
 			"If the file changed since (someone edited it), " +
@@ -64,7 +65,7 @@ func registerWriteTools(s *mcp.Server, h *handlers) {
 			"The new content must keep valid frontmatter and the type's required fields. " +
 			"Returns path, new hash and warnings.",
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes, OpenWorldHint: &no},
-	}, guard("replace_doc", h.replaceDoc))
+	}, writeTool[replaceDocIn](h, write.ToolReplace))
 
 	mcp.AddTool(s, &mcp.Tool{
 		Name:  "batch",
@@ -117,38 +118,38 @@ func createDocDescription(cfg *config.Config) string {
 	return b.String()
 }
 
-func writeResult(res *write.Result, err error) (*mcp.CallToolResult, any, error) {
-	if err != nil {
-		return nil, nil, err
+// writeTool is the handler of a single write tool, run as a batch of one. In
+// is the tool's argument type, for its schema; buildOp decodes the arguments,
+// as it does for a batch op.
+func writeTool[In any](h *handlers, tool string) mcp.ToolHandlerFor[In, any] {
+	handler := func(
+		ctx context.Context,
+		req *mcp.CallToolRequest,
+		_ In,
+	) (*mcp.CallToolResult, any, error) {
+		res, err := h.w.Apply(ctx, buildOp(tool, req.Params.Arguments))
+		if err != nil {
+			return nil, nil, err
+		}
+		return jsonResult(res)
 	}
-	res.Warnings = nonNil(res.Warnings)
-	return jsonResult(res)
+	return guard(tool, handler)
 }
 
-// nonNil makes the client see [], not null.
-func nonNil(s []string) []string {
-	if s == nil {
-		return []string{}
-	}
-	return s
-}
-
-// rawArgs pulls object-valued arguments out of a call's raw JSON, because
-// decoding them into a Go map would lose the order of their keys.
-func rawArgs(args json.RawMessage, keys ...string) (map[string]json.RawMessage, error) {
+// rawArg returns the object-valued argument key as the call's raw JSON has
+// it, because decoding it into a Go map would lose the order of its keys. It
+// is nil when the key is missing or null.
+func rawArg(args json.RawMessage, key string) (json.RawMessage, error) {
 	var all map[string]json.RawMessage
 	if len(args) > 0 {
 		if err := json.Unmarshal(args, &all); err != nil {
 			return nil, fmt.Errorf("arguments are not a JSON object: %w", err)
 		}
 	}
-	out := map[string]json.RawMessage{}
-	for _, k := range keys {
-		if v, ok := all[k]; ok && string(v) != "null" {
-			out[k] = v
-		}
+	if v := all[key]; string(v) != "null" {
+		return v, nil
 	}
-	return out, nil
+	return nil, nil
 }
 
 // The jsonschema tags are argument descriptions and cannot be split; see listDocsIn.
@@ -159,30 +160,22 @@ type createDocIn struct {
 	Slug        string         `json:"slug,omitempty" jsonschema:"Name for {slug} in the filename pattern. Defaults to the title field."`
 }
 
-func (h *handlers) createDoc(
-	ctx context.Context,
-	req *mcp.CallToolRequest,
-	in createDocIn,
-) (*mcp.CallToolResult, any, error) {
-	d, err := draftFrom(in, req.Params.Arguments)
-	if err != nil {
-		return nil, nil, err
+// decodeCreate builds create_doc's op, taking the frontmatter from the raw
+// JSON so its keys keep their order.
+func decodeCreate(args json.RawMessage) (write.Op, error) {
+	var in createDocIn
+	if err := decodeArgs(write.ToolCreate, args, &in); err != nil {
+		return write.Op{}, err
 	}
-	return writeResult(h.w.Create(ctx, d))
-}
-
-// draftFrom turns create_doc's arguments into a draft, taking the frontmatter
-// from the raw JSON so its keys keep their order.
-func draftFrom(in createDocIn, args json.RawMessage) (write.Draft, error) {
-	raw, err := rawArgs(args, "frontmatter")
+	raw, err := rawArg(args, "frontmatter")
 	if err != nil {
-		return write.Draft{}, err
+		return write.Op{}, err
 	}
-	fm, err := write.JSONToNode(raw["frontmatter"])
+	fm, err := write.JSONToNode(raw)
 	if err != nil {
-		return write.Draft{}, fmt.Errorf("frontmatter %w", err)
+		return write.Op{}, fmt.Errorf("frontmatter %w", err)
 	}
-	return write.Draft{Type: in.Type, Frontmatter: fm, Body: in.Body, Slug: in.Slug}, nil
+	return write.CreateOp(write.Draft{Type: in.Type, Frontmatter: fm, Body: in.Body, Slug: in.Slug}), nil
 }
 
 type appendSectionIn struct {
@@ -191,12 +184,12 @@ type appendSectionIn struct {
 	Content string `json:"content" jsonschema:"Markdown to add at the end of that section."`
 }
 
-func (h *handlers) appendSection(
-	ctx context.Context,
-	_ *mcp.CallToolRequest,
-	in appendSectionIn,
-) (*mcp.CallToolResult, any, error) {
-	return writeResult(h.w.AppendSection(ctx, in.Path, in.Heading, in.Content))
+func decodeAppend(args json.RawMessage) (write.Op, error) {
+	var in appendSectionIn
+	if err := decodeArgs(write.ToolAppend, args, &in); err != nil {
+		return write.Op{}, err
+	}
+	return write.AppendOp(in.Path, in.Heading, in.Content), nil
 }
 
 type updateFrontmatterIn struct {
@@ -207,32 +200,24 @@ type updateFrontmatterIn struct {
 	RemoveTags []string       `json:"remove_tags,omitempty" jsonschema:"Tags to remove."`
 }
 
-func (h *handlers) updateFrontmatter(
-	ctx context.Context,
-	req *mcp.CallToolRequest,
-	in updateFrontmatterIn,
-) (*mcp.CallToolResult, any, error) {
-	patch, err := patchFrom(in, req.Params.Arguments)
-	if err != nil {
-		return nil, nil, err
+// decodePatch builds update_frontmatter's op, taking set from the raw JSON so
+// its keys keep their order.
+func decodePatch(args json.RawMessage) (write.Op, error) {
+	var in updateFrontmatterIn
+	if err := decodeArgs(write.ToolPatch, args, &in); err != nil {
+		return write.Op{}, err
 	}
-	return writeResult(h.w.UpdateFrontmatter(ctx, in.Path, patch))
-}
-
-// patchFrom turns update_frontmatter's arguments into a patch, taking set
-// from the raw JSON so its keys keep their order.
-func patchFrom(in updateFrontmatterIn, args json.RawMessage) (write.Patch, error) {
 	patch := write.Patch{Unset: in.Unset, AddTags: in.AddTags, RemoveTags: in.RemoveTags}
-	raw, err := rawArgs(args, "set")
+	raw, err := rawArg(args, "set")
 	if err != nil {
-		return write.Patch{}, err
+		return write.Op{}, err
 	}
-	if set, ok := raw["set"]; ok {
-		if patch.Set, err = write.JSONToNode(set); err != nil {
-			return write.Patch{}, fmt.Errorf("set %w", err)
+	if raw != nil {
+		if patch.Set, err = write.JSONToNode(raw); err != nil {
+			return write.Op{}, fmt.Errorf("set %w", err)
 		}
 	}
-	return patch, nil
+	return write.PatchOp(in.Path, patch), nil
 }
 
 // The jsonschema tags are argument descriptions and cannot be split; see listDocsIn.
@@ -242,16 +227,16 @@ type replaceDocIn struct {
 	ExpectedHash string `json:"expected_hash" jsonschema:"The hash read_doc returned for the version you based this on."`
 }
 
-func (h *handlers) replaceDoc(
-	ctx context.Context,
-	_ *mcp.CallToolRequest,
-	in replaceDocIn,
-) (*mcp.CallToolResult, any, error) {
-	return writeResult(h.w.Replace(ctx, in.Path, in.Content, in.ExpectedHash))
+func decodeReplace(args json.RawMessage) (write.Op, error) {
+	var in replaceDocIn
+	if err := decodeArgs(write.ToolReplace, args, &in); err != nil {
+		return write.Op{}, err
+	}
+	return write.ReplaceOp(in.Path, in.Content, in.ExpectedHash), nil
 }
 
 // batchTools names the tools a batch op may use.
-const batchTools = "create_doc, append_section, update_frontmatter or replace_doc"
+const batchTools = write.ToolCreate + ", " + write.ToolAppend + ", " + write.ToolPatch + " or " + write.ToolReplace
 
 // The jsonschema tags are argument descriptions and cannot be split; see listDocsIn.
 type batchIn struct {
@@ -281,69 +266,42 @@ func (h *handlers) batch(
 	}
 	ops := make([]write.Op, len(raw.Ops))
 	for i, op := range raw.Ops {
-		ops[i] = opFrom(op.Tool, op.Args)
+		ops[i] = buildOp(op.Tool, op.Args)
 	}
 	res, err := h.w.Batch(ctx, ops, in.Message)
 	if err != nil {
 		return nil, nil, err
 	}
-	for i := range res.Results {
-		res.Results[i].Warnings = nonNil(res.Results[i].Warnings)
-	}
-	res.Warnings = nonNil(res.Warnings)
 	return jsonResult(res)
 }
 
-// opFrom builds a batch op from a write tool's name and raw arguments,
-// decoded as that tool decodes them. Arguments that do not decode give a
-// FailedOp, which the batch reports with the other failures.
-func opFrom(tool string, args json.RawMessage) write.Op {
-	op, err := buildOp(tool, args)
+// buildOp builds the op of a write tool from its name and raw arguments, for
+// the tool itself and for a batch op alike. Arguments that do not decode give
+// a FailedOp, which Apply and Batch report as that op's failure.
+func buildOp(tool string, args json.RawMessage) write.Op {
+	var (
+		op  write.Op
+		err error
+	)
+	switch tool {
+	case write.ToolCreate:
+		op, err = decodeCreate(args)
+	case write.ToolAppend:
+		op, err = decodeAppend(args)
+	case write.ToolPatch:
+		op, err = decodePatch(args)
+	case write.ToolReplace:
+		op, err = decodeReplace(args)
+	default:
+		err = fmt.Errorf("unknown tool %q; use %s", tool, batchTools)
+	}
 	if err != nil {
 		return write.FailedOp(tool, err)
 	}
 	return op
 }
 
-func buildOp(tool string, args json.RawMessage) (write.Op, error) {
-	switch tool {
-	case "create_doc":
-		var in createDocIn
-		if err := decodeArgs(tool, args, &in); err != nil {
-			return write.Op{}, err
-		}
-		d, err := draftFrom(in, args)
-		if err != nil {
-			return write.Op{}, err
-		}
-		return write.CreateOp(d), nil
-	case "append_section":
-		var in appendSectionIn
-		if err := decodeArgs(tool, args, &in); err != nil {
-			return write.Op{}, err
-		}
-		return write.AppendOp(in.Path, in.Heading, in.Content), nil
-	case "update_frontmatter":
-		var in updateFrontmatterIn
-		if err := decodeArgs(tool, args, &in); err != nil {
-			return write.Op{}, err
-		}
-		patch, err := patchFrom(in, args)
-		if err != nil {
-			return write.Op{}, err
-		}
-		return write.PatchOp(in.Path, patch), nil
-	case "replace_doc":
-		var in replaceDocIn
-		if err := decodeArgs(tool, args, &in); err != nil {
-			return write.Op{}, err
-		}
-		return write.ReplaceOp(in.Path, in.Content, in.ExpectedHash), nil
-	}
-	return write.Op{}, fmt.Errorf("unknown tool %q; use %s", tool, batchTools)
-}
-
-// decodeArgs decodes a batch op's args into the tool's own argument struct,
+// decodeArgs decodes a write tool's arguments into its argument struct,
 // rejecting unknown keys so a misspelt argument is not silently dropped.
 func decodeArgs(tool string, args json.RawMessage, v any) error {
 	if len(args) == 0 {
@@ -355,8 +313,12 @@ func decodeArgs(tool string, args json.RawMessage, v any) error {
 	var typeErr *json.UnmarshalTypeError
 	switch {
 	case errors.As(err, &typeErr):
-		return fmt.Errorf("args.%s has the wrong type (a %s); pass %s's own arguments as its schema describes",
-			typeErr.Field, typeErr.Value, tool)
+		return fmt.Errorf(
+			"args.%s has the wrong type (a %s); pass %s's own arguments as its schema describes",
+			typeErr.Field,
+			typeErr.Value,
+			tool,
+		)
 	case err != nil:
 		return fmt.Errorf("args: %w; pass %s's own arguments", err, tool)
 	}

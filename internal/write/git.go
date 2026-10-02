@@ -26,6 +26,9 @@ type Git struct {
 // left it behind (git runs with LC_ALL=C, so the message is stable).
 var lockRE = regexp.MustCompile(`Unable to create '([^']+\.lock)': File exists`)
 
+// shellSafeRE matches a word a POSIX shell takes as it is.
+var shellSafeRE = regexp.MustCompile(`^[A-Za-z0-9_./@%+=:,-]+$`)
+
 const (
 	defaultGitTimeout = 10 * time.Second
 	maxOutputInWarn   = 400
@@ -47,18 +50,28 @@ func (g *Git) Commit(ctx context.Context, dir string, paths []string, msg string
 	fail := func(format string, args ...any) (string, string) {
 		return "", "not committed: " + fmt.Sprintf(format, args...)
 	}
+	bin, name, email, err := g.identity()
+	if err != nil {
+		return fail("%s", err)
+	}
+	// fix is the command that makes this commit by hand, author and message included.
+	fix := fmt.Sprintf(
+		"run `git add -- %[1]s && git commit --only -m %[2]s --author=%[3]s -- %[1]s` in %[4]s",
+		pathList(paths),
+		shellQuote(msg),
+		shellQuote(name+" <"+email+">"),
+		dir,
+	)
 	// problem turns a failed git run into a warning, telling a timeout and a
 	// lock left by another git process from other failures.
 	problem := func(what, out string, err error) (string, string) {
 		switch {
 		case errors.Is(ctx.Err(), context.DeadlineExceeded):
 			return fail("git timed out after %s during %s (a hook or a prompt may be hanging). The file is saved; "+
-				"commit it yourself in %s", timeout, what, dir)
+				"to commit it, %s", timeout, what, fix)
 		case ctx.Err() != nil:
-			return fail("cancelled during %s. The file is saved; commit it yourself in %s", what, dir)
+			return fail("cancelled during %s. The file is saved; to commit it, %s", what, fix)
 		}
-		files := pathList(paths)
-		fix := fmt.Sprintf("run `git add -- %s && git commit --only -- %s` in %s", files, files, dir)
 		if m := lockRE.FindStringSubmatch(out); m != nil {
 			// A lock stops git add (index.lock) or only the commit (HEAD.lock, a branch's lock).
 			staged := "nothing was staged"
@@ -76,13 +89,14 @@ func (g *Git) Commit(ctx context.Context, dir string, paths []string, msg string
 				fix,
 			)
 		}
-		return fail("%s failed: %s. The file is saved; fix the cause, then %s", what, describe(out, err), fix)
+		return fail(
+			"%s failed: %s. The file is saved; fix the cause, then %s",
+			what,
+			describe(out, err),
+			fix,
+		)
 	}
 
-	bin, name, email, err := g.identity()
-	if err != nil {
-		return fail("%s", err)
-	}
 	r := runner{bin: bin, dir: dir, env: append(os.Environ(),
 		"GIT_TERMINAL_PROMPT=0",
 		"LC_ALL=C", // stable messages, so "not a git repository" can be recognised
@@ -177,12 +191,25 @@ func describe(out string, err error) string {
 	return s
 }
 
-// pathList names paths in a hint, at most maxPathsInWarn of them.
+// pathList is paths quoted for a hint's command, or a pointer to the result's
+// paths when there are more than maxPathsInWarn.
 func pathList(paths []string) string {
-	if len(paths) <= maxPathsInWarn {
-		return strings.Join(paths, " ")
+	if len(paths) > maxPathsInWarn {
+		return "<the paths in results>"
 	}
-	return fmt.Sprintf("%s (and %d more)", strings.Join(paths[:maxPathsInWarn], " "), len(paths)-maxPathsInWarn)
+	quoted := make([]string, len(paths))
+	for i, p := range paths {
+		quoted[i] = shellQuote(p)
+	}
+	return strings.Join(quoted, " ")
+}
+
+// shellQuote quotes s for a POSIX shell, so a hint's command runs as shown.
+func shellQuote(s string) string {
+	if shellSafeRE.MatchString(s) {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 // samePath compares two directories after resolving symlinks (~/prep may be a

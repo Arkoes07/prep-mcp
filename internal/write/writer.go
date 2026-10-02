@@ -3,7 +3,6 @@
 package write
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -20,8 +19,8 @@ import (
 )
 
 // Writer applies safe changes to one vault. Writes are serialised, every
-// write goes through the batch engine (batch.go), and every file is replaced
-// atomically. A nil Git means no commits and no commit warnings.
+// write goes through the batch engine (batch.go, Apply and Batch), and every
+// file is replaced atomically. A nil Git means no commits and no commit warnings.
 type Writer struct {
 	mu  sync.Mutex
 	v   *vault.Vault
@@ -52,7 +51,7 @@ func (e *ConflictError) Error() string {
 		"re-read with read_doc, merge, retry with expected_hash set to the current hash", e.Path, e.Current)
 }
 
-// Draft is a document for Create to make.
+// Draft is a document for CreateOp to make.
 type Draft struct {
 	Type        string     // a configured type
 	Frontmatter *yaml.Node // a mapping in the order to write it; nil for none
@@ -60,15 +59,10 @@ type Draft struct {
 	Slug        string // fills {slug} in the filename; empty means the title field
 }
 
-// Create makes a new document of a configured type. The path comes from the
-// type's folder and filename pattern.
-func (w *Writer) Create(ctx context.Context, d Draft) (*Result, error) {
-	return w.single(ctx, CreateOp(d))
-}
-
-// planCreate builds a new document and adds it to the plan. It fails if the
-// file exists on disk or was created earlier in the batch.
-func (w *Writer) planCreate(p *batchPlan, d Draft) (*file, []string, error) {
+// create builds a new document and adds it to the plan. It fails if the file
+// exists on disk or was created earlier in the batch.
+func (p *batchPlan) create(d Draft) (*file, []string, error) {
+	w := p.w
 	spec, ok := w.cfg.Types[d.Type]
 	if !ok {
 		return nil, nil, fmt.Errorf("unknown type %q; configured types: %s", d.Type, w.cfg.TypeList())
@@ -107,14 +101,14 @@ func (w *Writer) planCreate(p *batchPlan, d Draft) (*file, []string, error) {
 			"Report this as a bug", err)
 	}
 
-	f, err := p.file(w, rel)
+	f, err := p.file(rel)
 	if err != nil {
 		return nil, nil, err
 	}
 	if f.exists {
 		return nil, nil, fmt.Errorf("file exists: %s (use append_section or update_frontmatter)", rel)
 	}
-	f.cur, f.exists, f.edited = data, true, true
+	f.cur, f.exists = data, true
 	return f, w.tagWarnings(vault.NormalizeTags(vault.Field(doc, "tags"))), nil
 }
 
@@ -148,17 +142,6 @@ func newFrontmatter(typ string, fm *yaml.Node, today string) (*yaml.Node, error)
 	return doc, nil
 }
 
-// AppendSection adds content to the end of a "## heading" section, or adds
-// the section at the end of the file.
-func (w *Writer) AppendSection(ctx context.Context, p, heading, content string) (*Result, error) {
-	return w.single(ctx, AppendOp(p, heading, content))
-}
-
-// UpdateFrontmatter changes frontmatter keys and tags, leaving the body's bytes alone.
-func (w *Writer) UpdateFrontmatter(ctx context.Context, p string, patch Patch) (*Result, error) {
-	return w.single(ctx, PatchOp(p, patch))
-}
-
 // patchDoc applies patch to a document's bytes. A patch that changes nothing
 // returns old.
 func (w *Writer) patchDoc(old []byte, patch Patch) ([]byte, []string, error) {
@@ -187,34 +170,24 @@ func (w *Writer) patchDoc(old []byte, patch Patch) ([]byte, []string, error) {
 	return next, append(warnings, w.tagWarnings(newTags(oldTags, tagsOf(next)))...), nil
 }
 
-// Replace rewrites a whole file, but only if it still has the content whose
-// hash the caller read.
-func (w *Writer) Replace(ctx context.Context, p, content, expectedHash string) (*Result, error) {
-	return w.single(ctx, ReplaceOp(p, content, expectedHash))
-}
-
-// planReplace checks a full rewrite against the file as the batch sees it.
-// expectedHash is of the file as the caller read it, so a path an earlier op
-// in the batch changed cannot be replaced.
-func (w *Writer) planReplace(p *batchPlan, path, content, expectedHash string) (*file, []string, error) {
+// replace checks a full rewrite of docPath against the file as the batch sees
+// it. expectedHash is of the file as the caller read it, so a path an earlier
+// op in the batch changed cannot be replaced.
+func (p *batchPlan) replace(docPath, content, expectedHash string) (*file, []string, error) {
 	expected := strings.ToLower(strings.TrimSpace(expectedHash))
 	if expected == "" {
 		return nil, nil, errors.New("expected_hash is required; get it from read_doc")
 	}
-	rel, err := w.v.Resolve(path, vault.AccessWrite)
+	f, err := p.existing(docPath)
 	if err != nil {
 		return nil, nil, err
 	}
-	f, err := p.existing(w, rel)
-	if err != nil {
-		return nil, nil, err
-	}
-	if f.edited {
+	if f.changed() {
 		return nil, nil, fmt.Errorf("an earlier op in this batch changed %s; "+
-			"put replace_doc first for %s, or fold that change into its content", rel, rel)
+			"put replace_doc first for %s, or fold that change into its content", f.rel, f.rel)
 	}
 	if cur := vault.Hash(f.cur); cur != expected {
-		return nil, nil, &ConflictError{Path: rel, Current: cur}
+		return nil, nil, &ConflictError{Path: f.rel, Current: cur}
 	}
 
 	data := []byte(content)
@@ -230,17 +203,15 @@ func (w *Writer) planReplace(p *batchPlan, path, content, expectedHash string) (
 	if typ == "" {
 		warnings = append(warnings, "the new content has no frontmatter with a type, "+
 			"so this document will no longer appear in queries (list_docs, search_text, get_context)")
-	} else if spec, ok := w.cfg.Types[typ]; ok {
+	} else if spec, ok := p.w.cfg.Types[typ]; ok {
 		if missing := missingFields(spec.Required, fm.Map); len(missing) > 0 {
 			return nil, nil, fmt.Errorf("missing required fields for %s: %s; keep them in the frontmatter",
 				typ, strings.Join(missing, ", "))
 		}
 	}
-	warnings = append(warnings, w.tagWarnings(newTags(tagsOf(f.cur), tagsOf(data)))...)
+	warnings = append(warnings, p.w.tagWarnings(newTags(tagsOf(f.cur), tagsOf(data)))...)
 
-	if !bytes.Equal(data, f.cur) {
-		f.cur, f.edited = data, true
-	}
+	f.cur = data
 	return f, warnings, nil
 }
 
@@ -252,7 +223,12 @@ func (w *Writer) commit(ctx context.Context, paths []string, msg string) (string
 	if w.git == nil || !w.cfg.CommitOnWrite || len(paths) == 0 {
 		return "", nil
 	}
-	hash, warning := w.git.Commit(ctx, w.v.Dir(), paths, msg)
+	hash, warning := w.git.Commit(
+		ctx,
+		w.v.Dir(),
+		paths,
+		msg,
+	)
 	if warning == "" {
 		return hash, nil
 	}

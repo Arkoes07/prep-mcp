@@ -74,55 +74,19 @@ const gitLockMsg = "git's lock file is there, so AI writes are saved but not com
 	"Another git process may be running, or one crashed and left it behind. " +
 	"Once no git process is running in the vault, delete it; prep-mcp never deletes it"
 
-// gitLockProblems lists the git lock files that would stop every AI commit.
-// It only looks, and only when commits are on and the vault is the root of
-// its repository, as for commits.
+// gitLockProblems lists the git lock files in the vault's .git folder that
+// would stop every AI commit. It only looks, and only when commits are on.
 func (r *Reader) gitLockProblems() []Problem {
 	if !r.cfg.CommitOnWrite {
 		return nil
 	}
-	gitDir, ok := gitDirOf(r.v.Dir())
-	if !ok {
-		return nil
-	}
 	var problems []Problem
-	for _, name := range []string{"HEAD.lock", "index.lock"} {
-		p := filepath.Join(gitDir, name)
-		if _, err := os.Lstat(p); err != nil {
-			continue
+	for _, name := range []string{".git/HEAD.lock", ".git/index.lock"} {
+		if _, err := os.Lstat(filepath.Join(r.v.Dir(), name)); err == nil {
+			problems = append(problems, Problem{Path: name, Msg: gitLockMsg})
 		}
-		shown := p
-		if rel, err := filepath.Rel(r.v.Dir(), p); err == nil && filepath.IsLocal(rel) {
-			shown = filepath.ToSlash(rel)
-		}
-		problems = append(problems, Problem{Path: shown, Msg: gitLockMsg})
 	}
 	return problems
-}
-
-// gitDirOf finds the git directory of a repository rooted at dir: dir/.git,
-// or the directory a .git file names (a worktree or a submodule).
-func gitDirOf(dir string) (string, bool) {
-	dotGit := filepath.Join(dir, ".git")
-	fi, err := os.Stat(dotGit)
-	switch {
-	case err != nil:
-		return "", false
-	case fi.IsDir():
-		return dotGit, true
-	}
-	b, err := os.ReadFile(dotGit)
-	if err != nil {
-		return "", false
-	}
-	target, ok := strings.CutPrefix(strings.TrimSpace(string(b)), "gitdir: ")
-	if !ok {
-		return "", false
-	}
-	if !filepath.IsAbs(target) {
-		target = filepath.Join(dir, target)
-	}
-	return target, true
 }
 
 // rulesSection renders the working rules file, or "" when there is none.

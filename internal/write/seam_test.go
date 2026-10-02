@@ -58,11 +58,13 @@ func TestFailureBeforeRenameLeavesNothingBehind(t *testing.T) {
 		return errors.New("injected failure")
 	})
 
-	if _, err := w.AppendSection(context.Background(), p, "Log", "- Tue: x"); err == nil || !strings.Contains(err.Error(), "injected failure") {
-		t.Fatalf("AppendSection error = %v, want the injected failure", err)
+	_, err = w.Apply(context.Background(), AppendOp(p, "Log", "- Tue: x"))
+	if err == nil || !strings.Contains(err.Error(), "injected failure") {
+		t.Fatalf("append error = %v, want the injected failure", err)
 	}
-	if _, err := w.Create(context.Background(), Draft{Type: "reference", Frontmatter: nodeOf(t, `{"title":"T"}`), Body: "x"}); err == nil {
-		t.Fatal("Create succeeded despite the injected failure")
+	d := Draft{Type: "reference", Frontmatter: nodeOf(t, `{"title":"T"}`), Body: "x"}
+	if _, err := w.Apply(context.Background(), CreateOp(d)); err == nil {
+		t.Fatal("create succeeded despite the injected failure")
 	}
 	if got, _ := os.ReadFile(filepath.Join(root, p)); string(got) != string(orig) {
 		t.Errorf("the target changed:\n%s", got)
@@ -91,7 +93,7 @@ func TestHumanEditDuringWriteIsKept(t *testing.T) {
 		}
 		return nil
 	})
-	res, err := w.AppendSection(context.Background(), p, "Log", "- Tue: x")
+	res, err := w.Apply(context.Background(), AppendOp(p, "Log", "- Tue: x"))
 	if err != nil {
 		t.Fatalf("AppendSection: %v", err)
 	}
@@ -118,7 +120,7 @@ func TestGivesUpWhenFileKeepsChanging(t *testing.T) {
 		b, _ := os.ReadFile(target)
 		return os.WriteFile(target, append(b, "- edit\n"...), 0o644)
 	})
-	_, err := w.AppendSection(context.Background(), p, "Log", "- Tue: x")
+	_, err := w.Apply(context.Background(), AppendOp(p, "Log", "- Tue: x"))
 	if err == nil || !strings.Contains(err.Error(), "re-read it with read_doc") {
 		t.Fatalf("error = %v, want a retry hint", err)
 	}
@@ -142,7 +144,7 @@ func TestReplaceConflictAtRename(t *testing.T) {
 	setSeam(t, func(string) error {
 		return os.WriteFile(target, append(append([]byte{}, orig...), "- human edit\n"...), 0o644)
 	})
-	_, err := w.Replace(context.Background(), p, string(orig)+"- ai\n", vault.Hash(orig))
+	_, err := w.Apply(context.Background(), ReplaceOp(p, string(orig)+"- ai\n", vault.Hash(orig)))
 	var ce *ConflictError
 	if !errors.As(err, &ce) {
 		t.Fatalf("error %T (%v), want *ConflictError", err, err)

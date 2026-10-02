@@ -196,17 +196,6 @@ func TestContextGitLocks(t *testing.T) {
 			want: true,
 		},
 		{
-			// A worktree or submodule: .git is a file naming the real git dir.
-			name: "gitdir_file",
-			setup: func(t *testing.T, root string) []string {
-				gitDir := filepath.Join(filepath.Dir(root), "real.git")
-				testvault.Write(t, gitDir, "HEAD.lock", "")
-				testvault.Write(t, root, ".git", "gitdir: "+gitDir+"\n")
-				return []string{filepath.Join(gitDir, "HEAD.lock")}
-			},
-			want: true,
-		},
-		{
 			name: "commits_off",
 			setup: func(t *testing.T, root string) []string {
 				testvault.Write(t, root, ".git/index.lock", "")
@@ -235,11 +224,7 @@ func TestContextGitLocks(t *testing.T) {
 				if tc.want && !strings.Contains(problems, line) {
 					t.Errorf("Problems does not name %s:\n%s", lock, problems)
 				}
-				p := lock
-				if !filepath.IsAbs(p) {
-					p = filepath.Join(root, p)
-				}
-				if _, err := os.Stat(p); err != nil {
+				if _, err := os.Stat(filepath.Join(root, lock)); err != nil {
 					t.Errorf("get_context must not remove %s: %v", lock, err)
 				}
 			}

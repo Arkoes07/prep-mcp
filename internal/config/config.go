@@ -197,11 +197,23 @@ func fieldListErrors(label string, fields, shown []string) []error {
 	return errs
 }
 
-// typeErrors checks every type's folder, filename pattern and show list.
+// notDates are the always-shown fields that can never date a document.
+var notDates = []string{"type", "title", "tags"}
+
+// typeErrors checks every type's folder, filename pattern, date field and show list.
 func (c *Config) typeErrors() []error {
 	var errs []error
 	for _, name := range c.TypeNames() {
 		t := c.Types[name]
+		if strings.TrimSpace(t.DateField) == "" || slices.Contains(notDates, t.DateField) {
+			errs = append(errs, fmt.Errorf(
+				"type %s: date_field %q cannot hold a date; "+
+					"name the field that holds YYYY-MM-DD, or remove date_field to use %s",
+				name,
+				t.DateField,
+				DefaultDateField,
+			))
+		}
 		// The type's date field is shown as date already.
 		shown := append(slices.Clone(alwaysShown), t.DateField)
 		errs = append(errs, fieldListErrors("type "+name+": show", t.Show, shown)...)

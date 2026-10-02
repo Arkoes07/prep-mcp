@@ -208,6 +208,22 @@ types:
 			},
 		},
 		{
+			name: "date_field_blank",
+			yaml: `
+types:
+  note: {folder: notes, filename: "{slug}.md", date_field: " "}
+`,
+			wantErr: []string{`type note: date_field " " cannot hold a date`, "remove date_field"},
+		},
+		{
+			name: "date_field_not_a_date",
+			yaml: `
+types:
+  note: {folder: notes, filename: "{slug}.md", date_field: tags}
+`,
+			wantErr: []string{`type note: date_field "tags" cannot hold a date`},
+		},
+		{
 			name: "summary_fields",
 			yaml: `
 summary_fields: [priority, owner]

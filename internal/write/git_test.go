@@ -79,10 +79,19 @@ func gitFor(e *env, bin string, timeout time.Duration) *write.Git {
 
 const gitTimeout = 10 * time.Second
 
+// ddiaOp creates learning/ddia-ch5.md.
+func ddiaOp(t *testing.T) write.Op {
+	return write.CreateOp(write.Draft{
+		Type:        "learning",
+		Frontmatter: node(t, `{"title":"DDIA ch5","track":"ddia"}`),
+		Body:        "x",
+	})
+}
+
 // createNote writes learning/ddia-ch5.md through the writer.
 func createNote(t *testing.T, e *env) *write.Result {
 	t.Helper()
-	res, err := e.w.Create(ctx, write.Draft{Type: "learning", Frontmatter: node(t, `{"title":"DDIA ch5","track":"ddia"}`), Body: "x"})
+	res, err := e.w.Apply(ctx, ddiaOp(t))
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -194,17 +203,18 @@ func TestGitEachTool(t *testing.T) {
 		do        func(t *testing.T) (*write.Result, error)
 	}{
 		{"create_doc: learning/ddia-ch5.md", "learning/ddia-ch5.md", func(t *testing.T) (*write.Result, error) {
-			return e.w.Create(ctx, write.Draft{Type: "learning", Frontmatter: node(t, `{"title":"DDIA ch5","track":"ddia"}`), Body: "x"})
+			return e.w.Apply(ctx, ddiaOp(t))
 		}},
 		{"append_section: weeks/2026-w03.md", "weeks/2026-w03.md", func(t *testing.T) (*write.Result, error) {
-			return e.w.AppendSection(ctx, "weeks/2026-w03.md", "Log", "- Tue: x")
+			return e.w.Apply(ctx, write.AppendOp("weeks/2026-w03.md", "Log", "- Tue: x"))
 		}},
 		{"update_frontmatter: improvements/buries-headline.md", "improvements/buries-headline.md", func(t *testing.T) (*write.Result, error) {
-			return e.w.UpdateFrontmatter(ctx, "improvements/buries-headline.md", write.Patch{Set: node(t, `{"status":"improving"}`)})
+			patch := write.Patch{Set: node(t, `{"status":"improving"}`)}
+			return e.w.Apply(ctx, write.PatchOp("improvements/buries-headline.md", patch))
 		}},
 		{"replace_doc: learning/ddia-ch5.md", "learning/ddia-ch5.md", func(t *testing.T) (*write.Result, error) {
 			old := e.read(t, "learning/ddia-ch5.md")
-			return e.w.Replace(ctx, "learning/ddia-ch5.md", old+"more\n", vault.Hash([]byte(old)))
+			return e.w.Apply(ctx, write.ReplaceOp("learning/ddia-ch5.md", old+"more\n", vault.Hash([]byte(old))))
 		}},
 	}
 	for _, s := range steps {
@@ -259,11 +269,7 @@ func TestGitBatchOneCommit(t *testing.T) {
 		{
 			name: "caller_message",
 			ops: []write.Op{
-				write.CreateOp(write.Draft{
-					Type:        "learning",
-					Frontmatter: node(t, `{"title":"DDIA ch5","track":"ddia"}`),
-					Body:        "x",
-				}),
+				ddiaOp(t),
 				write.AppendOp("weeks/2026-w03.md", "Log", "- Wed: y"),
 			},
 			message: "  Import reading notes\n",
@@ -355,7 +361,7 @@ func TestGitRootViaSymlink(t *testing.T) {
 		w := write.New(v, e.cfg, gitFor(e, "git", gitTimeout), testvault.Clock())
 		before := commitCount(t, e.root)
 
-		res, err := w.Create(ctx, write.Draft{Type: "learning", Frontmatter: node(t, `{"title":"DDIA ch5","track":"ddia"}`), Body: "x"})
+		res, err := w.Apply(ctx, ddiaOp(t))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -515,6 +521,46 @@ func TestGitBatchLock(t *testing.T) {
 	}
 }
 
+// The command in a warning makes the commit the write could not, with the
+// configured author and the write's message, even for a path a shell would split.
+func TestGitHintCommandRuns(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the hint is a POSIX shell command")
+	}
+	const p = "weeks/odd 'name'.md"
+	e := newGitEnv(t, gitTimeout)
+	testvault.Write(t, e.root, p, "# Odd\n")
+	initRepo(t, e.root)
+	lock := filepath.Join(e.root, ".git", "index.lock")
+	if err := os.WriteFile(lock, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := e.w.Apply(ctx, write.AppendOp(p, "Log", "- Tue: x"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, after, _ := strings.Cut(strings.Join(res.Warnings, "\n"), "then run `")
+	cmdline, _, ok := strings.Cut(after, "`")
+	if !ok {
+		t.Fatalf("no command in the warnings %q", res.Warnings)
+	}
+	if err := os.Remove(lock); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command("sh", "-c", cmdline)
+	cmd.Dir = e.root
+	cmd.Env = append(os.Environ(), "GIT_COMMITTER_NAME=Human", "GIT_COMMITTER_EMAIL=human@local")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("%s: %v\n%s", cmdline, err, out)
+	}
+	got := git(t, e.root, "log", "-1", "--format=%an <%ae>|%s")
+	if want := e.cfg.Author + "|append_section: " + p; got != want {
+		t.Errorf("last commit = %q, want %q", got, want)
+	}
+}
+
 func TestGitNoBinary(t *testing.T) {
 	e := newGitEnv(t, gitTimeout)
 	initRepo(t, e.root)
@@ -539,7 +585,8 @@ func TestGitNoopUpdate(t *testing.T) {
 	initRepo(t, e.root)
 	before := commitCount(t, e.root)
 
-	res, err := e.w.UpdateFrontmatter(ctx, "improvements/buries-headline.md", write.Patch{Set: node(t, `{"status":"open"}`)})
+	patch := write.Patch{Set: node(t, `{"status":"open"}`)}
+	res, err := e.w.Apply(ctx, write.PatchOp("improvements/buries-headline.md", patch))
 	if err != nil {
 		t.Fatal(err)
 	}

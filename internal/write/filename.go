@@ -48,7 +48,12 @@ func RenderFilename(spec config.TypeSpec, fm *yaml.Node, slug string, today time
 	var firstErr error
 	out := placeholderRE.ReplaceAllStringFunc(spec.Filename, func(m string) string {
 		name := m[1 : len(m)-1]
-		val, err := placeholderValue(name, fm, slug, date)
+		val, err := placeholderValue(
+			name,
+			fm,
+			slug,
+			date,
+		)
 		if err != nil && firstErr == nil {
 			firstErr = err
 		}

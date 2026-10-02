@@ -279,6 +279,7 @@ Details the entry above leaves open. The tests are `internal/write/git_test.go`.
 
 ## Every write is a batch of one (2026-10-02)
 - Instead of: keeping a code path per write tool next to the batch engine.
+- How: `Writer.Apply(ctx, op)` runs one op, `Writer.Batch(ctx, ops, message)` several; `CreateOp`, `AppendOp`, `PatchOp` and `ReplaceOp` describe every write, each carrying the function that applies it to the plan. In the server, a write tool's arguments and a batch op's go through the same decoder (`buildOp`).
 - Why: one set of guarantees and one set of tests. The existing write, seam and git tests passed through the engine unchanged and now guard it too. Single tools keep their own error texts (unlabelled) and commit messages (`<tool>: <path>`).
 - Cost: a single write builds a one-op plan it does not need. A `replace_doc` whose content equals the file is now a no-op rather than a rewrite of the same bytes; there was no commit either way.
 
@@ -290,7 +291,7 @@ Details the entry above leaves open. The tests are `internal/write/git_test.go`.
 
 ## Per-type `date_field` (2026-10-02)
 - Instead of: the fixed field `date`, which made the real vault rename `applied` to `date` so applications could be filtered by date.
-- How: a type may set `date_field`, default `date`. The scan reads it, so `since`/`until`, date sorting, `get_context`'s recent queries and the tag dates follow it, and so does the `{date}` filename placeholder. A document without the field is dated by mtime; a `date` key on a type whose date field is another is an ordinary field.
+- How: a type may set `date_field`, default `date`. The scan reads it, so `since`/`until`, date sorting, `get_context`'s recent queries and the tag dates follow it, and so does the `{date}` filename placeholder. A document without the field is dated by mtime; a `date` key on a type whose date field is another is an ordinary field. Validation rejects a blank `date_field` and `type`, `title` or `tags`, which never hold a date.
 - Why `{date}` follows it: otherwise a type with `date_field: applied` and `{date}-{slug}.md` would name its files with today's date.
 - Cost: one more config key. Without a `type`, `list_docs` dates each document by its own type's field, so one `since` can compare different fields for different types.
 
@@ -303,12 +304,12 @@ Details the entry above leaves open. The tests are `internal/write/git_test.go`.
 ## A git lock: warn, never delete; flag it at session start (2026-10-02)
 - Instead of: deleting a stale `index.lock` or `HEAD.lock`, or passing git's raw message on as the warning.
 - Why: a live lock cannot be told from a stale one, and deleting the lock of a running git (a GUI, the Obsidian Git plugin, an open commit editor) can corrupt the index. The lock is the human's to remove. On the first day a manual commit left locks that would have blocked every later AI commit, behind a generic warning on each write.
-- How: when git says `Unable to create '<path>.lock': File exists`, the write's warning names the lock, says whether the change was staged, and says to delete the lock once no git process is running, with the command that commits afterwards. `get_context` lists `HEAD.lock` and `index.lock` in the vault's git directory (or the one a `.git` file names) under Problems when commits are on. It only looks.
+- How: when git says `Unable to create '<path>.lock': File exists`, the write's warning names the lock, says whether the change was staged, and says to delete the lock once no git process is running, with the command that commits afterwards: paths shell-quoted (or `<the paths in results>` past five), the write's message and the configured author, so it runs as shown and keeps the AI author. Timeout and cancel warnings carry the same command. `get_context` lists `.git/HEAD.lock` and `.git/index.lock` under Problems when commits are on. It only looks.
 - Cost: until the human removes the lock, every AI write is saved but not committed.
   - With `index.lock`, `git add` fails, so nothing is staged: the writes are plain working-tree changes.
   - With `HEAD.lock` (or a branch's ref lock), `git add` succeeds and only the commit fails, so each write stays staged. The next successful AI commit of the same path picks it up; other paths stay staged.
-  - Either way, writes the human then commits by hand lose the AI author.
-  - The write warning relies on git's English message, which `LC_ALL=C` pins and a test checks. The session-start check knows only those two lock names.
+  - Either way, writes the human commits by hand without that command lose the AI author.
+  - The write warning relies on git's English message, which `LC_ALL=C` pins and a test checks. The session-start check knows only those two lock names, and only in a `.git` folder: a vault that is a worktree or submodule (`.git` is a file) gets no session-start check, though its write warnings still name the lock.
 
 ## Server clock
 - `read.Reader.Now()` is the read side's clock. Production passes `time.Now`, tests pass a fixed day. `get_context` uses it only when the caller gives no `date`.

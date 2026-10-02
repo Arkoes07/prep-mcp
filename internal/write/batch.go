@@ -24,62 +24,75 @@ import (
 // MaxBatchOps is the most ops one Batch takes.
 const MaxBatchOps = 200
 
-// The tools an Op stands for, as named in commit messages and errors.
+// The write tools an Op stands for, as named in commit messages, errors and
+// the server's tool list.
 const (
-	toolCreate  = "create_doc"
-	toolAppend  = "append_section"
-	toolPatch   = "update_frontmatter"
-	toolReplace = "replace_doc"
+	ToolCreate  = "create_doc"
+	ToolAppend  = "append_section"
+	ToolPatch   = "update_frontmatter"
+	ToolReplace = "replace_doc"
 )
 
-// Op is one write: a tool and its arguments. Build it with CreateOp,
-// AppendOp, PatchOp, ReplaceOp or FailedOp.
+// Op is one write: the tool it stands for, what it targets (a path, or the
+// type for create_doc) and how it changes a plan. Build it with CreateOp,
+// AppendOp, PatchOp, ReplaceOp or FailedOp, and run it with Apply or Batch.
 type Op struct {
-	tool    string
-	draft   Draft  // create_doc
-	path    string // the other tools
-	heading string // append_section
-	content string // append_section, replace_doc
-	patch   Patch  // update_frontmatter
-	hash    string // replace_doc's expected hash
-	err     error  // FailedOp
+	tool, target string
+	apply        func(p *batchPlan) (*file, []string, error)
 }
 
-// CreateOp is a create_doc.
-func CreateOp(d Draft) Op { return Op{tool: toolCreate, draft: d} }
+// CreateOp makes a new document of a configured type. The path comes from the
+// type's folder and filename pattern.
+func CreateOp(d Draft) Op {
+	return Op{tool: ToolCreate, target: d.Type, apply: func(p *batchPlan) (*file, []string, error) {
+		return p.create(d)
+	}}
+}
 
-// AppendOp is an append_section.
+// AppendOp adds content to the end of a "## heading" section, or adds the
+// section at the end of the file.
 func AppendOp(path, heading, content string) Op {
-	return Op{tool: toolAppend, path: path, heading: heading, content: content}
+	return Op{tool: ToolAppend, target: path, apply: func(p *batchPlan) (*file, []string, error) {
+		return p.modify(path, func(old []byte) ([]byte, []string, error) {
+			next, err := InsertSection(old, heading, content)
+			return next, nil, err
+		})
+	}}
 }
 
-// PatchOp is an update_frontmatter.
-func PatchOp(path string, p Patch) Op { return Op{tool: toolPatch, path: path, patch: p} }
+// PatchOp changes frontmatter keys and tags, leaving the body's bytes alone.
+func PatchOp(path string, patch Patch) Op {
+	return Op{tool: ToolPatch, target: path, apply: func(p *batchPlan) (*file, []string, error) {
+		return p.modify(path, func(old []byte) ([]byte, []string, error) {
+			return p.w.patchDoc(old, patch)
+		})
+	}}
+}
 
-// ReplaceOp is a replace_doc.
+// ReplaceOp rewrites a whole file, but only if it still has the content whose
+// hash the caller read.
 func ReplaceOp(path, content, expectedHash string) Op {
-	return Op{tool: toolReplace, path: path, content: content, hash: expectedHash}
+	return Op{tool: ToolReplace, target: path, apply: func(p *batchPlan) (*file, []string, error) {
+		return p.replace(path, content, expectedHash)
+	}}
 }
 
 // FailedOp stands for an op of tool the caller could not build, for example
-// because its arguments did not decode. Batch reports err with the other
-// failures.
-func FailedOp(tool string, err error) Op { return Op{tool: tool, err: err} }
+// because its arguments did not decode. Apply and Batch report err as its failure.
+func FailedOp(tool string, err error) Op {
+	return Op{tool: tool, apply: func(*batchPlan) (*file, []string, error) { return nil, nil, err }}
+}
 
 // label names op number i (0-based) in an error: its position, tool and target.
 func (o Op) label(i int) string {
-	target := o.path
-	if o.tool == toolCreate {
-		target = o.draft.Type
-	}
-	if target == "" {
+	if o.target == "" {
 		return fmt.Sprintf("op %d (%s)", i+1, o.tool)
 	}
 	return fmt.Sprintf(
 		"op %d (%s %s)",
 		i+1,
 		o.tool,
-		target,
+		o.target,
 	)
 }
 
@@ -114,12 +127,12 @@ func (w *Writer) Batch(ctx context.Context, ops []Op, message string) (*BatchRes
 	}
 	msg := cmp.Or(strings.TrimSpace(message), batchMessage(ops))
 	hash, warnings := w.commit(ctx, p.written, msg)
-	return &BatchResult{Results: p.results, Commit: hash, Warnings: warnings}, nil
+	return &BatchResult{Results: p.results, Commit: hash, Warnings: append([]string{}, warnings...)}, nil
 }
 
-// single runs one op through the engine and commits it as "<tool>: <path>".
-// Its errors are the op's own, unlabelled.
-func (w *Writer) single(ctx context.Context, op Op) (*Result, error) {
+// Apply runs one op and commits it as "<tool>: <path>". Its errors are the
+// op's own, unlabelled.
+func (w *Writer) Apply(ctx context.Context, op Op) (*Result, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
@@ -177,7 +190,6 @@ type file struct {
 	rel             string
 	orig, cur       []byte
 	existed, exists bool
-	edited          bool // an op in this batch changed it
 }
 
 // changed reports whether the batch has something to write to f.
@@ -185,8 +197,9 @@ func (f *file) changed() bool {
 	return f.exists != f.existed || !bytes.Equal(f.cur, f.orig)
 }
 
-// batchPlan is ops checked against the vault without writing anything.
+// batchPlan is ops checked against w's vault without writing anything.
 type batchPlan struct {
+	w       *Writer
 	files   []*file // in the order the ops first touched them
 	byPath  map[string]*file
 	results []Result
@@ -195,11 +208,11 @@ type batchPlan struct {
 }
 
 // file returns rel as the batch sees it, reading it the first time.
-func (p *batchPlan) file(w *Writer, rel string) (*file, error) {
+func (p *batchPlan) file(rel string) (*file, error) {
 	if f, ok := p.byPath[rel]; ok {
 		return f, nil
 	}
-	b, err := w.v.Root().ReadFile(rel)
+	b, err := p.w.v.Root().ReadFile(rel)
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return nil, fmt.Errorf("read %s: %w", rel, err)
 	}
@@ -209,9 +222,14 @@ func (p *batchPlan) file(w *Writer, rel string) (*file, error) {
 	return f, nil
 }
 
-// existing returns rel as the batch sees it, which must exist.
-func (p *batchPlan) existing(w *Writer, rel string) (*file, error) {
-	f, err := p.file(w, rel)
+// existing resolves path for writing and returns it as the batch sees it,
+// which must exist.
+func (p *batchPlan) existing(path string) (*file, error) {
+	rel, err := p.w.v.Resolve(path, vault.AccessWrite)
+	if err != nil {
+		return nil, err
+	}
+	f, err := p.file(rel)
 	if err != nil {
 		return nil, err
 	}
@@ -249,14 +267,14 @@ func (w *Writer) run(ops []Op) (*batchPlan, []opError, error) {
 // plan checks every op in order against the vault as the earlier ops leave
 // it. A failed op leaves the plan as it was.
 func (w *Writer) plan(ops []Op) *batchPlan {
-	p := &batchPlan{byPath: map[string]*file{}, results: make([]Result, len(ops))}
+	p := &batchPlan{w: w, byPath: map[string]*file{}, results: make([]Result, len(ops))}
 	for i, op := range ops {
-		f, warnings, err := w.planOp(p, op)
+		f, warnings, err := op.apply(p)
 		if err != nil {
 			p.failed = append(p.failed, opError{op: i, err: err})
 			continue
 		}
-		p.results[i] = Result{Path: f.rel, Warnings: warnings}
+		p.results[i] = Result{Path: f.rel, Warnings: append([]string{}, warnings...)}
 	}
 	for i := range p.results {
 		if f := p.byPath[p.results[i].Path]; f != nil {
@@ -266,46 +284,12 @@ func (w *Writer) plan(ops []Op) *batchPlan {
 	return p
 }
 
-func (w *Writer) planOp(p *batchPlan, op Op) (*file, []string, error) {
-	if op.err != nil {
-		return nil, nil, op.err
-	}
-	switch op.tool {
-	case toolCreate:
-		return w.planCreate(p, op.draft)
-	case toolAppend:
-		return w.planModify(p, op.path, func(old []byte) ([]byte, []string, error) {
-			next, err := InsertSection(old, op.heading, op.content)
-			return next, nil, err
-		})
-	case toolPatch:
-		return w.planModify(p, op.path, func(old []byte) ([]byte, []string, error) {
-			return w.patchDoc(old, op.patch)
-		})
-	case toolReplace:
-		return w.planReplace(p, op.path, op.content, op.hash)
-	}
-	return nil, nil, fmt.Errorf(
-		"unknown tool %q; use %s, %s, %s or %s",
-		op.tool,
-		toolCreate,
-		toolAppend,
-		toolPatch,
-		toolReplace,
-	)
-}
-
-// planModify runs transform on the current content of an existing file.
-func (w *Writer) planModify(
-	p *batchPlan,
+// modify runs transform on the current content of an existing file.
+func (p *batchPlan) modify(
 	path string,
 	transform func(old []byte) (next []byte, warnings []string, err error),
 ) (*file, []string, error) {
-	rel, err := w.v.Resolve(path, vault.AccessWrite)
-	if err != nil {
-		return nil, nil, err
-	}
-	f, err := p.existing(w, rel)
+	f, err := p.existing(path)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -313,9 +297,7 @@ func (w *Writer) planModify(
 	if err != nil {
 		return nil, nil, err
 	}
-	if !bytes.Equal(next, f.cur) {
-		f.cur, f.edited = next, true
-	}
+	f.cur = next
 	return f, warnings, nil
 }
 
