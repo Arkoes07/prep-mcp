@@ -1,11 +1,11 @@
 # Design decisions
 
-Each entry: the decision, what it replaced, why, and what it costs. Fill in as they are made; PRD section 6 is the starting list. Entries marked *(deviation)* differ from PRD.md; PRD.md itself is left as written.
+Each entry: the decision, what it replaced, why, and what it costs. Fill in as they are made; PRD section 6 is the starting list. Entries marked *(deviation)* differ from PRD.md. PRD.md was left as written until 2026-10-02, when sections 4.3, 5 and 8 were updated for the changes listed under "What changed after using it for N weeks"; the deviations recorded before that date still stand.
 
 ## Scan on every call, no persisted index
 - Instead of: an in-memory index built at startup plus a `rebuild` tool (lethain/library-mcp), or a stored index file.
 - Why: this server writes. A startup index is stale the moment the AI logs something; a stored index is a second copy of the frontmatter that can drift, which is a dual write.
-- Cost: a full scan per call. Measured at 59 ms for 2,000 files (`go test -bench Scan -run ^$ ./internal/read`, Apple M4, 25 MB and 234k allocations per scan; 20 folders, about 1.2 KB per file, half with a `date`). That is far below anything a person notices next to a model call, so no cache. Re-measure on the real vault, and add the mtime-keyed cache only if it is slow there.
+- Cost: a full scan per call. Measured at 59 ms for 2,000 files (`go test -bench Scan -run ^$ ./internal/read`, Apple M4, 25 MB and 234k allocations per scan; 20 folders, about 1.2 KB per file, half with a `date`). `examples/vault` (8 documents) scans in 0.27 ms (`BenchmarkScanExample`, same machine, 118 KB and 1,162 allocations), and the first real vault, about 100 files, works out near 3 ms at the 2,000-file rate. That is far below anything a person notices next to a model call, so no cache. Add the mtime-keyed cache only if a real vault is measured slow.
 
 ## Partial writes by default
 - Instead of: a single write-file tool.
@@ -19,7 +19,7 @@ Each entry: the decision, what it replaced, why, and what it costs. Fill in as t
 
 ## Git commit per AI write
 - Why: every AI change is reviewable (`git log --author=Claude`) and revertible.
-- Cost: noisy history.
+- Cost: noisy history. Since 2026-10-02 a change to several documents can be one `batch` and one commit (see "Batch writes" below).
 
 ## No delete, confined paths
 - Why: a server that writes files is a prompt-injection target. Document content can contain instructions.
@@ -111,6 +111,8 @@ Each entry: the decision, what it replaced, why, and what it costs. Fill in as t
 - Cost: a human-made doc that is already missing a required field must be fixed before the AI can rewrite it.
 
 ## Writes: serialised, one retry, and a seam for the moment between write and rename (M2)
+*Since 2026-10-02 every write runs through the batch engine ("Every write is a batch of one" below), which keeps the behaviour described here: a file that changes before its rename makes the write start over once from the new content, and `replace_doc` then fails its hash check with a `ConflictError`.*
+
 - Instead of: unlocked writes, or a lock file.
 - Why: the server may get overlapping tool calls, so one mutex per `Writer` serialises them. A human can still save the file at any time, so `append_section` and `update_frontmatter` re-hash the file after staging the temp file and just before the rename. If it changed, they start over once from the new content, so the human's save is kept. If it changes twice in a row they stop with a "re-read and retry" error and write nothing. `replace_doc` never retries: a change after the hash check is a `ConflictError`, because the caller's content was based on the old version.
 - Test seam: an unexported `beforeRename` hook runs after the temp file is written and before the rename. `internal/write/seam_test.go` (package `write`) uses it to inject a failure, to simulate a human save in that window, and to check that no `.prep-tmp-*` file survives either. An injected-failure test needs some way in; this is the least invasive one, and production code never sets it.
@@ -163,7 +165,7 @@ Each entry: the decision, what it replaced, why, and what it costs. Fill in as t
 - Instead of: committing whenever the vault is anywhere inside a git work tree.
 - Why: the real vault is the root of its own private repo, so it commits. `examples/vault` sits inside the public prep-mcp repo and must never receive AI commits. Both paths are compared after `EvalSymlinks`. A vault that isn't a repo root gets the write plus a warning explaining how to fix it.
 - Also decided:
-  - The commit covers only the written path (`git commit --only -- <path>`), so a human's staged work is not swept in.
+  - The commit covers only the written paths (`git commit --only -- <paths>`), so a human's staged work is not swept in.
   - The committer identity is set to the configured author too, so commits work without `user.name`.
   - Hooks stay enabled, with a 10 s timeout and `GIT_TERMINAL_PROMPT=0`.
   - Any git failure is a warning, never a failed write.
@@ -173,11 +175,11 @@ Each entry: the decision, what it replaced, why, and what it costs. Fill in as t
 
 ## How the git step behaves (M3)
 Details the entry above leaves open. The tests are `internal/write/git_test.go`.
-- Steps, all inside one deadline (`Timeout`, 10 s by default, for the whole commit and not per command): find the binary, `git rev-parse --show-toplevel` and compare with the vault root after `EvalSymlinks`, `git add -- <path>`, `git diff --cached --quiet -- <path>`, `git commit --only -m <msg> --author=<author> -- <path>`, `git rev-parse --short HEAD`. Git runs with `GIT_TERMINAL_PROMPT=0`, `LC_ALL=C` and the author as committer (`GIT_COMMITTER_NAME/EMAIL`). Output is captured, never printed, because stdout is the protocol channel.
+- Steps, all inside one deadline (`Timeout`, 10 s by default, for the whole commit and not per command): find the binary, `git rev-parse --show-toplevel` and compare with the vault root after `EvalSymlinks`, `git add -- <paths>`, `git diff --cached --quiet -- <paths>`, `git commit --only -m <msg> --author=<author> -- <paths>`, `git rev-parse --short HEAD`. A single write has one path; a batch has every file it wrote. Git runs with `GIT_TERMINAL_PROMPT=0`, `LC_ALL=C` and the author as committer (`GIT_COMMITTER_NAME/EMAIL`). Output is captured, never printed, because stdout is the protocol channel.
 - Every failure is a warning that starts with `not committed:` and says what to do: `git init` in the vault, fix the hook or lock, install git, or set `commit_on_write: false`. The text includes git's own output, joined onto one line and cut at 400 characters, so a hook's message reaches the human.
 - **A write that changes nothing in the committed file is not a commit and not a warning.** `git diff --cached --quiet` after the `add` finds that (for example a `replace_doc` that writes the same bytes as HEAD). Instead of: letting `git commit` fail with "nothing to commit" and reporting that as a warning. No-op `update_frontmatter` calls never reach git at all.
 - **On a timeout the whole process group gets SIGTERM, then SIGKILL after 2 s** (`git_unix.go`). Instead of: the standard library's default, which kills only git. Why: a hook runs as a child that holds git's output pipes open, so killing git alone made the call wait for the hook (30 s in the test) and a SIGKILL would leave `.git/index.lock` behind, which would break every later commit. With SIGTERM git removes its own lock; checked by hand: after a timeout there is no `index.lock` and the next write commits. Cost: Unix only. `git_other.go` falls back to the default kill, so on Windows a hung hook can outlive the call. Nobody runs this there yet.
-- **A failed commit leaves the path staged.** After a hook rejects a new file, `git add` has already run, so the file stays in the index until a later `commit --only` for the same path, or the human, commits it. Instead of: running `git reset` to undo the add. Why: that is one more git call that can fail, in a repo that is already in an odd state, and the file does belong in the next commit. Cost: `git status` shows it as staged.
+- **A failed commit leaves the path staged, when `git add` got through.** After a hook rejects a new file, or `HEAD.lock` stops the commit, `git add` has already run, so the file stays in the index until a later `commit --only` for the same path, or the human, commits it. When `git add` itself fails (`index.lock`), nothing is staged. The warning says which (see the lock entry below). Instead of: running `git reset` to undo the add. Why: that is one more git call that can fail, in a repo that is already in an odd state, and the file does belong in the next commit. Cost: `git status` shows it as staged.
 - `Result.Commit` is the abbreviated hash (`git rev-parse --short`), as it is easier to read in a chat. It is a prefix of the full hash.
 - `Git` resolves symlinks itself, although `vault.Open` already hands it a resolved path. Why: `Git.Commit` takes any directory, and the symlinked `~/prep` case is tested on its own. Cost: one redundant `EvalSymlinks`.
 - Not done: a hook that needs a terminal or a GPG pinentry will time out rather than prompt (that is the point of `GIT_TERMINAL_PROMPT=0` plus the deadline). `commit.gpgsign=true` in the user's config may therefore cost the full timeout on every write (not tested).
@@ -207,8 +209,8 @@ Details the entry above leaves open. The tests are `internal/write/git_test.go`.
   - `==== ... ====` cannot be confused with the `##` headings inside the embedded week document, which Markdown headings would be.
   - Text costs fewer tokens than JSON and reads well in a chat.
   - The week section carries the file's `path` and `hash`, so `replace_doc` can be used without another `read_doc`.
-  - Lists are one line per document: `- path | title | attributes | tags`. Attributes are `date=`, then the configured `summary_fields` in config order (see below).
-  - `date=` appears only when the document has a `date` field. File mtime orders documents but is never shown as a date, because a clone or checkout resets it.
+  - Lists are one line per document: `- path | title | attributes | tags`. Attributes are `date=`, then the type's `show` fields, else `summary_fields`, in config order (see below).
+  - ~~`date=` appears only when the document has a `date` field.~~ Since 2026-10-02 every line shows `date=`, followed by `date_source=mtime` when the date is the file's mtime (see "`date` and `date_source`" below).
   - Each query block is labelled from its config (`improvement (status: open, improving):`, `session (newest 5):`), so the output explains itself.
 - Cost: the format is ours, not a standard, and a change means regenerating the golden files by hand. The model has to read a convention instead of parsing JSON.
 
@@ -239,20 +241,92 @@ Details the entry above leaves open. The tests are `internal/write/git_test.go`.
 - Cost: no truncation. A vault with hundreds of open items produces a long `get_context`.
 
 ## `list_docs` returns `date` or `modified`, never a body
+*Superseded on 2026-10-02 by "`date` and `date_source` in every list result" below: the `modified` key is gone. Bodies are still never returned, and the `note` for an unknown type stays.*
+
 - Instead of: one `date` field that is sometimes a file mtime.
 - Why: a model reading `date` should be able to trust it. A document with a `date` field returns `date`; one without returns `modified` (the file's last-modified day) instead. `updated` appears when present, and so do the configured summary fields, under `fields`. Bodies are never returned. A `type` that is not configured and matches nothing returns a `note` listing the configured types.
 - Cost: a client that wants one sort key must read either field.
 
 ## Summary fields come from config *(deviation from PRD 5.1)*
+*Amended on 2026-10-02: a type's `show` list replaces `summary_fields` for that type (see "Per-type `show` fields" below).*
+
 - Instead of: showing `status`, `stage` and `kind` whenever a document has them, as PRD 5.1 lists for `list_docs`.
 - Why: those three names come from one vault's types, and nothing in the code acts on them; they are only displayed. Fixed in Go, they broke goal 5 in a way the forbidden-word test cannot see, because the words are generic. A vault with `priority` or `owner` fields would have had to rename them to get them shown.
 - How: a top-level `summary_fields` list in `prep.config.yaml`. `get_context` shows them as attributes in config order after `date=`. `list_docs` returns the ones a document sets in a `fields` object, and its tool description is generated from the config so the model knows the names. The example config sets `[kind, stage, status]`, so the example output is unchanged.
 - Fields that carry meaning stay fixed, because the data model defines them: `type`, `title`, `tags`, `date`, `created`, `updated`. Validation rejects listing an always-shown one (`type`, `title`, `tags`, `date`, `updated`), an empty name or a repeat.
 - Cost: one more config key, and the default is no summary fields at all. In `list_docs` the values moved from top-level keys (`"status": "open"`) into `"fields": {"status": "open"}`. Only scalar values are shown.
 
+## Batch writes: all or nothing, one commit (2026-10-02)
+- Instead of: a commit per call, which made nine frontmatter edits nine commits and pushed a 60-file import around the server, without its checks or the AI author; or a write-ahead journal that could finish or undo a batch after a crash.
+- How: `batch(ops, message?)` takes `{tool, args}` ops, where `args` are exactly a write tool's arguments.
+  - Every op is checked first, in order, against an in-memory view of the vault as the earlier ops leave it: path safety, required fields, hashes, file-exists rules. Any failure writes nothing and returns every failure, labelled by op number. An op whose arguments do not decode is one of those failures, in the same response.
+  - Then each changed file is written once, with its final content, through the same atomic replace and rename-time checks as a single write.
+  - If a write fails, the files already written are put back in reverse order and created files removed.
+  - One commit covers every file written, with the caller's message or `batch: 2 create_doc, 9 update_frontmatter`. At most 200 ops per call.
+- Also decided:
+  - A path may appear more than once, and later ops see earlier ones, so "set the stage and append to the timeline" is one batch. `replace_doc` must be the first op on its path, because its hash is of the file as the caller read it.
+  - Putting a file back is guarded by the hash of what the batch wrote, so a human's save made after the batch's write is never overwritten; that file is left as it is and named in the error.
+  - A file that changes between the checks and its rename (a human saving in Obsidian) makes the batch put back what it wrote and start over once from disk, as single writes always did. Twice in a row, it gives up with nothing written.
+  - A per-op `hash` is the file's hash after the whole batch, so two ops on one path report the same hash.
+- Cost:
+  - Atomic per file, not per batch: rollback is best effort, not a transaction. A crash, `kill -9` or power loss while files are being written leaves a partial batch on disk, with nothing to finish or undo it; `git status` shows which files changed. A journal would close that at the price of a recovery step at every start.
+  - A file a human saved after the batch wrote it is not rolled back, so a failed batch can leave that one file with the batch's change under the human's edit. The error names it.
+  - A put-back that itself fails (disk full, permissions) is reported, not retried.
+  - A restored file has its old bytes and mode but a new inode and mtime, so Obsidian sees it touched; git sees no change.
+  - Folders made for new files stay behind, empty, after a rollback, as after a failed `create_doc`.
+  - The whole batch is held in memory; the 200-op cap bounds it.
+  - One commit means one `git revert` undoes the whole batch, never part of it.
+
+## Every write is a batch of one (2026-10-02)
+- Instead of: keeping a code path per write tool next to the batch engine.
+- Why: one set of guarantees and one set of tests. The existing write, seam and git tests passed through the engine unchanged and now guard it too. Single tools keep their own error texts (unlabelled) and commit messages (`<tool>: <path>`).
+- Cost: a single write builds a one-op plan it does not need. A `replace_doc` whose content equals the file is now a no-op rather than a rewrite of the same bytes; there was no commit either way.
+
+## Per-type `show` fields (2026-10-02)
+- Instead of: only the top-level `summary_fields`, which showed an application's `stage` and `status` but never `next_action`, the field that says a follow-up is due.
+- How: a type may set `show: [fields]`, listed in that order in `get_context` and under `fields` in `list_docs`. It replaces `summary_fields` for that type; `show: []` lists nothing; other types keep `summary_fields`. `list_docs` takes `fields: [...]` to choose the fields for one call, for every document; `[]` lists none. Validation is that of `summary_fields`, plus the type's own date field, which is already shown as `date`.
+- Why replace rather than merge: a type's list then says exactly what its lines show, and `show: []` can hide fields.
+- Cost: a type with `show` must repeat any summary field it still wants. `list_docs`' `fields` is a JSON object, which `encoding/json` writes with sorted keys, so only `get_context` keeps the configured order.
+
+## Per-type `date_field` (2026-10-02)
+- Instead of: the fixed field `date`, which made the real vault rename `applied` to `date` so applications could be filtered by date.
+- How: a type may set `date_field`, default `date`. The scan reads it, so `since`/`until`, date sorting, `get_context`'s recent queries and the tag dates follow it, and so does the `{date}` filename placeholder. A document without the field is dated by mtime; a `date` key on a type whose date field is another is an ordinary field.
+- Why `{date}` follows it: otherwise a type with `date_field: applied` and `{date}-{slug}.md` would name its files with today's date.
+- Cost: one more config key. Without a `type`, `list_docs` dates each document by its own type's field, so one `since` can compare different fields for different types.
+
+## `date` and `date_source` in every list result (2026-10-02)
+- Instead of: `date` for a document with a date field and `modified` for one without, so results carried one key or the other depending on the file.
+- How: every `list_docs` entry has `date` (YYYY-MM-DD) and `date_source`, `field` or `mtime`. Every `get_context` line shows `date=`, followed by `date_source=mtime` when the date is the file's mtime; a field date prints `date=` alone, to save tokens.
+- Why: one key to sort and read by, while the source still says when not to trust it (a clone or checkout resets mtime).
+- Cost: the `modified` key is gone, so anything that read it breaks; only the model did. Lines for undated documents in `get_context` are about 30 characters longer.
+
+## A git lock: warn, never delete; flag it at session start (2026-10-02)
+- Instead of: deleting a stale `index.lock` or `HEAD.lock`, or passing git's raw message on as the warning.
+- Why: a live lock cannot be told from a stale one, and deleting the lock of a running git (a GUI, the Obsidian Git plugin, an open commit editor) can corrupt the index. The lock is the human's to remove. On the first day a manual commit left locks that would have blocked every later AI commit, behind a generic warning on each write.
+- How: when git says `Unable to create '<path>.lock': File exists`, the write's warning names the lock, says whether the change was staged, and says to delete the lock once no git process is running, with the command that commits afterwards. `get_context` lists `HEAD.lock` and `index.lock` in the vault's git directory (or the one a `.git` file names) under Problems when commits are on. It only looks.
+- Cost: until the human removes the lock, every AI write is saved but not committed.
+  - With `index.lock`, `git add` fails, so nothing is staged: the writes are plain working-tree changes.
+  - With `HEAD.lock` (or a branch's ref lock), `git add` succeeds and only the commit fails, so each write stays staged. The next successful AI commit of the same path picks it up; other paths stay staged.
+  - Either way, writes the human then commits by hand lose the AI author.
+  - The write warning relies on git's English message, which `LC_ALL=C` pins and a test checks. The session-start check knows only those two lock names.
+
 ## Server clock
 - `read.Reader.Now()` is the read side's clock. Production passes `time.Now`, tests pass a fixed day. `get_context` uses it only when the caller gives no `date`.
 - `server.New(r, w, cfg, version)` takes the `*read.Reader` and the `*write.Writer`. The writer has its own clock, injected the same way, and uses it for `created`, `updated` and the `{date}` default.
 
 ## What changed after using it for N weeks
-- ___
+
+### 2026-10-02: first day, a vault of about 100 files
+
+| Real use exposed | Answered by |
+|---|---|
+| A 60-file import went around the server with shell and file tools, so it skipped the path, required-field and tag checks, and its commit had no AI author. | `batch`: up to 200 checked writes in one call, all or nothing, one commit by the AI author. |
+| Nine frontmatter edits made nine commits. | `batch`. |
+| A file with invalid YAML was caught and listed under Problems, and every other document was still served. | Nothing: it worked as designed ("Broken files are reported, not hidden"). |
+| A write into `templates/` was refused. | Nothing: the read-only guard worked as designed. |
+| `get_context` listed applications without `next_action`, so a due follow-up did not show. | Per-type `show`. |
+| Applications could only be filtered by date after renaming `applied` to `date`. | Per-type `date_field`. |
+| Some list results had `date` and others `modified`, depending on the file. | `date` and `date_source` in every result. |
+| A manual commit left git lock files that would have blocked every later AI commit. | A lock warning that names the lock and never deletes it, and a check in `get_context`. |
+
+Measured the same day: a scan of `examples/vault` takes 0.27 ms; 2,000 files take 59 ms, so the real vault is near 3 ms ("Scan on every call").

@@ -7,7 +7,7 @@ Most markdown MCP servers are read-only. This one is built for the harder case: 
 - Query by type, tags (AND / OR / prefix), frontmatter fields and date. Full-text search.
 - `get_context` returns everything a new session needs in one call.
 - Writes are append, frontmatter patch, or full rewrite guarded by a content hash.
-- Every AI write is a git commit. No delete tool. Paths confined to the vault.
+- Every AI write is a git commit, and `batch` makes many writes one: checked first, all or nothing. No delete tool. Paths confined to the vault.
 - Document types live in a config file, so it works for any vault.
 
 ## Install
@@ -77,8 +77,14 @@ summary_fields: [status]        # fields shown next to each document in lists
 types:
   note:
     folder: notes
-    filename: "{date}-{slug}.md"  # {slug}: slug argument or title, {date}: date field or today
+    filename: "{date}-{slug}.md"  # {slug}: slug argument or title, {date}: the type's date field or today
     required: [title]
+  task:
+    folder: tasks
+    filename: "{slug}.md"
+    required: [title, status]
+    date_field: due               # optional: dates, since/until and sorting use due (default: date)
+    show: [status, owner, due]    # optional: shown for this type instead of summary_fields
   week:
     folder: weeks
     filename: "{week}.md"         # any other {name} is that frontmatter field; it must be required
@@ -115,9 +121,12 @@ hash: b484cc9de79003ff8871df17e6acd8ab5d744ec055d0abd3db206761d206cd1b
 ...
 ==== Open items ====
 improvement (status: open, improving):
-- improvements/buries-headline.md | Buries the headline | status=open | -
-- improvements/missing-tradeoff.md | Trade-off not stated | status=improving | -
-...
+- improvements/buries-headline.md | Buries the headline | date=2026-10-02 date_source=mtime status=open | -
+- improvements/missing-tradeoff.md | Trade-off not stated | date=2026-10-02 date_source=mtime status=improving | -
+
+application (status: active):
+- applications/acme-backend.md | acme-backend | date=2026-01-05 stage=interview status=active next_action=Send thank-you note next_action_date=2026-01-16 | company/acme
+
 ==== Recent ====
 session (newest 5):
 - sessions/2026-01-14-deep-dive-checkout-rewrite.md | 2026-01-14-deep-dive-checkout-rewrite | date=2026-01-14 kind=deep-dive | q/hardest-project, issue/missing-tradeoff
@@ -126,10 +135,12 @@ session (newest 5):
 Top tags, last 30 days (since 2025-12-15): q/hardest-project (3), issue/missing-tradeoff (2), company/acme (1), ...
 ```
 
+The application is dated by its `applied` field and lists its next action, because its type sets `date_field` and `show`. The improvements have no date field, so their date is the file's modification time (the day you copied the vault), marked `date_source=mtime`.
+
 **"Which sessions show the buries-headline issue?"** calls `list_docs` with `{"type": "session", "tags": ["issue/buries-headline"]}`:
 
 ```json
-{"docs":[{"path":"sessions/2026-01-12-deep-dive-checkout-rewrite.md","type":"session","title":"2026-01-12-deep-dive-checkout-rewrite","tags":["q/hardest-project","issue/buries-headline","issue/missing-tradeoff"],"date":"2026-01-12","fields":{"kind":"deep-dive"}}],"count":1}
+{"docs":[{"path":"sessions/2026-01-12-deep-dive-checkout-rewrite.md","type":"session","title":"2026-01-12-deep-dive-checkout-rewrite","tags":["q/hardest-project","issue/buries-headline","issue/missing-tradeoff"],"date":"2026-01-12","date_source":"field","fields":{"kind":"deep-dive"}}],"count":1}
 ```
 
 **"Mark buries-headline as improving."** calls `update_frontmatter`. Only that line changes, and `updated` is stamped:
@@ -160,6 +171,21 @@ f55405e | Claude | create_doc: sessions/2026-01-16-deep-dive-checkout-rewrite.md
 e4b41e9 | Claude | update_frontmatter: improvements/buries-headline.md
 ```
 
+**"Move the Acme application to offer, log the offer call in its timeline, and add it to this week's log."** calls `batch` with three ops, one of them on a file another op already changed:
+
+```json
+{"ops":[
+  {"tool":"update_frontmatter","args":{"path":"applications/acme-backend.md","set":{"stage":"offer"}}},
+  {"tool":"append_section","args":{"path":"applications/acme-backend.md","heading":"Timeline","content":"- 2026-01-16 offer call"}},
+  {"tool":"append_section","args":{"path":"weeks/2026-w03.md","heading":"Log","content":"- Fri: Acme offer call"}}]}
+```
+
+Every op is checked before anything is written; had one failed, nothing would have been written and every failure would have been listed. Both files land in one commit:
+
+```text
+ae0dfba | Claude | batch: 2 append_section, 1 update_frontmatter
+```
+
 **Rewriting a whole file** takes the hash that `read_doc` returned. If someone changed the file since, `replace_doc` writes nothing and returns the current hash, so the assistant re-reads the file and merges.
 
 ## Tools
@@ -167,7 +193,7 @@ e4b41e9 | Claude | update_frontmatter: improvements/buries-headline.md
 | Tool | What it does |
 |---|---|
 | `get_context` | Working rules, current week, open items, recent activity |
-| `list_docs` | Metadata query: type, tags, any_tags, where, since, until |
+| `list_docs` | Metadata query: type, tags, any_tags, where, since, until; `fields` picks what is shown |
 | `read_doc` | Full file plus content hash |
 | `search_text` | Substring search with matching lines |
 | `list_tags` | Tags with counts and last use |
@@ -175,6 +201,7 @@ e4b41e9 | Claude | update_frontmatter: improvements/buries-headline.md
 | `append_section` | Append under a heading |
 | `update_frontmatter` | Change fields or tags, body untouched |
 | `replace_doc` | Full rewrite, rejected if the file changed since you read it |
+| `batch` | Up to 200 of the four writes above in one call: all or nothing, one commit |
 
 See [DESIGN.md](DESIGN.md) for why each of these exists and what it costs.
 
@@ -185,7 +212,7 @@ go test ./...                                       # all tests; the ones that t
 go test -race ./...
 go vet ./... && gofmt -l .
 go test ./internal/read -run TestContextGolden -update   # rewrite the golden files after an intended format change
-go test -bench Scan -run '^$' ./internal/read       # scan cost for 2,000 generated files
+go test -bench Scan -run '^$' ./internal/read       # scan cost: 2,000 generated files, and examples/vault
 go build -ldflags "-X main.version=v0.1.0" ./cmd/prep-mcp
 ```
 

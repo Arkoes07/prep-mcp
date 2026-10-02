@@ -52,3 +52,16 @@ func BenchmarkScan(b *testing.B) {
 	}
 	b.ReportMetric(docs, "docs")
 }
+
+// BenchmarkScanExample measures one full scan of examples/vault, the number
+// DESIGN.md gives for a small vault.
+func BenchmarkScanExample(b *testing.B) {
+	_, r := copyOpen(b)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		if _, _, err := r.Scan(); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
