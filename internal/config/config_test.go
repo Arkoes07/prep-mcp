@@ -49,11 +49,11 @@ types:
 				if c.TagsFile != "" {
 					t.Errorf("TagsFile = %q, want empty", c.TagsFile)
 				}
-				ts, ok := c.Type("note")
+				ts, ok := c.Types["note"]
 				if !ok || ts.Folder != "notes" || ts.Filename != "{slug}.md" || len(ts.Required) != 0 {
 					t.Errorf("Type(note) = %+v, %v", ts, ok)
 				}
-				if _, ok := c.Type("nope"); ok {
+				if _, ok := c.Types["nope"]; ok {
 					t.Error("Type(nope) should not exist")
 				}
 			},
@@ -477,14 +477,14 @@ func TestLoadExample(t *testing.T) {
 	if c.Context.CurrentWeekType != "week" || c.Context.CurrentWeekField != "week" {
 		t.Errorf("current week = %q / %q, want week / week", c.Context.CurrentWeekType, c.Context.CurrentWeekField)
 	}
-	wk, ok := c.Type("week")
+	wk, ok := c.Types["week"]
 	if !ok {
 		t.Fatal("example config has no week type")
 	}
 	if wk.Filename != "{week}.md" || wk.Folder != "weeks" || !slices.Equal(wk.Required, []string{"week"}) {
 		t.Errorf("week type = %+v", wk)
 	}
-	if lt, ok := c.Type("learning"); !ok || !slices.Equal(lt.Required, []string{"title", "track"}) {
+	if lt, ok := c.Types["learning"]; !ok || !slices.Equal(lt.Required, []string{"title", "track"}) {
 		t.Errorf("learning type = %+v, %v", lt, ok)
 	}
 }

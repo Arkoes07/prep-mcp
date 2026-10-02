@@ -17,11 +17,8 @@ type Reader struct {
 	now func() time.Time
 }
 
-// New returns a Reader for v. A nil now means the system clock.
+// New returns a Reader for v. now is the clock that sets "today".
 func New(v *vault.Vault, cfg *config.Config, now func() time.Time) *Reader {
-	if now == nil {
-		now = time.Now
-	}
 	return &Reader{v: v, cfg: cfg, now: now}
 }
 

@@ -6,7 +6,6 @@
 package vault
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -22,8 +21,7 @@ type Vault struct {
 }
 
 // Open opens the vault at dir. The directory is resolved through symlinks once.
-// A nil cfg means an empty config. The caller must Close the vault when done
-// with it.
+// The caller must Close the vault when done with it.
 func Open(dir string, cfg *config.Config) (*Vault, error) {
 	abs, err := filepath.Abs(dir)
 	if err != nil {
@@ -36,11 +34,6 @@ func Open(dir string, cfg *config.Config) (*Vault, error) {
 	root, err := os.OpenRoot(resolved)
 	if err != nil {
 		return nil, fmt.Errorf("vault root %q: %w (check --root or PREP_ROOT)", dir, err)
-	}
-	if cfg == nil {
-		if cfg, err = config.Parse(nil); err != nil {
-			return nil, errors.Join(fmt.Errorf("empty default config: %w", err), root.Close())
-		}
 	}
 	return &Vault{dir: resolved, root: root, cfg: cfg}, nil
 }

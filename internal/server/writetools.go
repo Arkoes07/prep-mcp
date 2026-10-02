@@ -96,23 +96,14 @@ func createDocDescription(cfg *config.Config) string {
 	return b.String()
 }
 
-// writeOut is the JSON every write returns.
-type writeOut struct {
-	Path     string   `json:"path"`
-	Hash     string   `json:"hash"`
-	Warnings []string `json:"warnings"`
-	Commit   string   `json:"commit,omitempty"`
-}
-
 func writeResult(res *write.Result, err error) (*mcp.CallToolResult, any, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	warnings := res.Warnings
-	if warnings == nil {
-		warnings = []string{}
+	if res.Warnings == nil {
+		res.Warnings = []string{} // the client sees [], not null
 	}
-	return jsonResult(writeOut{Path: res.Path, Hash: res.Hash, Warnings: warnings, Commit: res.Commit})
+	return jsonResult(res)
 }
 
 // rawArgs pulls object-valued arguments out of the call's raw JSON, because

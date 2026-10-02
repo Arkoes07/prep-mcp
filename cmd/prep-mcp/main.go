@@ -54,8 +54,10 @@ func run(ctx context.Context, args []string, getenv func(string) string, stderr 
 		fmt.Fprintln(stderr, "prep-mcp", version)
 		return nil
 	}
-	// stdout carries the protocol, so every log line goes to stderr.
+	// stdout carries the protocol, so every log line goes to stderr, the
+	// server's included.
 	logger := slog.New(slog.NewTextHandler(stderr, nil))
+	slog.SetDefault(logger)
 
 	root, err := vaultRoot(*rootFlag, getenv)
 	if err != nil {
@@ -77,8 +79,19 @@ func run(ctx context.Context, args []string, getenv func(string) string, stderr 
 	}()
 	logger.Info("serving vault", slog.String("root", v.Dir()), slog.Int("types", len(cfg.Types)))
 	r := read.New(v, cfg, time.Now)
-	w := write.New(v, cfg, &write.Git{Bin: "git", Author: cfg.Author, Timeout: 10 * time.Second}, time.Now)
-	err = server.New(r, w, cfg, version, server.WithLogger(logger)).Run(ctx, &mcp.StdioTransport{})
+	w := write.New(
+		v,
+		cfg,
+		&write.Git{Author: cfg.Author},
+		time.Now,
+	)
+	srv := server.New(
+		r,
+		w,
+		cfg,
+		version,
+	)
+	err = srv.Run(ctx, &mcp.StdioTransport{})
 	if err != nil && ctx.Err() == nil && !errors.Is(err, io.EOF) {
 		return err
 	}

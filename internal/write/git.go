@@ -99,19 +99,15 @@ func (g *Git) Commit(ctx context.Context, dir, rel, msg string) (hash, warning s
 	return strings.TrimSpace(out), ""
 }
 
-// identity finds the git binary and splits the author into name and email,
-// applying the defaults for empty settings.
+// identity finds the git binary, defaulting to git on the PATH, and splits the
+// author into name and email.
 func (g *Git) identity() (bin, name, email string, err error) {
 	bin = cmp.Or(g.Bin, "git")
 	if _, err := exec.LookPath(bin); err != nil {
 		return "", "", "", fmt.Errorf(
 			"cannot run git (%w). Install git, fix the path %q, or set commit_on_write: false in the config", err, bin)
 	}
-	author := g.Author
-	if strings.TrimSpace(author) == "" {
-		author = config.DefaultAuthor
-	}
-	name, email, ok := config.ParseAuthor(author)
+	name, email, ok := config.ParseAuthor(g.Author)
 	if !ok {
 		return "", "", "", fmt.Errorf("author %q must look like \"Name <email>\"; fix author in the config", g.Author)
 	}

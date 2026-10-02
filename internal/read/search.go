@@ -16,15 +16,16 @@ const (
 
 // Hit is one document that matched a search.
 type Hit struct {
-	Path, Title string
-	Lines       []Line // at most MaxHitLines, in file order
-	Total       int    // all matching lines
+	Path  string `json:"path"`
+	Title string `json:"title"`
+	Total int    `json:"total"` // all matching lines
+	Lines []Line `json:"lines"` // at most MaxHitLines, in file order
 }
 
 // Line is one matching file line: 1-based number and the verbatim text.
 type Line struct {
-	N    int
-	Text string
+	N    int    `json:"n"`
+	Text string `json:"text"`
 }
 
 // Search finds documents whose body or title field contains q, ignoring case.
@@ -44,7 +45,7 @@ func (r *Reader) Search(q, typ string, limit int) ([]Hit, error) {
 	if err != nil {
 		return nil, err
 	}
-	var hits []Hit
+	hits := []Hit{}
 	for _, d := range docs {
 		if typ != "" && d.Type != typ {
 			continue

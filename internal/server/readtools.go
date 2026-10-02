@@ -132,19 +132,6 @@ type docMeta struct {
 	Status   string   `json:"status,omitempty"`
 }
 
-type problemOut struct {
-	Path string `json:"path"`
-	Msg  string `json:"msg"`
-}
-
-func problemsOut(ps []read.Problem) []problemOut {
-	out := make([]problemOut, 0, len(ps))
-	for _, p := range ps {
-		out = append(out, problemOut{Path: p.Path, Msg: p.Msg})
-	}
-	return out
-}
-
 func (h *handlers) listDocs(
 	_ context.Context,
 	_ *mcp.CallToolRequest,
@@ -160,16 +147,16 @@ func (h *handlers) listDocs(
 	}
 
 	out := struct {
-		Docs     []docMeta    `json:"docs"`
-		Count    int          `json:"count"`
-		Note     string       `json:"note,omitempty"`
-		Problems []problemOut `json:"problems,omitempty"`
-	}{Docs: make([]docMeta, 0, len(docs)), Count: len(docs), Problems: problemsOut(problems)}
+		Docs     []docMeta      `json:"docs"`
+		Count    int            `json:"count"`
+		Note     string         `json:"note,omitempty"`
+		Problems []read.Problem `json:"problems,omitempty"`
+	}{Docs: make([]docMeta, 0, len(docs)), Count: len(docs), Problems: problems}
 	for _, d := range docs {
 		out.Docs = append(out.Docs, metaOf(d))
 	}
 	if in.Type != "" {
-		if _, ok := h.cfg.Type(in.Type); !ok && len(docs) == 0 {
+		if _, ok := h.cfg.Types[in.Type]; !ok && len(docs) == 0 {
 			out.Note = fmt.Sprintf("type %q is not configured; configured types: %s", in.Type, h.cfg.TypeList())
 		}
 	}
@@ -275,27 +262,10 @@ func (h *handlers) searchText(
 	if err != nil {
 		return nil, nil, err
 	}
-	type lineOut struct {
-		N    int    `json:"n"`
-		Text string `json:"text"`
-	}
-	type hitOut struct {
-		Path  string    `json:"path"`
-		Title string    `json:"title"`
-		Total int       `json:"total"`
-		Lines []lineOut `json:"lines"`
-	}
 	out := struct {
-		Hits  []hitOut `json:"hits"`
-		Count int      `json:"count"`
-	}{Hits: make([]hitOut, 0, len(hits)), Count: len(hits)}
-	for _, hit := range hits {
-		ho := hitOut{Path: hit.Path, Title: hit.Title, Total: hit.Total, Lines: make([]lineOut, 0, len(hit.Lines))}
-		for _, l := range hit.Lines {
-			ho.Lines = append(ho.Lines, lineOut{N: l.N, Text: l.Text})
-		}
-		out.Hits = append(out.Hits, ho)
-	}
+		Hits  []read.Hit `json:"hits"`
+		Count int        `json:"count"`
+	}{Hits: hits, Count: len(hits)}
 	return jsonResult(out)
 }
 

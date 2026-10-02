@@ -3,6 +3,7 @@ package config
 
 import (
 	"bytes"
+	"cmp"
 	"errors"
 	"fmt"
 	"io"
@@ -25,32 +26,55 @@ const (
 
 // Config is a validated prep.config.yaml with its defaults applied.
 type Config struct {
-	TagsFile      string
-	CommitOnWrite bool
-	Author        string
-	Types         map[string]TypeSpec
-	Context       ContextSpec
+	TagsFile      string              `yaml:"tags_file"`
+	CommitOnWrite bool                `yaml:"commit_on_write"`
+	Author        string              `yaml:"author"`
+	Types         map[string]TypeSpec `yaml:"types"`
+	Context       ContextSpec         `yaml:"context"`
 }
 
 // TypeSpec is one document type: where its files live, how they are named
 // and which frontmatter fields they must have.
 type TypeSpec struct {
-	Folder, Filename string
-	Required         []string
+	Folder   string   `yaml:"folder"`
+	Filename string   `yaml:"filename"`
+	Required []string `yaml:"required"`
 }
 
 // ContextSpec says what get_context returns besides the working rules.
 type ContextSpec struct {
-	CurrentWeekType, CurrentWeekField string
-	OpenItems, Recent                 []Query
+	CurrentWeekType  string  `yaml:"current_week_type"`
+	CurrentWeekField string  `yaml:"current_week_field"`
+	OpenItems        []Query `yaml:"open_items"`
+	Recent           []Query `yaml:"recent"`
 }
 
 // Query is one configured get_context query. Limit is never 0 after Parse.
 type Query struct {
-	Type          string
-	Where         map[string][]string
-	Tags, AnyTags []string
-	Limit         int
+	Type    string     `yaml:"type"`
+	Where   Conditions `yaml:"where"`
+	Tags    []string   `yaml:"tags"`
+	AnyTags []string   `yaml:"any_tags"`
+	Limit   int        `yaml:"limit"`
+}
+
+// Conditions maps a frontmatter field to the values it may equal. In YAML
+// each value is one scalar or a list of them.
+type Conditions map[string][]string
+
+var _ yaml.Unmarshaler = (*Conditions)(nil)
+
+// UnmarshalYAML implements yaml.Unmarshaler.
+func (c *Conditions) UnmarshalYAML(n *yaml.Node) error {
+	var raw map[string]scalarOrList
+	if err := n.Decode(&raw); err != nil {
+		return err
+	}
+	*c = make(Conditions, len(raw))
+	for k, v := range raw {
+		(*c)[k] = v
+	}
+	return nil
 }
 
 // scalarOrList decodes a YAML scalar as one value and a sequence as many.
@@ -76,89 +100,28 @@ func (s *scalarOrList) UnmarshalYAML(n *yaml.Node) error {
 	return nil
 }
 
-type rawConfig struct {
-	TagsFile      string             `yaml:"tags_file"`
-	CommitOnWrite *bool              `yaml:"commit_on_write"`
-	Author        string             `yaml:"author"`
-	Types         map[string]rawType `yaml:"types"`
-	Context       rawContext         `yaml:"context"`
-}
-
-type rawType struct {
-	Folder   string   `yaml:"folder"`
-	Filename string   `yaml:"filename"`
-	Required []string `yaml:"required"`
-}
-
-type rawContext struct {
-	CurrentWeekType  string     `yaml:"current_week_type"`
-	CurrentWeekField string     `yaml:"current_week_field"`
-	OpenItems        []rawQuery `yaml:"open_items"`
-	Recent           []rawQuery `yaml:"recent"`
-}
-
-type rawQuery struct {
-	Type    string                  `yaml:"type"`
-	Where   map[string]scalarOrList `yaml:"where"`
-	Tags    []string                `yaml:"tags"`
-	AnyTags []string                `yaml:"any_tags"`
-	Limit   *int                    `yaml:"limit"`
-}
-
 // Parse reads a config, applies defaults and validates it. Unknown keys are
 // errors. All validation problems are reported together.
 func Parse(data []byte) (*Config, error) {
-	var raw rawConfig
+	// Decoding leaves fields the file does not mention as they are, so the
+	// defaults that are not zero values are set first.
+	c := &Config{CommitOnWrite: true, Types: map[string]TypeSpec{}}
 	dec := yaml.NewDecoder(bytes.NewReader(data))
 	dec.KnownFields(true)
-	if err := dec.Decode(&raw); err != nil && !errors.Is(err, io.EOF) {
+	if err := dec.Decode(c); err != nil && !errors.Is(err, io.EOF) {
 		return nil, fmt.Errorf("invalid YAML: %w (fix the config file and restart)", err)
 	}
 
-	c := &Config{
-		TagsFile:      raw.TagsFile,
-		CommitOnWrite: raw.CommitOnWrite == nil || *raw.CommitOnWrite,
-		Author:        raw.Author,
-		Types:         make(map[string]TypeSpec, len(raw.Types)),
-		Context: ContextSpec{
-			CurrentWeekType:  raw.Context.CurrentWeekType,
-			CurrentWeekField: raw.Context.CurrentWeekField,
-			OpenItems:        convertQueries(raw.Context.OpenItems),
-			Recent:           convertQueries(raw.Context.Recent),
-		},
-	}
-	if c.Author == "" {
-		c.Author = DefaultAuthor
-	}
-	for name, t := range raw.Types {
-		c.Types[name] = TypeSpec(t)
+	c.Author = cmp.Or(c.Author, DefaultAuthor)
+	for _, qs := range [][]Query{c.Context.OpenItems, c.Context.Recent} {
+		for i := range qs {
+			qs[i].Limit = cmp.Or(qs[i].Limit, DefaultQueryLimit)
+		}
 	}
 	if err := c.Validate(); err != nil {
 		return nil, err
 	}
 	return c, nil
-}
-
-func convertQueries(in []rawQuery) []Query {
-	out := make([]Query, len(in))
-	for i, q := range in {
-		out[i] = Query{
-			Type:    q.Type,
-			Tags:    q.Tags,
-			AnyTags: q.AnyTags,
-			Limit:   DefaultQueryLimit,
-		}
-		if q.Limit != nil && *q.Limit != 0 {
-			out[i].Limit = *q.Limit
-		}
-		if len(q.Where) > 0 {
-			out[i].Where = make(map[string][]string, len(q.Where))
-			for k, v := range q.Where {
-				out[i].Where[k] = v
-			}
-		}
-	}
-	return out
 }
 
 // Load reads and parses the config file at path. The returned error wraps
@@ -329,12 +292,6 @@ func checkFilename(name string, t TypeSpec) []error {
 		}
 	}
 	return errs
-}
-
-// Type returns the named type.
-func (c *Config) Type(name string) (TypeSpec, bool) {
-	t, ok := c.Types[name]
-	return t, ok
 }
 
 // TypeList is the configured type names, sorted and comma-separated, or a

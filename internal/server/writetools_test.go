@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/Arkoes07/prep-mcp/internal/testvault"
+	"github.com/Arkoes07/prep-mcp/internal/write"
 )
 
 // create_doc's description is generated from the config, so the model never
@@ -61,13 +62,13 @@ func TestEachWriteToolAnswers(t *testing.T) {
 		}
 		return string(b)
 	}
-	callOK := func(tool string, args map[string]any) writeOut {
+	callOK := func(tool string, args map[string]any) write.Result {
 		t.Helper()
 		out, isErr := call(t, cs, tool, args)
 		if isErr {
 			t.Fatalf("%s: IsError: %s", tool, out)
 		}
-		var got writeOut
+		var got write.Result
 		if err := json.Unmarshal([]byte(out), &got); err != nil {
 			t.Fatalf("%s: result is not JSON: %v\n%s", tool, err, out)
 		}

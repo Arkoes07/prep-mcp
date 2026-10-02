@@ -28,7 +28,10 @@ type Doc struct {
 }
 
 // Problem is a file the vault could not fully use, with what to do about it.
-type Problem struct{ Path, Msg string }
+type Problem struct {
+	Path string `json:"path"`
+	Msg  string `json:"msg"`
+}
 
 // Scan reads every typed document under the vault, sorted by path. It skips
 // dot-folders and dot-files, the root templates/ folder, symlinks, and files

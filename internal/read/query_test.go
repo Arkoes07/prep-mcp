@@ -10,39 +10,23 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/Arkoes07/prep-mcp/internal/config"
 	"github.com/Arkoes07/prep-mcp/internal/read"
 )
 
-// scalarOrList decodes a YAML scalar as one value and a sequence as many.
-type scalarOrList []string
-
-func (s *scalarOrList) UnmarshalYAML(n *yaml.Node) error {
-	switch n.Kind {
-	case yaml.ScalarNode:
-		*s = []string{n.Value}
-	case yaml.SequenceNode:
-		for _, c := range n.Content {
-			*s = append(*s, c.Value)
-		}
-	default:
-		return fmt.Errorf("line %d: want a scalar or a list", n.Line)
-	}
-	return nil
-}
-
 type listCase struct {
-	Name     string                  `yaml:"name"`
-	Type     string                  `yaml:"type"`
-	Tags     []string                `yaml:"tags"`
-	AnyTags  []string                `yaml:"any_tags"`
-	Where    map[string]scalarOrList `yaml:"where"`
-	Since    string                  `yaml:"since"`
-	Until    string                  `yaml:"until"`
-	Sort     string                  `yaml:"sort"`
-	Limit    int                     `yaml:"limit"`
-	Want     []string                `yaml:"want"`
-	Err      []string                `yaml:"err"`
-	ParseErr bool                    `yaml:"parse_err"`
+	Name     string            `yaml:"name"`
+	Type     string            `yaml:"type"`
+	Tags     []string          `yaml:"tags"`
+	AnyTags  []string          `yaml:"any_tags"`
+	Where    config.Conditions `yaml:"where"`
+	Since    string            `yaml:"since"`
+	Until    string            `yaml:"until"`
+	Sort     string            `yaml:"sort"`
+	Limit    int               `yaml:"limit"`
+	Want     []string          `yaml:"want"`
+	Err      []string          `yaml:"err"`
+	ParseErr bool              `yaml:"parse_err"`
 }
 
 func TestList(t *testing.T) {
@@ -69,12 +53,7 @@ func TestList(t *testing.T) {
 				AnyTags: tc.AnyTags,
 				Sort:    tc.Sort,
 				Limit:   tc.Limit,
-			}
-			if len(tc.Where) > 0 {
-				flt.Where = map[string][]string{}
-				for k, vals := range tc.Where {
-					flt.Where[k] = vals
-				}
+				Where:   tc.Where,
 			}
 			if tc.Since != "" {
 				d, err := read.ParseDate(tc.Since)

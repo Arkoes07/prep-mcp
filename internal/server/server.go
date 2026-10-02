@@ -25,31 +25,15 @@ const instructions = "Call get_context first: it returns the vault's working rul
 	"use create_doc, append_section, update_frontmatter or replace_doc. " +
 	"Do not save it to local memory or notes files instead: the vault is the record."
 
-// Option configures New.
-type Option func(*options)
-
-type options struct {
-	logger *slog.Logger
-}
-
-// WithLogger sets where the server logs what the client must not see, such as
-// the stack of a handler panic. The default is slog.Default(). It must not
-// write to stdout, which carries the protocol.
-func WithLogger(l *slog.Logger) Option {
-	return func(o *options) { o.logger = l }
-}
-
-// New builds the server with the read and write tools registered.
-func New(r *read.Reader, w *write.Writer, cfg *config.Config, version string, opts ...Option) *mcp.Server {
-	o := options{logger: slog.Default()}
-	for _, opt := range opts {
-		opt(&o)
-	}
+// New builds the server with the read and write tools registered. What the
+// client must not see, such as the stack of a handler panic, goes to
+// slog.Default(), which must not write to stdout: stdout carries the protocol.
+func New(r *read.Reader, w *write.Writer, cfg *config.Config, version string) *mcp.Server {
 	s := mcp.NewServer(
 		&mcp.Implementation{Name: "prep-mcp", Version: version},
 		&mcp.ServerOptions{Instructions: instructions},
 	)
-	h := &handlers{r: r, w: w, cfg: cfg, logger: o.logger}
+	h := &handlers{r: r, w: w, cfg: cfg, logger: slog.Default()}
 	registerReadTools(s, h)
 	registerWriteTools(s, h)
 	return s

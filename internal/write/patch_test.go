@@ -45,7 +45,7 @@ func TestApplyPatch(t *testing.T) {
 		{name: "date_string", src: doc("a: 1\n", ""), set: `{"d":"2026-01-20"}`, want: doc("a: 1\nd: 2026-01-20\nupdated: 2026-01-14\n", "")},
 		{name: "ambiguous_string_word", src: doc("a: 1\n", ""), set: `{"s":"yes"}`, want: doc("a: 1\ns: \"yes\"\nupdated: 2026-01-14\n", "")},
 		{name: "ambiguous_string_number", src: doc("a: 1\n", ""), set: `{"s":"123"}`, want: doc("a: 1\ns: \"123\"\nupdated: 2026-01-14\n", "")},
-		{name: "wikilink", src: doc("a: 1\n", ""), set: `{"s":"[[x]]"}`, want: doc("a: 1\ns: \"[[x]]\"\nupdated: 2026-01-14\n", "")},
+		{name: "wikilink", src: doc("a: 1\n", ""), set: `{"s":"[[x]]"}`, want: doc("a: 1\ns: '[[x]]'\nupdated: 2026-01-14\n", "")},
 
 		{name: "add_tags_flow", src: doc("tags: [a, b]\n", "x\n"), add: []string{"C"}, want: doc("tags: [a, b, c]\nupdated: 2026-01-14\n", "x\n")},
 		{

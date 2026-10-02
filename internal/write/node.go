@@ -35,24 +35,14 @@ func isPlainDate(s string) bool {
 	return err == nil
 }
 
-// needsQuotes reports whether s, written plain, would be read back as anything
-// but the same string: numbers, booleans, null, lists, maps, comments, and the
-// YAML 1.1 words (yes, no, on, off) other tools still read as booleans.
+// needsQuotes reports whether s is one of the YAML 1.1 words (yes, no, on,
+// off) that other tools still read as booleans. The encoder already quotes any
+// other string that would not read back as itself, such as "", "12", "true"
+// or "[a]", but it writes these four plain.
 func needsQuotes(s string) bool {
-	if s == "" {
-		return true
-	}
-	if strings.Contains(s, "\n") {
-		return false // the encoder writes a block scalar
-	}
 	switch strings.ToLower(s) {
 	case "yes", "no", "on", "off":
 		return true
 	}
-	var doc yaml.Node
-	if err := yaml.Unmarshal([]byte(s), &doc); err != nil || len(doc.Content) != 1 {
-		return true
-	}
-	c := doc.Content[0]
-	return c.Kind != yaml.ScalarNode || c.ShortTag() != "!!str" || c.Value != s
+	return false
 }

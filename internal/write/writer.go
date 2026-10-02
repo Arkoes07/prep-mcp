@@ -29,19 +29,17 @@ type Writer struct {
 	now func() time.Time
 }
 
-// New builds a Writer. now is the clock for created/updated dates; nil means
-// the system clock.
+// New builds a Writer. now is the clock for created and updated dates.
 func New(v *vault.Vault, cfg *config.Config, g *Git, now func() time.Time) *Writer {
-	if now == nil {
-		now = time.Now
-	}
 	return &Writer{v: v, cfg: cfg, git: g, now: now}
 }
 
 // Result is what every write returns.
 type Result struct {
-	Path, Hash, Commit string
-	Warnings           []string
+	Path     string   `json:"path"`
+	Hash     string   `json:"hash"`
+	Warnings []string `json:"warnings"`
+	Commit   string   `json:"commit,omitempty"`
 }
 
 // ExistsError means create_doc found the target file already there.
@@ -79,7 +77,7 @@ func (w *Writer) Create(ctx context.Context, d Draft) (*Result, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	spec, ok := w.cfg.Type(d.Type)
+	spec, ok := w.cfg.Types[d.Type]
 	if !ok {
 		return nil, fmt.Errorf("unknown type %q; configured types: %s", d.Type, w.cfg.TypeList())
 	}
@@ -195,7 +193,7 @@ func (w *Writer) UpdateFrontmatter(ctx context.Context, p string, patch Patch) (
 			return nil, nil, fmt.Errorf("internal error: the patched file did not re-read (%w); nothing was written. "+
 				"Report this as a bug", err)
 		}
-		if spec, ok := w.cfg.Type(vault.FieldText(fm.Map, "type")); ok {
+		if spec, ok := w.cfg.Types[vault.FieldText(fm.Map, "type")]; ok {
 			if missing := missingFields(spec.Required, fm.Map); len(missing) > 0 {
 				parts := make([]string, len(missing))
 				for i, f := range missing {
@@ -243,7 +241,7 @@ func (w *Writer) Replace(ctx context.Context, p, content, expectedHash string) (
 	if typ == "" {
 		warnings = append(warnings, "the new content has no frontmatter with a type, "+
 			"so this document will no longer appear in queries (list_docs, search_text, get_context)")
-	} else if spec, ok := w.cfg.Type(typ); ok {
+	} else if spec, ok := w.cfg.Types[typ]; ok {
 		if missing := missingFields(spec.Required, fm.Map); len(missing) > 0 {
 			return nil, fmt.Errorf("missing required fields for %s: %s; keep them in the frontmatter",
 				typ, strings.Join(missing, ", "))
