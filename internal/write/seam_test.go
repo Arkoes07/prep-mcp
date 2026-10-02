@@ -163,3 +163,178 @@ func nodeOf(t *testing.T, js string) *yaml.Node {
 	}
 	return n
 }
+
+// Paths in the example vault the batch seam tests write to.
+const (
+	seamA = "improvements/buries-headline.md"
+	seamB = "learning/ddia-ch5.md" // created by the batch
+	seamC = "weeks/2026-w03.md"
+	seamD = "improvements/missing-tradeoff.md"
+)
+
+// readAll returns the content of each path under root.
+func readAll(t *testing.T, root string, paths ...string) map[string]string {
+	t.Helper()
+	out := make(map[string]string, len(paths))
+	for _, p := range paths {
+		b, err := os.ReadFile(filepath.Join(root, p))
+		if err != nil {
+			t.Fatal(err)
+		}
+		out[p] = string(b)
+	}
+	return out
+}
+
+// A write that fails partway through a batch puts back every file the batch
+// already wrote, byte for byte and with its mode, and removes the files it
+// created. Files it had not reached yet are untouched.
+func TestBatchFailureMidwayRollsBack(t *testing.T) {
+	root, w := seamEnv(t)
+	if err := os.Chmod(filepath.Join(root, seamA), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	before := readAll(t, root, seamA, seamC, seamD)
+	calls := 0
+	setSeam(t, func(string) error {
+		calls++
+		if calls == 3 { // the third rename: seamC
+			return errors.New("injected failure")
+		}
+		return nil
+	})
+	ops := []Op{
+		PatchOp(seamA, Patch{Set: nodeOf(t, `{"status":"improving"}`)}),
+		CreateOp(Draft{Type: "learning", Frontmatter: nodeOf(t, `{"title":"DDIA ch5","track":"ddia"}`), Body: "x"}),
+		AppendOp(seamC, "Log", "- Tue: x"),
+		PatchOp(seamD, Patch{Set: nodeOf(t, `{"status":"open"}`)}),
+	}
+
+	_, err := w.Batch(context.Background(), ops, "")
+
+	if err == nil || !strings.Contains(err.Error(), "injected failure") || !strings.Contains(err.Error(), "put back") {
+		t.Fatalf("error = %v, want the injected failure and that the written files were put back", err)
+	}
+	after := readAll(t, root, seamA, seamC, seamD)
+	for p, want := range before {
+		if after[p] != want {
+			t.Errorf("%s was not restored byte for byte:\n%s", p, after[p])
+		}
+	}
+	if fi, err := os.Stat(filepath.Join(root, seamA)); err != nil || fi.Mode().Perm() != 0o600 {
+		t.Errorf("%s mode = %v (%v), want 0600 as before", seamA, fi.Mode().Perm(), err)
+	}
+	if _, err := os.Stat(filepath.Join(root, seamB)); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("the created %s was not removed (%v)", seamB, err)
+	}
+	if left := tempFiles(t, root); len(left) > 0 {
+		t.Errorf("temp files left behind: %v", left)
+	}
+}
+
+// Rollback never overwrites a human's save: a file changed since the batch
+// wrote it is left as the human saved it, and the error names it.
+func TestBatchRollbackKeepsHumanSave(t *testing.T) {
+	root, w := seamEnv(t)
+	targetA := filepath.Join(root, seamA)
+	before := readAll(t, root, seamC)
+	var human []byte
+	calls := 0
+	setSeam(t, func(string) error {
+		calls++
+		if calls != 2 { // the second rename: seamC
+			return nil
+		}
+		ours, err := os.ReadFile(targetA)
+		if err != nil {
+			return err
+		}
+		human = append(ours, "human edit\n"...)
+		if err := os.WriteFile(targetA, human, 0o644); err != nil {
+			return err
+		}
+		return errors.New("injected failure")
+	})
+	ops := []Op{
+		PatchOp(seamA, Patch{Set: nodeOf(t, `{"status":"improving"}`)}),
+		AppendOp(seamC, "Log", "- Tue: x"),
+	}
+
+	_, err := w.Batch(context.Background(), ops, "")
+
+	if err == nil || !strings.Contains(err.Error(), "injected failure") || !strings.Contains(err.Error(), seamA) {
+		t.Fatalf("error = %v, want the injected failure and %s named as not put back", err, seamA)
+	}
+	if got, _ := os.ReadFile(targetA); string(got) != string(human) {
+		t.Errorf("%s:\n%s\nwant the human's save kept:\n%s", seamA, got, human)
+	}
+	if got := readAll(t, root, seamC); got[seamC] != before[seamC] {
+		t.Errorf("%s changed:\n%s", seamC, got[seamC])
+	}
+	if left := tempFiles(t, root); len(left) > 0 {
+		t.Errorf("temp files left behind: %v", left)
+	}
+}
+
+// A human saving a file between the batch's checks and its rename is a
+// conflict: the batch puts back what it wrote, starts over once from the new
+// content, and the human's save is kept.
+func TestBatchHumanEditDuringApplyIsKept(t *testing.T) {
+	root, w := seamEnv(t)
+	targetC := filepath.Join(root, seamC)
+	origC, _ := os.ReadFile(targetC)
+	calls := 0
+	setSeam(t, func(string) error {
+		calls++
+		if calls == 2 { // the second rename, seamC, on the first attempt
+			return os.WriteFile(targetC, append(append([]byte{}, origC...), "- human edit\n"...), 0o644)
+		}
+		return nil
+	})
+	ops := []Op{
+		PatchOp(seamA, Patch{Set: nodeOf(t, `{"status":"improving"}`)}),
+		AppendOp(seamC, "Log", "- Tue: x"),
+	}
+
+	if _, err := w.Batch(context.Background(), ops, ""); err != nil {
+		t.Fatalf("Batch: %v", err)
+	}
+
+	// Renames: A, C (conflict), A put back, then A and C again.
+	if calls != 5 {
+		t.Errorf("renames = %d, want 5", calls)
+	}
+	if got, _ := os.ReadFile(targetC); string(got) != string(origC)+"- human edit\n- Tue: x\n" {
+		t.Errorf("%s:\n%s\nwant the human edit followed by the batch's line", seamC, got)
+	}
+	gotA := readAll(t, root, seamA)[seamA]
+	if strings.Count(gotA, "status: improving\n") != 1 || strings.Count(gotA, "updated:") != 1 {
+		t.Errorf("%s:\n%s\nwant the patch applied once", seamA, gotA)
+	}
+	if left := tempFiles(t, root); len(left) > 0 {
+		t.Errorf("temp files left behind: %v", left)
+	}
+}
+
+// Several ops on one path are one write of the final content.
+func TestBatchWritesEachFileOnce(t *testing.T) {
+	_, w := seamEnv(t)
+	calls := 0
+	setSeam(t, func(string) error {
+		calls++
+		return nil
+	})
+	ops := []Op{
+		PatchOp(seamA, Patch{Set: nodeOf(t, `{"status":"improving"}`)}),
+		AppendOp(seamA, "Notes", "- a"),
+		PatchOp(seamA, Patch{AddTags: []string{"meta/plan"}}),
+	}
+
+	if _, err := w.Batch(context.Background(), ops, ""); err != nil {
+		t.Fatalf("Batch: %v", err)
+	}
+
+	if calls != 1 {
+		t.Errorf("renames = %d, want 1", calls)
+	}
+}

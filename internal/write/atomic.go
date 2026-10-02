@@ -21,17 +21,6 @@ import (
 // before it is renamed into place. Production leaves it nil.
 var beforeRename func(tmp string) error
 
-func (w *Writer) readExisting(rel string) ([]byte, error) {
-	b, err := w.v.Root().ReadFile(rel)
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil, fmt.Errorf("not found: %s (use create_doc to make a new document)", rel)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", rel, err)
-	}
-	return b, nil
-}
-
 // replaceFile atomically replaces an existing file, provided it still has the
 // content with hash oldHash. If it does not, nothing is written and the error
 // is a *ConflictError carrying the file's current hash.

@@ -19,8 +19,9 @@ import (
 	"github.com/Arkoes07/prep-mcp/internal/vault"
 )
 
-// Writer applies safe changes to one vault. Writes are serialised, and every
-// file is replaced atomically. A nil Git means no commits and no commit warnings.
+// Writer applies safe changes to one vault. Writes are serialised, every
+// write goes through the batch engine (batch.go), and every file is replaced
+// atomically. A nil Git means no commits and no commit warnings.
 type Writer struct {
 	mu  sync.Mutex
 	v   *vault.Vault
@@ -62,20 +63,23 @@ type Draft struct {
 // Create makes a new document of a configured type. The path comes from the
 // type's folder and filename pattern.
 func (w *Writer) Create(ctx context.Context, d Draft) (*Result, error) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
+	return w.single(ctx, CreateOp(d))
+}
 
+// planCreate builds a new document and adds it to the plan. It fails if the
+// file exists on disk or was created earlier in the batch.
+func (w *Writer) planCreate(p *batchPlan, d Draft) (*file, []string, error) {
 	spec, ok := w.cfg.Types[d.Type]
 	if !ok {
-		return nil, fmt.Errorf("unknown type %q; configured types: %s", d.Type, w.cfg.TypeList())
+		return nil, nil, fmt.Errorf("unknown type %q; configured types: %s", d.Type, w.cfg.TypeList())
 	}
 	day := w.now()
 	doc, err := newFrontmatter(d.Type, d.Frontmatter, day.Format(time.DateOnly))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if missing := missingFields(spec.Required, doc); len(missing) > 0 {
-		return nil, fmt.Errorf("missing required fields for %s: %s; add them to frontmatter and retry",
+		return nil, nil, fmt.Errorf("missing required fields for %s: %s; add them to frontmatter and retry",
 			d.Type, strings.Join(missing, ", "))
 	}
 
@@ -86,11 +90,11 @@ func (w *Writer) Create(ctx context.Context, d Draft) (*Result, error) {
 		day,
 	)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	rel, err := w.v.Resolve(path.Join(spec.Folder, name), vault.AccessWrite)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	body := d.Body
@@ -99,20 +103,19 @@ func (w *Writer) Create(ctx context.Context, d Draft) (*Result, error) {
 	}
 	data := []byte("---\n" + encode(doc) + "---\n" + body)
 	if _, err := reread(data); err != nil {
-		return nil, fmt.Errorf("internal error: the new frontmatter did not re-read (%w); nothing was written. "+
+		return nil, nil, fmt.Errorf("internal error: the new frontmatter did not re-read (%w); nothing was written. "+
 			"Report this as a bug", err)
 	}
 
-	if err := w.createFile(rel, data); err != nil {
-		return nil, err
+	f, err := p.file(w, rel)
+	if err != nil {
+		return nil, nil, err
 	}
-	res := &Result{
-		Path:     rel,
-		Hash:     vault.Hash(data),
-		Warnings: w.tagWarnings(vault.NormalizeTags(vault.Field(doc, "tags"))),
+	if f.exists {
+		return nil, nil, fmt.Errorf("file exists: %s (use append_section or update_frontmatter)", rel)
 	}
-	w.commit(ctx, "create_doc", res)
-	return res, nil
+	f.cur, f.exists, f.edited = data, true, true
+	return f, w.tagWarnings(vault.NormalizeTags(vault.Field(doc, "tags"))), nil
 }
 
 // newFrontmatter builds a new document's frontmatter: type first, then the
@@ -148,79 +151,77 @@ func newFrontmatter(typ string, fm *yaml.Node, today string) (*yaml.Node, error)
 // AppendSection adds content to the end of a "## heading" section, or adds
 // the section at the end of the file.
 func (w *Writer) AppendSection(ctx context.Context, p, heading, content string) (*Result, error) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	rel, err := w.v.Resolve(p, vault.AccessWrite)
-	if err != nil {
-		return nil, err
-	}
-	return w.modify(ctx, "append_section", rel, func(old []byte) ([]byte, []string, error) {
-		next, err := InsertSection(old, heading, content)
-		return next, nil, err
-	})
+	return w.single(ctx, AppendOp(p, heading, content))
 }
 
 // UpdateFrontmatter changes frontmatter keys and tags, leaving the body's bytes alone.
 func (w *Writer) UpdateFrontmatter(ctx context.Context, p string, patch Patch) (*Result, error) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	rel, err := w.v.Resolve(p, vault.AccessWrite)
-	if err != nil {
-		return nil, err
+	return w.single(ctx, PatchOp(p, patch))
+}
+
+// patchDoc applies patch to a document's bytes. A patch that changes nothing
+// returns old.
+func (w *Writer) patchDoc(old []byte, patch Patch) ([]byte, []string, error) {
+	var warnings []string
+	oldTags := tagsOf(old)
+	for _, t := range vault.NormalizeTagList(patch.RemoveTags) {
+		if !slices.Contains(oldTags, t) {
+			warnings = append(warnings,
+				fmt.Sprintf("tag %q is not on this document, so there was nothing to remove", t))
+		}
 	}
-	return w.modify(ctx, "update_frontmatter", rel, func(old []byte) ([]byte, []string, error) {
-		var warnings []string
-		oldTags := tagsOf(old)
-		for _, t := range vault.NormalizeTagList(patch.RemoveTags) {
-			if !slices.Contains(oldTags, t) {
-				warnings = append(warnings,
-					fmt.Sprintf("tag %q is not on this document, so there was nothing to remove", t))
+	next, fm, err := ApplyPatch(old, patch, w.now().Format(time.DateOnly))
+	if err != nil || fm == nil {
+		return old, warnings, err
+	}
+	if spec, ok := w.cfg.Types[vault.FieldText(fm.Map, "type")]; ok {
+		if missing := missingFields(spec.Required, fm.Map); len(missing) > 0 {
+			parts := make([]string, len(missing))
+			for i, f := range missing {
+				parts[i] = fmt.Sprintf("%s is required for %s", f, vault.FieldText(fm.Map, "type"))
 			}
+			return nil, nil, fmt.Errorf("%s; give the field a value with set instead of removing or emptying it",
+				strings.Join(parts, "; "))
 		}
-		next, fm, err := ApplyPatch(old, patch, w.now().Format(time.DateOnly))
-		if err != nil || fm == nil {
-			return old, warnings, err
-		}
-		if spec, ok := w.cfg.Types[vault.FieldText(fm.Map, "type")]; ok {
-			if missing := missingFields(spec.Required, fm.Map); len(missing) > 0 {
-				parts := make([]string, len(missing))
-				for i, f := range missing {
-					parts[i] = fmt.Sprintf("%s is required for %s", f, vault.FieldText(fm.Map, "type"))
-				}
-				return nil, nil, fmt.Errorf("%s; give the field a value with set instead of removing or emptying it",
-					strings.Join(parts, "; "))
-			}
-		}
-		return next, append(warnings, w.tagWarnings(newTags(oldTags, tagsOf(next)))...), nil
-	})
+	}
+	return next, append(warnings, w.tagWarnings(newTags(oldTags, tagsOf(next)))...), nil
 }
 
 // Replace rewrites a whole file, but only if it still has the content whose
 // hash the caller read.
 func (w *Writer) Replace(ctx context.Context, p, content, expectedHash string) (*Result, error) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
+	return w.single(ctx, ReplaceOp(p, content, expectedHash))
+}
+
+// planReplace checks a full rewrite against the file as the batch sees it.
+// expectedHash is of the file as the caller read it, so a path an earlier op
+// in the batch changed cannot be replaced.
+func (w *Writer) planReplace(p *batchPlan, path, content, expectedHash string) (*file, []string, error) {
 	expected := strings.ToLower(strings.TrimSpace(expectedHash))
 	if expected == "" {
-		return nil, errors.New("expected_hash is required; get it from read_doc")
+		return nil, nil, errors.New("expected_hash is required; get it from read_doc")
 	}
-	rel, err := w.v.Resolve(p, vault.AccessWrite)
+	rel, err := w.v.Resolve(path, vault.AccessWrite)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	old, err := w.readExisting(rel)
+	f, err := p.existing(w, rel)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	if cur := vault.Hash(old); cur != expected {
-		return nil, &ConflictError{Path: rel, Current: cur}
+	if f.edited {
+		return nil, nil, fmt.Errorf("an earlier op in this batch changed %s; "+
+			"put replace_doc first for %s, or fold that change into its content", rel, rel)
+	}
+	if cur := vault.Hash(f.cur); cur != expected {
+		return nil, nil, &ConflictError{Path: rel, Current: cur}
 	}
 
 	data := []byte(content)
 	var warnings []string
 	fm, err := vault.SplitFrontmatter(data)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	typ := ""
 	if fm != nil {
@@ -231,66 +232,31 @@ func (w *Writer) Replace(ctx context.Context, p, content, expectedHash string) (
 			"so this document will no longer appear in queries (list_docs, search_text, get_context)")
 	} else if spec, ok := w.cfg.Types[typ]; ok {
 		if missing := missingFields(spec.Required, fm.Map); len(missing) > 0 {
-			return nil, fmt.Errorf("missing required fields for %s: %s; keep them in the frontmatter",
+			return nil, nil, fmt.Errorf("missing required fields for %s: %s; keep them in the frontmatter",
 				typ, strings.Join(missing, ", "))
 		}
 	}
-	warnings = append(warnings, w.tagWarnings(newTags(tagsOf(old), tagsOf(data)))...)
+	warnings = append(warnings, w.tagWarnings(newTags(tagsOf(f.cur), tagsOf(data)))...)
 
-	if err := w.replaceFile(rel, data, expected); err != nil {
-		return nil, err
+	if !bytes.Equal(data, f.cur) {
+		f.cur, f.edited = data, true
 	}
-	res := &Result{Path: rel, Hash: vault.Hash(data), Warnings: warnings}
-	w.commit(ctx, "replace_doc", res)
-	return res, nil
+	return f, warnings, nil
 }
 
 // ---- shared steps ----
 
-// modify reads rel, transforms it and replaces it atomically. If the file
-// changes between the read and the rename it starts over once from the new
-// content, so a human's save is not lost. A transform returning its input
-// unchanged means there is nothing to write.
-func (w *Writer) modify(
-	ctx context.Context,
-	tool, rel string,
-	transform func(old []byte) (next []byte, warnings []string, err error),
-) (*Result, error) {
-	for range 2 {
-		old, err := w.readExisting(rel)
-		if err != nil {
-			return nil, err
-		}
-		next, warnings, err := transform(old)
-		if err != nil {
-			return nil, err
-		}
-		if bytes.Equal(next, old) {
-			return &Result{Path: rel, Hash: vault.Hash(old), Warnings: warnings}, nil
-		}
-		var conflict *ConflictError
-		if err := w.replaceFile(rel, next, vault.Hash(old)); errors.As(err, &conflict) {
-			continue
-		} else if err != nil {
-			return nil, err
-		}
-		res := &Result{Path: rel, Hash: vault.Hash(next), Warnings: warnings}
-		w.commit(ctx, tool, res)
-		return res, nil
+// commit commits paths with msg when commits are on and anything was written,
+// and returns the commit's hash and any warning.
+func (w *Writer) commit(ctx context.Context, paths []string, msg string) (string, []string) {
+	if w.git == nil || !w.cfg.CommitOnWrite || len(paths) == 0 {
+		return "", nil
 	}
-	return nil, fmt.Errorf("%s changed again while it was being edited, twice in a row. Nothing was written: "+
-		"re-read it with read_doc and retry", rel)
-}
-
-func (w *Writer) commit(ctx context.Context, tool string, res *Result) {
-	if w.git == nil || !w.cfg.CommitOnWrite {
-		return
+	hash, warning := w.git.Commit(ctx, w.v.Dir(), paths, msg)
+	if warning == "" {
+		return hash, nil
 	}
-	hash, warning := w.git.Commit(ctx, w.v.Dir(), res.Path, tool+": "+res.Path)
-	res.Commit = hash
-	if warning != "" {
-		res.Warnings = append(res.Warnings, warning)
-	}
+	return hash, []string{warning}
 }
 
 // tagWarnings names the closest known tag for each added tag that is not in

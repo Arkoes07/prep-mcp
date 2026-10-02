@@ -24,13 +24,14 @@ type Git struct {
 const (
 	defaultGitTimeout = 10 * time.Second
 	maxOutputInWarn   = 400
+	maxPathsInWarn    = 5
 )
 
-// Commit commits rel (slash-separated, relative to dir) with message msg. It
-// only commits when dir is the root of its git repository, and only the one
-// path, so staged work by a human is left alone. It never fails a write:
+// Commit commits paths (slash-separated, relative to dir) with message msg. It
+// only commits when dir is the root of its git repository, and only those
+// paths, so staged work by a human is left alone. It never fails a write:
 // every problem comes back as warning, and then hash is empty.
-func (g *Git) Commit(ctx context.Context, dir, rel, msg string) (hash, warning string) {
+func (g *Git) Commit(ctx context.Context, dir string, paths []string, msg string) (hash, warning string) {
 	timeout := g.Timeout
 	if timeout <= 0 {
 		timeout = defaultGitTimeout
@@ -50,9 +51,16 @@ func (g *Git) Commit(ctx context.Context, dir, rel, msg string) (hash, warning s
 		case ctx.Err() != nil:
 			return fail("cancelled during %s. The file is saved; commit it yourself in %s", what, dir)
 		}
-		return fail("%s failed: %s. The file is saved; "+
-			"fix the cause, then run `git add -- %s && git commit --only -- %s` in %s",
-			what, describe(out, err), rel, rel, dir)
+		files := pathList(paths)
+		return fail(
+			"%s failed: %s. The file is saved; "+
+				"fix the cause, then run `git add -- %s && git commit --only -- %s` in %s",
+			what,
+			describe(out, err),
+			files,
+			files,
+			dir,
+		)
 	}
 
 	bin, name, email, err := g.identity()
@@ -80,16 +88,17 @@ func (g *Git) Commit(ctx context.Context, dir, rel, msg string) (hash, warning s
 			dir, top, dir)
 	}
 
-	if out, err := r.run(ctx, "add", "--", rel); err != nil {
+	if out, err := r.run(ctx, append([]string{"add", "--"}, paths...)...); err != nil {
 		return problem("git add", out, err)
 	}
-	// A write that left the file as it already was in HEAD has nothing to commit.
-	if _, err := r.run(ctx, "diff", "--cached", "--quiet", "--", rel); err == nil {
+	// A write that left the files as they already were in HEAD has nothing to commit.
+	if _, err := r.run(ctx, append([]string{"diff", "--cached", "--quiet", "--"}, paths...)...); err == nil {
 		return "", ""
 	} else if ctx.Err() != nil {
 		return problem("git diff", "", err)
 	}
-	if out, err := r.run(ctx, "commit", "--only", "-m", msg, "--author="+name+" <"+email+">", "--", rel); err != nil {
+	commit := []string{"commit", "--only", "-m", msg, "--author=" + name + " <" + email + ">", "--"}
+	if out, err := r.run(ctx, append(commit, paths...)...); err != nil {
 		return problem("git commit", out, err)
 	}
 	out, err := r.run(ctx, "rev-parse", "--short", "HEAD")
@@ -150,6 +159,14 @@ func describe(out string, err error) string {
 		return err.Error()
 	}
 	return s
+}
+
+// pathList names paths in a hint, at most maxPathsInWarn of them.
+func pathList(paths []string) string {
+	if len(paths) <= maxPathsInWarn {
+		return strings.Join(paths, " ")
+	}
+	return fmt.Sprintf("%s (and %d more)", strings.Join(paths[:maxPathsInWarn], " "), len(paths)-maxPathsInWarn)
 }
 
 // samePath compares two directories after resolving symlinks (~/prep may be a

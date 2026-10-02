@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -219,6 +220,81 @@ func TestGitEachTool(t *testing.T) {
 	}
 }
 
+// A batch is one commit by the AI author, holding every file it wrote. The
+// message is the caller's, else a count of ops per tool.
+func TestGitBatchOneCommit(t *testing.T) {
+	e := newGitEnv(t, gitTimeout)
+	initRepo(t, e.root)
+	set := func(p, js string) write.Op {
+		return write.PatchOp(p, write.Patch{Set: node(t, js)})
+	}
+	threeFiles := []string{"improvements/buries-headline.md", "improvements/missing-tradeoff.md", "weeks/2026-w03.md"}
+	steps := []struct {
+		name    string
+		ops     []write.Op
+		message string
+		wantMsg string
+		paths   []string
+	}{
+		{
+			name: "generated_message",
+			ops: []write.Op{
+				set("improvements/buries-headline.md", `{"status":"improving"}`),
+				set("improvements/missing-tradeoff.md", `{"status":"open"}`),
+				set("weeks/2026-w03.md", `{"mood":"ok"}`),
+			},
+			wantMsg: "batch: 3 update_frontmatter",
+			paths:   threeFiles,
+		},
+		{
+			name: "mixed_tools",
+			ops: []write.Op{
+				write.AppendOp("weeks/2026-w03.md", "Log", "- Tue: x"),
+				set("improvements/buries-headline.md", `{"status":"open"}`),
+				set("improvements/missing-tradeoff.md", `{"status":"improving"}`),
+			},
+			wantMsg: "batch: 1 append_section, 2 update_frontmatter",
+			paths:   threeFiles,
+		},
+		{
+			name: "caller_message",
+			ops: []write.Op{
+				write.CreateOp(write.Draft{
+					Type:        "learning",
+					Frontmatter: node(t, `{"title":"DDIA ch5","track":"ddia"}`),
+					Body:        "x",
+				}),
+				write.AppendOp("weeks/2026-w03.md", "Log", "- Wed: y"),
+			},
+			message: "  Import reading notes\n",
+			wantMsg: "Import reading notes",
+			paths:   []string{"learning/ddia-ch5.md", "weeks/2026-w03.md"},
+		},
+	}
+	for _, s := range steps {
+		t.Run(s.name, func(t *testing.T) {
+			before := commitCount(t, e.root)
+
+			res, err := e.w.Batch(ctx, s.ops, s.message)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if len(res.Warnings) != 0 {
+				t.Errorf("warnings = %q, want none", res.Warnings)
+			}
+			n, err := strconv.Atoi(before)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got, want := commitCount(t, e.root), strconv.Itoa(n+1); got != want {
+				t.Errorf("commit count = %s, want exactly one more (%s)", got, want)
+			}
+			wantCommitted(t, e, &write.Result{Commit: res.Commit}, before, s.wantMsg, s.paths...)
+		})
+	}
+}
+
 // The human's staged work must neither be swept into the AI's commit nor lose
 // its place in the index.
 func TestGitHumanStaged(t *testing.T) {
@@ -292,7 +368,7 @@ func TestGitRootViaSymlink(t *testing.T) {
 		testvault.Write(t, e.root, "direct.md", "x\n")
 		before := commitCount(t, e.root)
 
-		hash, warning := gitFor(e, "git", gitTimeout).Commit(ctx, link, "direct.md", "direct: direct.md")
+		hash, warning := gitFor(e, "git", gitTimeout).Commit(ctx, link, []string{"direct.md"}, "direct: direct.md")
 
 		if warning != "" {
 			t.Fatalf("warning = %q, want none", warning)
