@@ -26,14 +26,14 @@ func registerReadTools(s *mcp.Server, h *handlers) {
 			"Call this first. " +
 			"Optional date (YYYY-MM-DD) builds the bundle as of another day.",
 		Annotations: readOnly,
-	}, guard(h.logger, "get_context", h.getContext))
+	}, guard("get_context", h.getContext))
 
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "list_docs",
 		Title:       "List documents",
 		Description: listDocsDescription(h.cfg),
 		Annotations: readOnly,
-	}, guard(h.logger, "list_docs", h.listDocs))
+	}, guard("list_docs", h.listDocs))
 
 	mcp.AddTool(s, &mcp.Tool{
 		Name:  "read_doc",
@@ -43,7 +43,7 @@ func registerReadTools(s *mcp.Server, h *handlers) {
 			"and the full content. " +
 			"Any .md file in the vault can be read, including templates/.",
 		Annotations: readOnly,
-	}, guard(h.logger, "read_doc", h.readDoc))
+	}, guard("read_doc", h.readDoc))
 
 	mcp.AddTool(s, &mcp.Tool{
 		Name:  "search_text",
@@ -53,7 +53,7 @@ func registerReadTools(s *mcp.Server, h *handlers) {
 			"with 1-based file line numbers. " +
 			"Other frontmatter fields are not searched. Optionally limit to one type; limit defaults to 20.",
 		Annotations: readOnly,
-	}, guard(h.logger, "search_text", h.searchText))
+	}, guard("search_text", h.searchText))
 
 	mcp.AddTool(s, &mcp.Tool{
 		Name:  "list_tags",
@@ -62,7 +62,7 @@ func registerReadTools(s *mcp.Server, h *handlers) {
 			"Optionally only tags under a prefix such as issue/. " +
 			"Tags missing from the vocabulary file are marked unknown.",
 		Annotations: readOnly,
-	}, guard(h.logger, "list_tags", h.listTags))
+	}, guard("list_tags", h.listTags))
 }
 
 // listDocsDescription names the configured summary fields, so the model knows

@@ -24,7 +24,7 @@ func registerWriteTools(s *mcp.Server, h *handlers) {
 		Title:       "Create a document",
 		Description: createDocDescription(h.cfg),
 		Annotations: additive,
-	}, guard(h.logger, "create_doc", h.createDoc))
+	}, guard("create_doc", h.createDoc))
 
 	mcp.AddTool(s, &mcp.Tool{
 		Name:  "append_section",
@@ -37,7 +37,7 @@ func registerWriteTools(s *mcp.Server, h *handlers) {
 			"Frontmatter and all existing text stay byte for byte. Returns path, new hash, warnings and commit. " +
 			"This is the default way to add to a document.",
 		Annotations: additive,
-	}, guard(h.logger, "append_section", h.appendSection))
+	}, guard("append_section", h.appendSection))
 
 	mcp.AddTool(s, &mcp.Tool{
 		Name:  "update_frontmatter",
@@ -49,7 +49,7 @@ func registerWriteTools(s *mcp.Server, h *handlers) {
 			"set.tags cannot be combined with add_tags/remove_tags. " +
 			"A patch that changes nothing writes nothing. Returns path, new hash and warnings such as unknown tags.",
 		Annotations: additive,
-	}, guard(h.logger, "update_frontmatter", h.updateFrontmatter))
+	}, guard("update_frontmatter", h.updateFrontmatter))
 
 	mcp.AddTool(s, &mcp.Tool{
 		Name:  "replace_doc",
@@ -62,7 +62,7 @@ func registerWriteTools(s *mcp.Server, h *handlers) {
 			"The new content must keep valid frontmatter and the type's required fields. " +
 			"Returns path, new hash and warnings.",
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes, OpenWorldHint: &no},
-	}, guard(h.logger, "replace_doc", h.replaceDoc))
+	}, guard("replace_doc", h.replaceDoc))
 }
 
 // createDocDescription lists every configured type with its path pattern and

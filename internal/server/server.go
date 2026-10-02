@@ -33,19 +33,19 @@ func New(r *read.Reader, w *write.Writer, cfg *config.Config, version string) *m
 		&mcp.Implementation{Name: "prep-mcp", Version: version},
 		&mcp.ServerOptions{Instructions: instructions},
 	)
-	h := &handlers{r: r, w: w, cfg: cfg, logger: slog.Default()}
+	h := &handlers{r: r, w: w, cfg: cfg}
 	registerReadTools(s, h)
 	registerWriteTools(s, h)
 	return s
 }
 
 // guard turns a panic in a handler into an error result, so one bad call
-// cannot take the server down. The stack goes to logger, never to the client.
-func guard[In any](logger *slog.Logger, name string, h mcp.ToolHandlerFor[In, any]) mcp.ToolHandlerFor[In, any] {
+// cannot take the server down. The stack goes to slog.Default(), never to the client.
+func guard[In any](name string, h mcp.ToolHandlerFor[In, any]) mcp.ToolHandlerFor[In, any] {
 	return func(ctx context.Context, req *mcp.CallToolRequest, in In) (res *mcp.CallToolResult, out any, err error) {
 		defer func() {
 			if r := recover(); r != nil {
-				logger.Error("tool handler panicked",
+				slog.Error("tool handler panicked",
 					slog.String("tool", name),
 					slog.Any("panic", r),
 					slog.String("stack", string(debug.Stack())),
@@ -59,10 +59,9 @@ func guard[In any](logger *slog.Logger, name string, h mcp.ToolHandlerFor[In, an
 }
 
 type handlers struct {
-	r      *read.Reader
-	w      *write.Writer
-	cfg    *config.Config
-	logger *slog.Logger
+	r   *read.Reader
+	w   *write.Writer
+	cfg *config.Config
 }
 
 func text(s string) *mcp.CallToolResult {

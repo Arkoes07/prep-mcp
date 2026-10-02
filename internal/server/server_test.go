@@ -120,14 +120,16 @@ func TestDescriptionsAreDomainNeutral(t *testing.T) {
 }
 
 func TestPanicBecomesToolError(t *testing.T) {
-	quiet := slog.New(slog.DiscardHandler) // guard logs the stack; keep test output clean
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.DiscardHandler)) // guard logs the stack; keep test output clean
+	t.Cleanup(func() { slog.SetDefault(prev) })
 	s := mcp.NewServer(&mcp.Implementation{Name: "t", Version: "0"}, nil)
 	mcp.AddTool(s, &mcp.Tool{Name: "boom", Description: "panics"},
-		guard(quiet, "boom", func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, any, error) {
+		guard("boom", func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, any, error) {
 			panic("kaboom")
 		}))
 	mcp.AddTool(s, &mcp.Tool{Name: "fine", Description: "works"},
-		guard(quiet, "fine", func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, any, error) {
+		guard("fine", func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, any, error) {
 			return text("still here"), nil, nil
 		}))
 	cs := serve(t, s)
