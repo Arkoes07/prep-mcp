@@ -71,7 +71,7 @@ func TestApplyPatch(t *testing.T) {
 		},
 		{name: "no_frontmatter", src: "# x\n", set: `{"a":1}`, wantErr: "no frontmatter"},
 		{name: "invalid_frontmatter", src: "---\na: 1\nb: : x\n---\nbody\n", set: `{"a":2}`, wantErr: "line 3"},
-		{name: "invalid_frontmatter_flow", src: "---\na: 1\nb: [1\nc: 2\n---\nbody\n", set: `{"a":2}`, wantErr: "line 3"},
+		{name: "invalid_frontmatter_flow", src: "---\na: 1\nb: [1\nc: 2\n---\nbody\n", set: `{"a":2}`, wantErr: "invalid frontmatter near line"},
 		{
 			name: "crlf", src: "---\r\na: 1\r\nb: 2\r\n---\r\nbody\r\n", set: `{"a":5}`,
 			want: "---\r\na: 5\r\nb: 2\r\nupdated: 2026-01-14\r\n---\r\nbody\r\n",

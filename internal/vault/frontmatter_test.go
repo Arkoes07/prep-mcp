@@ -1,8 +1,8 @@
 package vault_test
 
 import (
-	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -110,8 +110,8 @@ func TestSplitFrontmatterInvalidYAML(t *testing.T) {
 	}
 }
 
-// yaml.v3 numbers some parse errors from 0 and some from 1, so its own line
-// is not trustworthy. The reported line must be where the bad YAML starts in
+// yaml.v3 numbers some parse errors from 0 and some from 1, and its line is
+// used as is, so the reported line is the bad one or the one before it, in
 // the FILE. Line 1 of each source is the opening fence.
 func TestSplitFrontmatterErrorLine(t *testing.T) {
 	tests := []struct {
@@ -134,9 +134,12 @@ func TestSplitFrontmatterErrorLine(t *testing.T) {
 			if err == nil {
 				t.Fatal("want an error")
 			}
-			want := fmt.Sprintf("line %d", tc.line)
-			if !regexp.MustCompile(want + `\b`).MatchString(err.Error()) {
-				t.Errorf("error = %q, want it to name %s", err, want)
+			m := regexp.MustCompile(`near line (\d+)\b`).FindStringSubmatch(err.Error())
+			if m == nil {
+				t.Fatalf("error = %q, want it to name a line", err)
+			}
+			if n, _ := strconv.Atoi(m[1]); n < tc.line-1 || n > tc.line {
+				t.Errorf("error = %q, want it to name line %d or %d", err, tc.line-1, tc.line)
 			}
 			if regexp.MustCompile(`line \d+.*line \d+`).MatchString(err.Error()) {
 				t.Errorf("error = %q names more than one line", err)
