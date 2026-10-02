@@ -434,25 +434,82 @@ func TestGitHookHangs(t *testing.T) {
 	wantWarning(t, res, "git timed out")
 }
 
-// A stale or concurrent index.lock is the human's to clear. Report it, keep the write, leave the lock.
-func TestGitIndexLock(t *testing.T) {
+// A stale or concurrent git lock is the human's to clear. Report it by its
+// path and say whether the write was staged; keep the write; leave the lock.
+// index.lock stops git add, so nothing is staged; HEAD.lock stops only the
+// commit, so the file is staged.
+func TestGitLock(t *testing.T) {
+	tests := []struct {
+		lock   string
+		staged string // git diff --cached --name-only afterwards
+		say    string
+	}{
+		{lock: "index.lock", staged: "", say: "nothing was staged"},
+		{lock: "HEAD.lock", staged: "learning/ddia-ch5.md", say: "the change is staged"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.lock, func(t *testing.T) {
+			e := newGitEnv(t, gitTimeout)
+			initRepo(t, e.root)
+			lock := filepath.Join(e.root, ".git", tc.lock)
+			if err := os.WriteFile(lock, nil, 0o644); err != nil {
+				t.Fatal(err)
+			}
+			before := commitCount(t, e.root)
+
+			res := createNote(t, e)
+
+			if !e.exists("learning/ddia-ch5.md") {
+				t.Error("the write must be kept")
+			}
+			if got := commitCount(t, e.root); got != before {
+				t.Errorf("commit count = %s, want %s", got, before)
+			}
+			wantWarning(
+				t,
+				res,
+				"not committed",
+				"/vault/.git/"+tc.lock+" exists",
+				tc.say,
+				"Once no git process is running",
+				"delete",
+				"prep-mcp never deletes it",
+			)
+			if got := git(t, e.root, "diff", "--cached", "--name-only"); got != tc.staged {
+				t.Errorf("staged = %q, want %q", got, tc.staged)
+			}
+			if _, err := os.Stat(lock); err != nil {
+				t.Errorf("the server must not remove a lock it did not create: %v", err)
+			}
+		})
+	}
+}
+
+// A batch under a lock is written in full, with the one commit warning.
+func TestGitBatchLock(t *testing.T) {
 	e := newGitEnv(t, gitTimeout)
 	initRepo(t, e.root)
 	lock := filepath.Join(e.root, ".git", "index.lock")
 	if err := os.WriteFile(lock, nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	before := commitCount(t, e.root)
-
-	res := createNote(t, e)
-
-	if !e.exists("learning/ddia-ch5.md") {
-		t.Error("the write must be kept")
+	ops := []write.Op{
+		write.AppendOp("weeks/2026-w03.md", "Log", "- Tue: x"),
+		write.PatchOp("improvements/buries-headline.md", write.Patch{Set: node(t, `{"status":"improving"}`)}),
 	}
-	if got := commitCount(t, e.root); got != before {
-		t.Errorf("commit count = %s, want %s", got, before)
+
+	res, err := e.w.Batch(ctx, ops, "")
+	if err != nil {
+		t.Fatal(err)
 	}
-	wantWarning(t, res, "not committed", "index.lock")
+
+	if !strings.Contains(e.read(t, "weeks/2026-w03.md"), "- Tue: x\n") ||
+		!strings.Contains(e.read(t, "improvements/buries-headline.md"), "status: improving\n") {
+		t.Error("the batch's writes must be kept")
+	}
+	if res.Commit != "" || len(res.Warnings) != 1 || !strings.Contains(res.Warnings[0], ".git/index.lock exists") {
+		t.Errorf("commit = %q, warnings = %q; want no commit and one lock warning", res.Commit, res.Warnings)
+	}
 	if _, err := os.Stat(lock); err != nil {
 		t.Errorf("the server must not remove a lock it did not create: %v", err)
 	}

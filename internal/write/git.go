@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -20,6 +21,10 @@ type Git struct {
 	Bin, Author string
 	Timeout     time.Duration // for the whole commit, not per git command; zero means 10 s
 }
+
+// lockRE finds the lock file git names when another git process holds it, or
+// left it behind (git runs with LC_ALL=C, so the message is stable).
+var lockRE = regexp.MustCompile(`Unable to create '([^']+\.lock)': File exists`)
 
 const (
 	defaultGitTimeout = 10 * time.Second
@@ -42,7 +47,8 @@ func (g *Git) Commit(ctx context.Context, dir string, paths []string, msg string
 	fail := func(format string, args ...any) (string, string) {
 		return "", "not committed: " + fmt.Sprintf(format, args...)
 	}
-	// problem turns a failed git run into a warning, telling a timeout from other failures.
+	// problem turns a failed git run into a warning, telling a timeout and a
+	// lock left by another git process from other failures.
 	problem := func(what, out string, err error) (string, string) {
 		switch {
 		case errors.Is(ctx.Err(), context.DeadlineExceeded):
@@ -52,15 +58,25 @@ func (g *Git) Commit(ctx context.Context, dir string, paths []string, msg string
 			return fail("cancelled during %s. The file is saved; commit it yourself in %s", what, dir)
 		}
 		files := pathList(paths)
-		return fail(
-			"%s failed: %s. The file is saved; "+
-				"fix the cause, then run `git add -- %s && git commit --only -- %s` in %s",
-			what,
-			describe(out, err),
-			files,
-			files,
-			dir,
-		)
+		fix := fmt.Sprintf("run `git add -- %s && git commit --only -- %s` in %s", files, files, dir)
+		if m := lockRE.FindStringSubmatch(out); m != nil {
+			// A lock stops git add (index.lock) or only the commit (HEAD.lock, a branch's lock).
+			staged := "nothing was staged"
+			if what == "git commit" {
+				staged = "the change is staged"
+			}
+			return fail(
+				"git's lock file %s exists. Another git process may be running, or one crashed and left it behind. "+
+					"The file is saved; %s. Once no git process is running in %s, delete %s, then %s. "+
+					"prep-mcp never deletes it",
+				m[1],
+				staged,
+				dir,
+				m[1],
+				fix,
+			)
+		}
+		return fail("%s failed: %s. The file is saved; fix the cause, then %s", what, describe(out, err), fix)
 	}
 
 	bin, name, email, err := g.identity()
