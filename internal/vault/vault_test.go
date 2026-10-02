@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/Arkoes07/prep-mcp/internal/testvault"
 	"github.com/Arkoes07/prep-mcp/internal/vault"
 )
 
@@ -23,7 +24,7 @@ func TestRootEnforced(t *testing.T) {
 	if err := os.RemoveAll(filepath.Join(root, "weeks")); err != nil {
 		t.Fatal(err)
 	}
-	mustSymlink(t, outside, filepath.Join(root, "weeks"))
+	testvault.Symlink(t, outside, filepath.Join(root, "weeks"))
 
 	r := v.Root()
 	if r == nil {
@@ -44,9 +45,9 @@ func TestRootEnforced(t *testing.T) {
 func TestOpenViaSymlinkedRoot(t *testing.T) {
 	root, _ := copyOpen(t)
 	link := filepath.Join(filepath.Dir(root), "link")
-	mustSymlink(t, root, link)
+	testvault.Symlink(t, root, link)
 
-	v := openAt(t, link)
+	_, v := testvault.Open(t, link)
 	if _, err := v.Resolve("weeks/2026-w03.md", vault.AccessWrite); err != nil {
 		t.Errorf("Resolve through a symlinked root: %v", err)
 	}

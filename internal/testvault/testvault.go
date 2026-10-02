@@ -11,6 +11,9 @@ import (
 	"runtime"
 	"testing"
 	"time"
+
+	"github.com/Arkoes07/prep-mcp/internal/config"
+	"github.com/Arkoes07/prep-mcp/internal/vault"
 )
 
 // Day is the fixed "today" for tests: a Wednesday in ISO week 2026-W03.
@@ -80,6 +83,30 @@ func Write(t testing.TB, root, rel, content string) {
 	}
 	if err := os.Chtimes(p, Mtime, Mtime); err != nil {
 		t.Fatalf("testvault.Write: %v", err)
+	}
+}
+
+// Open loads dir's prep.config.yaml and opens the vault at dir. The vault is
+// closed when the test ends.
+func Open(t testing.TB, dir string) (*config.Config, *vault.Vault) {
+	t.Helper()
+	cfg, err := config.Load(filepath.Join(dir, "prep.config.yaml"))
+	if err != nil {
+		t.Fatalf("testvault.Open: %v", err)
+	}
+	v, err := vault.Open(dir, cfg)
+	if err != nil {
+		t.Fatalf("testvault.Open: %v", err)
+	}
+	CloseOnCleanup(t, v)
+	return cfg, v
+}
+
+// Symlink creates link pointing at target.
+func Symlink(t testing.TB, target, link string) {
+	t.Helper()
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatalf("testvault.Symlink %s -> %s: %v", link, target, err)
 	}
 }
 

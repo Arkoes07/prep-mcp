@@ -1,37 +1,20 @@
 package vault_test
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/Arkoes07/prep-mcp/internal/config"
 	"github.com/Arkoes07/prep-mcp/internal/testvault"
 	"github.com/Arkoes07/prep-mcp/internal/vault"
 )
-
-// openAt opens the vault at dir with the config found in it.
-func openAt(t testing.TB, dir string) *vault.Vault {
-	t.Helper()
-	cfg, err := config.Load(filepath.Join(dir, "prep.config.yaml"))
-	if err != nil {
-		t.Fatalf("load config: %v", err)
-	}
-	v, err := vault.Open(dir, cfg)
-	if err != nil {
-		t.Fatalf("open vault: %v", err)
-	}
-	testvault.CloseOnCleanup(t, v)
-	return v
-}
 
 // copyOpen makes a temp copy of the example vault and opens it.
 func copyOpen(t testing.TB) (string, *vault.Vault) {
 	t.Helper()
 	root := testvault.Copy(t)
-	return root, openAt(t, root)
+	_, v := testvault.Open(t, root)
+	return root, v
 }
 
 // mapValue returns the scalar value of key in a mapping node, and whether it exists.
@@ -41,11 +24,4 @@ func mapValue(n *yaml.Node, key string) (string, bool) {
 		return "", false
 	}
 	return val.Value, true
-}
-
-func mustSymlink(t testing.TB, target, link string) {
-	t.Helper()
-	if err := os.Symlink(target, link); err != nil {
-		t.Fatalf("symlink %s -> %s: %v", link, target, err)
-	}
 }

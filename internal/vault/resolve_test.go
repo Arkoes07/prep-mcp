@@ -23,9 +23,9 @@ func TestResolve(t *testing.T) {
 	root, v := copyOpen(t)
 	outside := filepath.Dir(root)
 	testvault.Write(t, outside, "out.md", "outside\n")
-	mustSymlink(t, filepath.Join(outside, "out.md"), filepath.Join(root, "link-out.md"))
-	mustSymlink(t, outside, filepath.Join(root, "linkdir"))
-	mustSymlink(t, "weeks/2026-w03.md", filepath.Join(root, "link-in.md"))
+	testvault.Symlink(t, filepath.Join(outside, "out.md"), filepath.Join(root, "link-out.md"))
+	testvault.Symlink(t, outside, filepath.Join(root, "linkdir"))
+	testvault.Symlink(t, "weeks/2026-w03.md", filepath.Join(root, "link-in.md"))
 
 	tests := []struct {
 		in          string

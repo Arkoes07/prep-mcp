@@ -15,7 +15,6 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/Arkoes07/prep-mcp/internal/config"
 	"github.com/Arkoes07/prep-mcp/internal/testvault"
 	"github.com/Arkoes07/prep-mcp/internal/vault"
 )
@@ -23,15 +22,7 @@ import (
 func seamEnv(t *testing.T) (string, *Writer) {
 	t.Helper()
 	root := testvault.Copy(t)
-	cfg, err := config.Load(filepath.Join(root, "prep.config.yaml"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	v, err := vault.Open(root, cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	testvault.CloseOnCleanup(t, v)
+	cfg, v := testvault.Open(t, root)
 	return root, New(v, cfg, nil, testvault.Clock())
 }
 

@@ -4,17 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/Arkoes07/prep-mcp/internal/config"
 	"github.com/Arkoes07/prep-mcp/internal/read"
 	"github.com/Arkoes07/prep-mcp/internal/testvault"
-	"github.com/Arkoes07/prep-mcp/internal/vault"
 	"github.com/Arkoes07/prep-mcp/internal/write"
 )
 
@@ -35,15 +32,7 @@ func connectRoot(t *testing.T) (string, *mcp.ClientSession) {
 // connectAt serves the vault at root, with its own config, to an in-memory client.
 func connectAt(t *testing.T, root string) *mcp.ClientSession {
 	t.Helper()
-	cfg, err := config.Load(filepath.Join(root, "prep.config.yaml"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	v, err := vault.Open(root, cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	testvault.CloseOnCleanup(t, v)
+	cfg, v := testvault.Open(t, root)
 	r := read.New(v, cfg, testvault.Clock())
 	// A nil Git: the server tests do not commit.
 	return serve(t, New(r, write.New(v, cfg, nil, testvault.Clock()), cfg, "test"))

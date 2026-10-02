@@ -214,14 +214,14 @@ func TestScan(t *testing.T) {
 			setup: func(t *testing.T, root string) {
 				outside := filepath.Join(filepath.Dir(root), "outside")
 				testvault.Write(t, outside, "x.md", learning)
-				mustSymlink(t, outside, filepath.Join(root, "linkdir"))
+				testvault.Symlink(t, outside, filepath.Join(root, "linkdir"))
 			},
 			check: excludes("linkdir/x.md"),
 		},
 		{
 			name: "symlinked_file_skipped",
 			setup: func(t *testing.T, root string) {
-				mustSymlink(t, "weeks/2026-w03.md", filepath.Join(root, "link-in.md"))
+				testvault.Symlink(t, "weeks/2026-w03.md", filepath.Join(root, "link-in.md"))
 			},
 			check: func(t *testing.T, _ string, _ *read.Reader, docs []*read.Doc, _ []read.Problem) {
 				got := paths(docs)

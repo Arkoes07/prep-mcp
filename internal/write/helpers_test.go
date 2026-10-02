@@ -33,15 +33,7 @@ type env struct {
 func newEnv(t testing.TB) *env {
 	t.Helper()
 	root := testvault.Copy(t)
-	cfg, err := config.Load(filepath.Join(root, "prep.config.yaml"))
-	if err != nil {
-		t.Fatalf("load config: %v", err)
-	}
-	v, err := vault.Open(root, cfg)
-	if err != nil {
-		t.Fatalf("open vault: %v", err)
-	}
-	testvault.CloseOnCleanup(t, v)
+	cfg, v := testvault.Open(t, root)
 	return &env{root: root, v: v, cfg: cfg, w: write.New(v, cfg, nil, testvault.Clock())}
 }
 
