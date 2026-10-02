@@ -1,9 +1,12 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 func TestEachReadToolAnswers(t *testing.T) {
@@ -51,10 +54,14 @@ func TestListDocsIsMetadataOnly(t *testing.T) {
 	if len(got.Docs) != 2 {
 		t.Fatalf("docs = %d, want 2", len(got.Docs))
 	}
-	for _, key := range []string{"path", "type", "title", "tags", "date", "kind"} {
+	for _, key := range []string{"path", "type", "title", "tags", "date", "fields"} {
 		if _, ok := got.Docs[0][key]; !ok {
 			t.Errorf("doc lacks %q: %v", key, got.Docs[0])
 		}
+	}
+	// The example config's summary fields, as far as the document sets them.
+	if fields, _ := got.Docs[0]["fields"].(map[string]any); len(fields) != 1 || fields["kind"] != "deep-dive" {
+		t.Errorf("fields = %v, want only kind: deep-dive", got.Docs[0]["fields"])
 	}
 	for _, key := range []string{"body", "content"} {
 		if _, ok := got.Docs[0][key]; ok {
@@ -102,5 +109,32 @@ func TestUnknownTypeNamesTheConfiguredOnes(t *testing.T) {
 		if !strings.Contains(out, s) {
 			t.Errorf("result lacks %q: %s", s, out)
 		}
+	}
+}
+
+// list_docs's description names the configured summary fields, and leaves the
+// clause out when there are none.
+func TestListDocsDescriptionNamesSummaryFields(t *testing.T) {
+	const clause = "and under fields the ones of"
+	description := func(t *testing.T, cs *mcp.ClientSession) string {
+		t.Helper()
+		res, err := cs.ListTools(context.Background(), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, tool := range res.Tools {
+			if tool.Name == "list_docs" {
+				return tool.Description
+			}
+		}
+		t.Fatal("no list_docs tool")
+		return ""
+	}
+
+	if got := description(t, connect(t)); !strings.Contains(got, clause+" kind, stage, status that are set") {
+		t.Errorf("example vault: description lacks the summary fields:\n%s", got)
+	}
+	if got := description(t, connectAt(t, neutralVault(t))); strings.Contains(got, clause) {
+		t.Errorf("vault without summary_fields: description still names fields:\n%s", got)
 	}
 }

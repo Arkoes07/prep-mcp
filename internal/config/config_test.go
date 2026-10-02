@@ -190,6 +190,32 @@ types:
 			wantErr: []string{"type note", "filename"},
 		},
 		{
+			name: "summary_fields",
+			yaml: `
+summary_fields: [priority, owner]
+`,
+			check: func(t *testing.T, c *config.Config) {
+				if want := []string{"priority", "owner"}; !slices.Equal(c.SummaryFields, want) {
+					t.Errorf("SummaryFields = %q, want %q", c.SummaryFields, want)
+				}
+			},
+		},
+		{
+			name:    "summary_field_empty",
+			yaml:    `summary_fields: [priority, ""]`,
+			wantErr: []string{"summary_fields[1] is empty", "remove the entry"},
+		},
+		{
+			name:    "summary_field_always_shown",
+			yaml:    `summary_fields: [date]`,
+			wantErr: []string{"date is always shown", "remove it"},
+		},
+		{
+			name:    "summary_field_twice",
+			yaml:    `summary_fields: [owner, owner]`,
+			wantErr: []string{"owner is listed twice", "remove one"},
+		},
+		{
 			name: "field_placeholder_not_required",
 			yaml: `
 types:
@@ -459,6 +485,9 @@ func TestLoadExample(t *testing.T) {
 	}
 	if c.TagsFile != "tags.md" {
 		t.Errorf("TagsFile = %q, want tags.md", c.TagsFile)
+	}
+	if want := []string{"kind", "stage", "status"}; !slices.Equal(c.SummaryFields, want) {
+		t.Errorf("SummaryFields = %q, want %q", c.SummaryFields, want)
 	}
 	if got := len(c.Context.OpenItems); got != 2 {
 		t.Errorf("open_items = %d, want 2", got)

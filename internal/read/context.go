@@ -95,7 +95,7 @@ func (r *Reader) querySections(docs []*Doc) ([]string, error) {
 		}
 		blocks := make([]string, 0, len(group.qs))
 		for _, q := range group.qs {
-			block, err := queryBlock(docs, q, group.isRecent)
+			block, err := r.queryBlock(docs, q, group.isRecent)
 			if err != nil {
 				return nil, err
 			}
@@ -163,7 +163,7 @@ func (r *Reader) weekSection(docs []*Doc, day time.Time) (string, []Problem) {
 }
 
 // queryBlock renders one configured query: a label line and one line per document.
-func queryBlock(docs []*Doc, q config.Query, isRecent bool) (string, error) {
+func (r *Reader) queryBlock(docs []*Doc, q config.Query, isRecent bool) (string, error) {
 	f := Filter{
 		Type:    q.Type,
 		Tags:    q.Tags,
@@ -200,20 +200,21 @@ func queryBlock(docs []*Doc, q config.Query, isRecent bool) (string, error) {
 		b.WriteString("(none)\n")
 	}
 	for _, d := range got {
-		b.WriteString(metaLine(d))
+		b.WriteString(metaLine(d, r.cfg.SummaryFields))
 		b.WriteByte('\n')
 	}
 	return b.String(), nil
 }
 
-// metaLine is "- path | title | attributes | tags". The date is shown only
-// when the document has a date field; file modification time is for ordering.
-func metaLine(d *Doc) string {
+// metaLine is "- path | title | attributes | tags". The attributes are the
+// date, shown only when the document has a date field (file modification time
+// is for ordering), then each of fields that the document sets.
+func metaLine(d *Doc, fields []string) string {
 	var attrs []string
 	if !d.DateFromMtime {
 		attrs = append(attrs, "date="+d.Date.Format(time.DateOnly))
 	}
-	for _, k := range []string{"kind", "stage", "status"} {
+	for _, k := range fields {
 		if val := d.Text(k); val != "" {
 			attrs = append(attrs, k+"="+oneLine(val))
 		}

@@ -102,6 +102,39 @@ func TestContextGolden(t *testing.T) {
 	})
 }
 
+// The attributes after the title are the configured summary fields, in config
+// order; a vault without summary_fields shows only the date.
+func TestContextSummaryFields(t *testing.T) {
+	const line = "- improvements/missing-tradeoff.md | Trade-off not stated | "
+	tests := []struct {
+		name, fields, want string
+	}{
+		{
+			name:   "configured",
+			fields: "summary_fields: [exit_criteria, status]",
+			want:   line + "exit_criteria=Cost stated in 5 project answers in a row status=improving | -",
+		},
+		{
+			name:   "none",
+			fields: "",
+			want:   line + "- | -",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			root, _ := copyOpen(t)
+			replaceInFile(t, root, "prep.config.yaml", "summary_fields: [kind, stage, status]", tc.fields)
+			got, err := openAt(t, root).Context(day)
+			if err != nil {
+				t.Fatalf("Context: %v", err)
+			}
+			if !strings.Contains(got, tc.want+"\n") {
+				t.Errorf("output lacks the line\n%s\n--- got ---\n%s", tc.want, got)
+			}
+		})
+	}
+}
+
 // TestCurrentWeek checks how the current week doc is found. The vault API has
 // no separate accessor, so it looks at the "path:" line of the week section
 // of Context, and at the Problems section.

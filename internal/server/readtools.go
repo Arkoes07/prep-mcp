@@ -9,6 +9,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/Arkoes07/prep-mcp/internal/config"
 	"github.com/Arkoes07/prep-mcp/internal/read"
 )
 
@@ -28,15 +29,9 @@ func registerReadTools(s *mcp.Server, h *handlers) {
 	}, guard(h.logger, "get_context", h.getContext))
 
 	mcp.AddTool(s, &mcp.Tool{
-		Name:  "list_docs",
-		Title: "List documents",
-		Description: "List document metadata (path, type, title, tags, date and any kind/stage/status), " +
-			"never bodies. " +
-			"All filters combine with AND. tags: every tag must match; any_tags: at least one; " +
-			"a trailing / matches a prefix (issue/ matches every issue tag). " +
-			"where: frontmatter equality such as {\"status\": [\"open\", \"improving\"]}; a list means any of. " +
-			"since/until: inclusive YYYY-MM-DD against the date field, else file modification time. " +
-			"sort: date_desc (default), date_asc or title. limit: default 50, at most 500.",
+		Name:        "list_docs",
+		Title:       "List documents",
+		Description: listDocsDescription(h.cfg),
 		Annotations: readOnly,
 	}, guard(h.logger, "list_docs", h.listDocs))
 
@@ -68,6 +63,21 @@ func registerReadTools(s *mcp.Server, h *handlers) {
 			"Tags missing from the vocabulary file are marked unknown.",
 		Annotations: readOnly,
 	}, guard(h.logger, "list_tags", h.listTags))
+}
+
+// listDocsDescription names the configured summary fields, so the model knows
+// what fields holds without reading the config.
+func listDocsDescription(cfg *config.Config) string {
+	shown := "path, type, title, tags, date and updated"
+	if len(cfg.SummaryFields) > 0 {
+		shown += ", and under fields the ones of " + strings.Join(cfg.SummaryFields, ", ") + " that are set"
+	}
+	return "List document metadata (" + shown + "), never bodies. " +
+		"All filters combine with AND. tags: every tag must match; any_tags: at least one; " +
+		"a trailing / matches a prefix (issue/ matches every issue tag). " +
+		"where: frontmatter equality such as {\"status\": [\"open\", \"improving\"]}; a list means any of. " +
+		"since/until: inclusive YYYY-MM-DD against the date field, else file modification time. " +
+		"sort: date_desc (default), date_asc or title. limit: default 50, at most 500."
 }
 
 // parseDay parses an optional YYYY-MM-DD argument.
@@ -120,16 +130,14 @@ type listDocsIn struct {
 }
 
 type docMeta struct {
-	Path     string   `json:"path"`
-	Type     string   `json:"type"`
-	Title    string   `json:"title"`
-	Tags     []string `json:"tags"`
-	Date     string   `json:"date,omitempty"`     // the date field
-	Modified string   `json:"modified,omitempty"` // file modification day, when there is no date field
-	Updated  string   `json:"updated,omitempty"`
-	Kind     string   `json:"kind,omitempty"`
-	Stage    string   `json:"stage,omitempty"`
-	Status   string   `json:"status,omitempty"`
+	Path     string            `json:"path"`
+	Type     string            `json:"type"`
+	Title    string            `json:"title"`
+	Tags     []string          `json:"tags"`
+	Date     string            `json:"date,omitempty"`     // the date field
+	Modified string            `json:"modified,omitempty"` // file modification day, when there is no date field
+	Updated  string            `json:"updated,omitempty"`
+	Fields   map[string]string `json:"fields,omitempty"` // the configured summary fields the document sets
 }
 
 func (h *handlers) listDocs(
@@ -153,7 +161,7 @@ func (h *handlers) listDocs(
 		Problems []read.Problem `json:"problems,omitempty"`
 	}{Docs: make([]docMeta, 0, len(docs)), Count: len(docs), Problems: problems}
 	for _, d := range docs {
-		out.Docs = append(out.Docs, metaOf(d))
+		out.Docs = append(out.Docs, metaOf(d, h.cfg.SummaryFields))
 	}
 	if in.Type != "" {
 		if _, ok := h.cfg.Types[in.Type]; !ok && len(docs) == 0 {
@@ -185,17 +193,20 @@ func (in listDocsIn) filter() (read.Filter, error) {
 }
 
 // metaOf is the list_docs entry for d: its date field as date, or its file
-// modification day as modified when it has none.
-func metaOf(d *read.Doc) docMeta {
+// modification day as modified when it has none, and each of fields it sets.
+func metaOf(d *read.Doc, fields []string) docMeta {
 	m := docMeta{
 		Path:    d.Path,
 		Type:    d.Type,
 		Title:   d.Title,
 		Tags:    append([]string{}, d.Tags...),
 		Updated: d.Text("updated"),
-		Kind:    d.Text("kind"),
-		Stage:   d.Text("stage"),
-		Status:  d.Text("status"),
+		Fields:  map[string]string{},
+	}
+	for _, k := range fields {
+		if v := d.Text(k); v != "" {
+			m.Fields[k] = v
+		}
 	}
 	if d.DateFromMtime {
 		m.Modified = d.Date.Format(time.DateOnly)

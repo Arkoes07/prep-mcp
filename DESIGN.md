@@ -207,7 +207,7 @@ Details the entry above leaves open. The tests are `internal/write/git_test.go`.
   - `==== ... ====` cannot be confused with the `##` headings inside the embedded week document, which Markdown headings would be.
   - Text costs fewer tokens than JSON and reads well in a chat.
   - The week section carries the file's `path` and `hash`, so `replace_doc` can be used without another `read_doc`.
-  - Lists are one line per document: `- path | title | attributes | tags`. Attributes are `date=`, `kind=`, `stage=`, `status=`, in that order.
+  - Lists are one line per document: `- path | title | attributes | tags`. Attributes are `date=`, then the configured `summary_fields` in config order (see below).
   - `date=` appears only when the document has a `date` field. File mtime orders documents but is never shown as a date, because a clone or checkout resets it.
   - Each query block is labelled from its config (`improvement (status: open, improving):`, `session (newest 5):`), so the output explains itself.
 - Cost: the format is ours, not a standard, and a change means regenerating the golden files by hand. The model has to read a convention instead of parsing JSON.
@@ -240,8 +240,15 @@ Details the entry above leaves open. The tests are `internal/write/git_test.go`.
 
 ## `list_docs` returns `date` or `modified`, never a body
 - Instead of: one `date` field that is sometimes a file mtime.
-- Why: a model reading `date` should be able to trust it. A document with a `date` field returns `date`; one without returns `modified` (the file's last-modified day) instead. `status`, `stage`, `kind` and `updated` appear when present. Bodies are never returned. A `type` that is not configured and matches nothing returns a `note` listing the configured types.
+- Why: a model reading `date` should be able to trust it. A document with a `date` field returns `date`; one without returns `modified` (the file's last-modified day) instead. `updated` appears when present, and so do the configured summary fields, under `fields`. Bodies are never returned. A `type` that is not configured and matches nothing returns a `note` listing the configured types.
 - Cost: a client that wants one sort key must read either field.
+
+## Summary fields come from config *(deviation from PRD 5.1)*
+- Instead of: showing `status`, `stage` and `kind` whenever a document has them, as PRD 5.1 lists for `list_docs`.
+- Why: those three names come from one vault's types, and nothing in the code acts on them; they are only displayed. Fixed in Go, they broke goal 5 in a way the forbidden-word test cannot see, because the words are generic. A vault with `priority` or `owner` fields would have had to rename them to get them shown.
+- How: a top-level `summary_fields` list in `prep.config.yaml`. `get_context` shows them as attributes in config order after `date=`. `list_docs` returns the ones a document sets in a `fields` object, and its tool description is generated from the config so the model knows the names. The example config sets `[kind, stage, status]`, so the example output is unchanged.
+- Fields that carry meaning stay fixed, because the data model defines them: `type`, `title`, `tags`, `date`, `created`, `updated`. Validation rejects listing an always-shown one (`type`, `title`, `tags`, `date`, `updated`), an empty name or a repeat.
+- Cost: one more config key, and the default is no summary fields at all. In `list_docs` the values moved from top-level keys (`"status": "open"`) into `"fields": {"status": "open"}`. Only scalar values are shown.
 
 ## Server clock
 - `read.Reader.Now()` is the read side's clock. Production passes `time.Now`, tests pass a fixed day. `get_context` uses it only when the caller gives no `date`.

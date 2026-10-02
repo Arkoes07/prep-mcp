@@ -26,9 +26,12 @@ const (
 
 // Config is a validated prep.config.yaml with its defaults applied.
 type Config struct {
-	TagsFile      string              `yaml:"tags_file"`
-	CommitOnWrite bool                `yaml:"commit_on_write"`
-	Author        string              `yaml:"author"`
+	TagsFile      string `yaml:"tags_file"`
+	CommitOnWrite bool   `yaml:"commit_on_write"`
+	Author        string `yaml:"author"`
+	// SummaryFields are the frontmatter fields shown, in this order, next to
+	// each document in list_docs and get_context.
+	SummaryFields []string            `yaml:"summary_fields"`
 	Types         map[string]TypeSpec `yaml:"types"`
 	Context       ContextSpec         `yaml:"context"`
 }
@@ -151,10 +154,34 @@ func (c *Config) Validate() error {
 			errs = append(errs, fmt.Errorf("tags_file %q: %w", c.TagsFile, err))
 		}
 	}
+	errs = append(errs, c.summaryErrors()...)
 	errs = append(errs, c.typeErrors()...)
 	errs = append(errs, c.weekErrors()...)
 	errs = append(errs, c.queryErrors()...)
 	return errors.Join(errs...)
+}
+
+// alwaysShown are the fields every document's metadata already carries, so
+// they cannot be summary fields as well.
+var alwaysShown = []string{"type", "title", "tags", "date", "updated"}
+
+// summaryErrors checks summary_fields for empty, always-shown and repeated names.
+func (c *Config) summaryErrors() []error {
+	var errs []error
+	seen := map[string]bool{}
+	for i, f := range c.SummaryFields {
+		switch {
+		case strings.TrimSpace(f) == "":
+			errs = append(errs, fmt.Errorf(
+				"summary_fields[%d] is empty; name a frontmatter field or remove the entry", i))
+		case slices.Contains(alwaysShown, f):
+			errs = append(errs, fmt.Errorf("summary_fields: %s is always shown; remove it from the list", f))
+		case seen[f]:
+			errs = append(errs, fmt.Errorf("summary_fields: %s is listed twice; remove one", f))
+		}
+		seen[f] = true
+	}
+	return errs
 }
 
 // typeErrors checks every type's folder and filename pattern.

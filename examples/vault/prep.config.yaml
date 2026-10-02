@@ -1,6 +1,8 @@
 tags_file: tags.md
 commit_on_write: true
 author: "Claude <claude@local>"
+# Frontmatter fields shown next to each document in list_docs and get_context.
+summary_fields: [kind, stage, status]
 
 types:
   story:
