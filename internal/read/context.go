@@ -16,9 +16,7 @@ import (
 )
 
 const (
-	// ContextTagDays is the window of the tag summary in Context.
 	ContextTagDays = 30
-	// ContextTopTags is how many tags the summary names.
 	ContextTopTags = 10
 	rulesFile      = "CLAUDE.md"
 )
@@ -69,7 +67,6 @@ func (r *Reader) Context(day time.Time) (string, error) {
 	return strings.Join(sections, "\n"), nil
 }
 
-// gitLockMsg is the problem reported for a git lock file in the vault's repository.
 const gitLockMsg = "git's lock file is there, so AI writes are saved but not committed. " +
 	"Another git process may be running, or one crashed and left it behind. " +
 	"Once no git process is running in the vault, delete it; prep-mcp never deletes it"
@@ -129,7 +126,6 @@ func (r *Reader) querySections(docs []*Doc) ([]string, error) {
 	return sections, nil
 }
 
-// problemsSection lists the files that could not be fully used, by path.
 func problemsSection(problems []Problem) string {
 	slices.SortStableFunc(problems, func(a, b Problem) int { return strings.Compare(a.Path, b.Path) })
 	var b strings.Builder
@@ -186,7 +182,6 @@ func (r *Reader) weekSection(docs []*Doc, day time.Time) (string, []Problem) {
 	return section(title, body), problems
 }
 
-// queryBlock renders one configured query: a label line and one line per document.
 func (r *Reader) queryBlock(docs []*Doc, q config.Query, isRecent bool) (string, error) {
 	f := Filter{
 		Type:    q.Type,

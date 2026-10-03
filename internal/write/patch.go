@@ -12,7 +12,6 @@ import (
 	"github.com/Arkoes07/prep-mcp/internal/vault"
 )
 
-// Patch is a set of frontmatter changes.
 type Patch struct {
 	Set                        *yaml.Node // ordered mapping of keys to set; nil for none
 	Unset, AddTags, RemoveTags []string
@@ -95,7 +94,6 @@ type lineEdit struct {
 	isDropped bool     // the key is removed; replace is empty
 }
 
-// patchPlan collects the line edits one Patch makes to one frontmatter block.
 type patchPlan struct {
 	patch        Patch
 	setKeys      []string

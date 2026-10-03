@@ -58,7 +58,6 @@ func NormalizeTagList(in []string) []string {
 	return out
 }
 
-// Vocabulary is the controlled tag list from the tags file.
 type Vocabulary struct {
 	set  map[string]bool
 	list []string // sorted

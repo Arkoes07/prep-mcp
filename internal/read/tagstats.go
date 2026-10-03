@@ -9,7 +9,6 @@ import (
 	"github.com/Arkoes07/prep-mcp/internal/vault"
 )
 
-// TagCount is one tag with its usage.
 type TagCount struct {
 	Tag     string
 	Count   int       // documents carrying the tag

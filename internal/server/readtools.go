@@ -13,7 +13,6 @@ import (
 	"github.com/Arkoes07/prep-mcp/internal/read"
 )
 
-// registerReadTools adds the five read tools. None of them changes the read.
 func registerReadTools(s *mcp.Server, h *handlers) {
 	readOnly := &mcp.ToolAnnotations{ReadOnlyHint: true}
 
@@ -189,7 +188,6 @@ func (h *handlers) listDocs(
 	return jsonResult(out)
 }
 
-// filter checks the arguments and turns them into a vault filter.
 func (in listDocsIn) filter() (read.Filter, error) {
 	f := read.Filter{Type: in.Type, Tags: in.Tags, AnyTags: in.AnyTags, Sort: in.Sort, Limit: in.Limit}
 	var err error

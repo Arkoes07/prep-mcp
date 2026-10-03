@@ -166,7 +166,6 @@ func nodeOf(t *testing.T, js string) *yaml.Node {
 	return n
 }
 
-// Paths in the example vault the batch seam tests write to.
 const (
 	seamA = "improvements/buries-headline.md"
 	seamB = "learning/ddia-ch5.md" // created by the batch
@@ -174,7 +173,6 @@ const (
 	seamD = "improvements/missing-tradeoff.md"
 )
 
-// readAll returns the content of each path under root.
 func readAll(t *testing.T, root string, paths ...string) map[string]string {
 	t.Helper()
 	out := make(map[string]string, len(paths))

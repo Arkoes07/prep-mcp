@@ -15,7 +15,6 @@ func openAt(t testing.TB, dir string) *read.Reader {
 	return read.New(v, cfg, testvault.Clock())
 }
 
-// copyOpen makes a temp copy of the example vault and opens it.
 func copyOpen(t testing.TB) (string, *read.Reader) {
 	t.Helper()
 	root := testvault.Copy(t)

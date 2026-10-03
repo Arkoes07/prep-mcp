@@ -10,7 +10,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Limits of a Filter.
 const (
 	DefaultListLimit = 50
 	MaxListLimit     = 500

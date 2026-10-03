@@ -9,7 +9,6 @@ import (
 	"github.com/Arkoes07/prep-mcp/internal/vault"
 )
 
-// copyOpen makes a temp copy of the example vault and opens it.
 func copyOpen(t testing.TB) (string, *vault.Vault) {
 	t.Helper()
 	root := testvault.Copy(t)

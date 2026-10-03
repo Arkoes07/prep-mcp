@@ -55,7 +55,6 @@ func serve(t *testing.T, s *mcp.Server) *mcp.ClientSession {
 	return cs
 }
 
-// toolDescription returns the description of the named tool.
 func toolDescription(t *testing.T, cs *mcp.ClientSession, name string) string {
 	t.Helper()
 	res, err := cs.ListTools(context.Background(), nil)

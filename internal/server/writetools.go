@@ -235,7 +235,6 @@ func decodeReplace(args json.RawMessage) (write.Op, error) {
 	return write.ReplaceOp(in.Path, in.Content, in.ExpectedHash), nil
 }
 
-// batchTools names the tools a batch op may use.
 const batchTools = write.ToolCreate + ", " + write.ToolAppend + ", " + write.ToolPatch + " or " + write.ToolReplace
 
 // The jsonschema tags are argument descriptions and cannot be split; see listDocsIn.

@@ -18,12 +18,9 @@ import (
 )
 
 const (
-	// DefaultAuthor is used for commits when the config sets none.
-	DefaultAuthor = "Claude <claude@local>"
-	// DefaultQueryLimit is the limit of a context query that sets none.
+	DefaultAuthor     = "Claude <claude@local>"
 	DefaultQueryLimit = 20
-	// DefaultDateField dates the documents of a type that sets no date_field.
-	DefaultDateField = "date"
+	DefaultDateField  = "date"
 )
 
 // Config is a validated prep.config.yaml with its defaults applied.
@@ -38,8 +35,6 @@ type Config struct {
 	Context       ContextSpec         `yaml:"context"`
 }
 
-// TypeSpec is one document type: where its files live, how they are named
-// and which frontmatter fields they must have.
 type TypeSpec struct {
 	Folder   string   `yaml:"folder"`
 	Filename string   `yaml:"filename"`
@@ -53,7 +48,6 @@ type TypeSpec struct {
 	Show []string `yaml:"show"`
 }
 
-// ContextSpec says what get_context returns besides the working rules.
 type ContextSpec struct {
 	CurrentWeekType  string  `yaml:"current_week_type"`
 	CurrentWeekField string  `yaml:"current_week_field"`
@@ -76,7 +70,6 @@ type Conditions map[string][]string
 
 var _ yaml.Unmarshaler = (*Conditions)(nil)
 
-// UnmarshalYAML implements yaml.Unmarshaler.
 func (c *Conditions) UnmarshalYAML(n *yaml.Node) error {
 	var raw map[string]scalarOrList
 	if err := n.Decode(&raw); err != nil {
@@ -89,12 +82,10 @@ func (c *Conditions) UnmarshalYAML(n *yaml.Node) error {
 	return nil
 }
 
-// scalarOrList decodes a YAML scalar as one value and a sequence as many.
 type scalarOrList []string
 
 var _ yaml.Unmarshaler = (*scalarOrList)(nil)
 
-// UnmarshalYAML implements yaml.Unmarshaler.
 func (s *scalarOrList) UnmarshalYAML(n *yaml.Node) error {
 	switch n.Kind {
 	case yaml.ScalarNode:
@@ -200,7 +191,6 @@ func fieldListErrors(label string, fields, shown []string) []error {
 // notDates are the always-shown fields that can never date a document.
 var notDates = []string{"type", "title", "tags"}
 
-// typeErrors checks every type's folder, filename pattern, date field and show list.
 func (c *Config) typeErrors() []error {
 	var errs []error
 	for _, name := range c.TypeNames() {
@@ -257,8 +247,6 @@ func (c *Config) weekErrors() []error {
 	return nil
 }
 
-// queryErrors checks that every context query names a defined type and a
-// usable limit.
 func (c *Config) queryErrors() []error {
 	var errs []error
 	for _, group := range []struct {
@@ -283,7 +271,6 @@ func (c *Config) queryErrors() []error {
 	return errs
 }
 
-// checkRelPath accepts a clean, relative, slash-separated path that stays inside the vault.
 func checkRelPath(p string) error {
 	switch {
 	case strings.ContainsAny(p, "\\\x00"):
@@ -297,7 +284,6 @@ func checkRelPath(p string) error {
 	return nil
 }
 
-// checkFolder additionally refuses hidden folders and the read-only templates folder.
 func checkFolder(p string) error {
 	if err := checkRelPath(p); err != nil {
 		return err
@@ -320,7 +306,6 @@ func checkFolder(p string) error {
 
 var placeholderRE = regexp.MustCompile(`\{[^{}]*\}`)
 
-// checkFilename validates one type's filename pattern.
 func checkFilename(name string, t TypeSpec) []error {
 	var errs []error
 	add := func(format string, args ...any) {

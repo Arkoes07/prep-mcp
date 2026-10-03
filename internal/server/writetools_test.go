@@ -148,7 +148,6 @@ func TestWriteErrorsAreToolResultsWithHints(t *testing.T) {
 	}
 }
 
-// batchOp is one entry of batch's ops argument.
 func batchOp(tool string, args any) map[string]any {
 	return map[string]any{"tool": tool, "args": args}
 }

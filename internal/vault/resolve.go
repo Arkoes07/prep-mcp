@@ -9,7 +9,6 @@ import (
 	"strings"
 )
 
-// Access says what a path is about to be used for.
 type Access int
 
 // AccessRead is the zero value on purpose: a forgotten Access gets the rules
@@ -24,7 +23,6 @@ func fail(format string, args ...any) (string, error) {
 	return "", fmt.Errorf(format, args...)
 }
 
-// notFound is the error for a document path that does not exist.
 func notFound(clean string) error {
 	return fmt.Errorf("not found: %s (use list_docs or search_text)", clean)
 }
@@ -39,7 +37,6 @@ func (v *Vault) Resolve(p string, a Access) (string, error) {
 	}
 	parts := strings.Split(clean, "/")
 
-	// Walk the components, looking for symlinks and missing pieces.
 	for i := range parts {
 		prefix := strings.Join(parts[:i+1], "/")
 		last := i == len(parts)-1

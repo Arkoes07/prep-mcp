@@ -35,7 +35,7 @@ func TestInsertSection(t *testing.T) {
 		{name: "content_trailing_nls", src: "a\n", heading: "H", content: "c\n\n\n", want: "a\n\n## H\n\nc\n"},
 		{name: "empty_content", src: "a\n", heading: "H", content: "", wantErr: "content is empty"},
 		{name: "crlf", src: "## H\r\nold\r\n", heading: "H", content: "new\nmore", want: "## H\r\nold\r\n\r\nnew\r\nmore\r\n"},
-		// Not in the plan table: a new heading in a CRLF file.
+		// A new heading in a CRLF file.
 		{name: "crlf_new_heading", src: "a\r\n", heading: "H", content: "c", want: "a\r\n\r\n## H\r\n\r\nc\r\n"},
 	}
 	for _, tc := range tests {

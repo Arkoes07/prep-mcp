@@ -103,7 +103,6 @@ func (g *Git) Commit(ctx context.Context, dir string, paths []string, msg string
 		"GIT_COMMITTER_NAME="+name, "GIT_COMMITTER_EMAIL="+email,
 	)}
 
-	// Is dir the root of its repository?
 	top, err := r.run(ctx, "rev-parse", "--show-toplevel")
 	if err != nil {
 		if strings.Contains(top, "not a git repository") {

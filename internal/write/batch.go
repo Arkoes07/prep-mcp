@@ -22,7 +22,6 @@ import (
 // back what it wrote and start over once, so a human's save in Obsidian at that
 // moment is kept.
 
-// MaxBatchOps is the most ops one Batch takes.
 const MaxBatchOps = 200
 
 // The write tools an Op stands for, as named in commit messages, errors and
@@ -157,7 +156,6 @@ type opError struct {
 	err error
 }
 
-// checksFailed reports every op that failed its checks, labelled.
 func checksFailed(ops []Op, failed []opError) error {
 	errs := make([]error, len(failed))
 	for i, f := range failed {
@@ -285,7 +283,6 @@ func (w *Writer) plan(ops []Op) *batchPlan {
 	return p
 }
 
-// modify runs transform on the current content of an existing file.
 func (p *batchPlan) modify(
 	path string,
 	transform func(old []byte) (next []byte, warnings []string, err error),

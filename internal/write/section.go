@@ -79,7 +79,6 @@ func cleanSectionArgs(heading, content string) (string, string, error) {
 	return heading, content, nil
 }
 
-// line is one body line of a file.
 type line struct {
 	text string // without the line ending
 	end  int    // offset just after the line ending

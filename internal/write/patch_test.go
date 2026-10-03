@@ -63,7 +63,7 @@ func TestApplyPatch(t *testing.T) {
 		{name: "set_unset_same", src: doc("status: x\n", ""), set: `{"status":"y"}`, unset: []string{"status"}, wantErr: "status"},
 		{name: "unset_type", src: doc("type: x\na: 1\n", ""), unset: []string{"type"}, wantErr: "type"},
 		{name: "explicit_updated", src: doc("a: 1\n", ""), set: `{"updated":"2020-01-01"}`, want: doc("a: 1\nupdated: 2020-01-01\n", "")},
-		// Not in the plan table: an existing updated line is replaced in place, not duplicated.
+		// An existing updated line is replaced in place, not duplicated.
 		{name: "updated_existing", src: doc("a: 1\nupdated: 2025-12-01\n", "x\n"), set: `{"a":2}`, want: doc("a: 2\nupdated: 2026-01-14\n", "x\n")},
 		{
 			name: "body_edge_cases", src: doc("a: 1\n", "---\ntrailing   \n\ttabbed\nünï 世界\nno final newline"), set: `{"a":2}`,

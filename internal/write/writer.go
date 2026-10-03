@@ -35,7 +35,6 @@ func New(v *vault.Vault, cfg *config.Config, g *Git, now func() time.Time) *Writ
 	return &Writer{v: v, cfg: cfg, git: g, now: now}
 }
 
-// Result is what every write returns.
 type Result struct {
 	Path     string   `json:"path"`
 	Hash     string   `json:"hash"`
@@ -46,13 +45,11 @@ type Result struct {
 // ConflictError means replace_doc saw a file that changed since it was read.
 type ConflictError struct{ Path, Current string }
 
-// Error gives the current hash and says how to retry.
 func (e *ConflictError) Error() string {
 	return fmt.Sprintf("%s changed since you read it; its current hash is %s. Nothing was written: "+
 		"re-read with read_doc, merge, retry with expected_hash set to the current hash", e.Path, e.Current)
 }
 
-// Draft is a document for CreateOp to make.
 type Draft struct {
 	Type        string     // a configured type
 	Frontmatter *yaml.Node // a mapping in the order to write it; nil for none
@@ -218,8 +215,6 @@ func (p *batchPlan) replace(docPath, content, expectedHash string) (*file, []str
 	f.cur = data
 	return f, warnings, nil
 }
-
-// ---- shared steps ----
 
 // commit commits paths with msg when commits are on and anything was written,
 // and returns the commit's hash and any warning.

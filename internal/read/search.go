@@ -6,7 +6,6 @@ import (
 	"strings"
 )
 
-// Limits of a Search.
 const (
 	DefaultSearchLimit = 20
 	MaxSearchLimit     = 500
@@ -14,7 +13,6 @@ const (
 	MaxHitLines = 3
 )
 
-// Hit is one document that matched a search.
 type Hit struct {
 	Path  string `json:"path"`
 	Title string `json:"title"`

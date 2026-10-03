@@ -23,7 +23,6 @@ var Day = time.Date(2026, 1, 14, 9, 0, 0, 0, time.Local)
 // Day, so documents dated by mtime sort below documents with a date field.
 var Mtime = time.Date(2026, 1, 10, 12, 0, 0, 0, time.Local)
 
-// Clock returns a clock frozen at Day.
 func Clock() func() time.Time {
 	return func() time.Time { return Day }
 }
@@ -102,7 +101,6 @@ func Open(t testing.TB, dir string) (*config.Config, *vault.Vault) {
 	return cfg, v
 }
 
-// Symlink creates link pointing at target.
 func Symlink(t testing.TB, target, link string) {
 	t.Helper()
 	if err := os.Symlink(target, link); err != nil {

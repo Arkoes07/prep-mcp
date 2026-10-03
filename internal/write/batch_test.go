@@ -10,7 +10,6 @@ import (
 	"github.com/Arkoes07/prep-mcp/internal/write"
 )
 
-// Paths in the example vault the batch tests write to.
 const (
 	headline = "improvements/buries-headline.md"
 	tradeoff = "improvements/missing-tradeoff.md"

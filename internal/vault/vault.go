@@ -13,7 +13,6 @@ import (
 	"path/filepath"
 )
 
-// Vault is one root directory of markdown files.
 type Vault struct {
 	dir  string
 	root *os.Root
@@ -43,8 +42,6 @@ func (v *Vault) Dir() string { return v.dir }
 // Root returns the confining root. All file I/O must go through it.
 func (v *Vault) Root() *os.Root { return v.root }
 
-// Close releases the vault's directory handle. The vault must not be used
-// afterwards.
 func (v *Vault) Close() error {
 	if err := v.root.Close(); err != nil {
 		return fmt.Errorf("close vault %s: %w", v.dir, err)

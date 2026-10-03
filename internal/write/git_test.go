@@ -101,7 +101,6 @@ func createNote(t *testing.T, e *env) *write.Result {
 	return res
 }
 
-// wantNoWarnings fails if the result carries any warning.
 func wantNoWarnings(t *testing.T, res *write.Result) {
 	t.Helper()
 	if len(res.Warnings) != 0 {
