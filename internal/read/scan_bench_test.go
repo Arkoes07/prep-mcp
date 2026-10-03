@@ -11,7 +11,7 @@ import (
 )
 
 // BenchmarkScan measures one full scan of a generated vault. It is the number
-// behind DESIGN.md's "scan on every call" decision: PRD section 6 says to add a
+// behind ADR-0001, the "scan on every call" decision: PRD section 6 says to add a
 // cache only if this is measured slow.
 func BenchmarkScan(b *testing.B) {
 	const docs = 2000
@@ -54,7 +54,7 @@ func BenchmarkScan(b *testing.B) {
 }
 
 // BenchmarkScanExample measures one full scan of examples/vault, the number
-// DESIGN.md gives for a small vault.
+// ADR-0001 gives for a small vault.
 func BenchmarkScanExample(b *testing.B) {
 	_, r := copyOpen(b)
 	b.ReportAllocs()

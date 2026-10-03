@@ -1,0 +1,11 @@
+# Path confinement in two layers, through `os.Root`
+- Instead of: checking the cleaned path string and then using ordinary `os` calls.
+- Why:
+  - A lexical check gives clear, actionable errors. It rejects absolute paths, `..` escapes, `\`, NUL, dot components, root-level `templates/` (case-insensitive, for APFS) and non-`.md` files.
+  - All I/O then goes through `os.Root`, which the kernel confines and which follows only symlinks that stay inside the root. That closes the check-then-swap race a string check alone leaves open.
+- Also decided:
+  - Writes refuse any symlink component in the path.
+  - Reads follow symlinks that stay inside the root.
+  - The scanner never follows symlinks.
+  - The root is resolved once with `EvalSymlinks`.
+- Cost: two layers to keep consistent. Tests cover both.

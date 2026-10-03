@@ -203,7 +203,7 @@ ae0dfba | Claude | batch: 2 append_section, 1 update_frontmatter
 | `replace_doc` | Full rewrite, rejected if the file changed since you read it |
 | `batch` | Up to 200 of the four writes above in one call: all or nothing, one commit |
 
-See [DESIGN.md](DESIGN.md) for why each of these exists and what it costs.
+See [docs/adr](docs/adr/) for why each of these exists and what it costs.
 
 ## Develop
 
@@ -229,7 +229,7 @@ go build -ldflags "-X main.version=v0.1.0" ./cmd/prep-mcp
 
 Rules ([CLAUDE.md](CLAUDE.md) has them all):
 
-- [PRD.md](PRD.md) is the spec. A decision that differs from it goes into [DESIGN.md](DESIGN.md) with the alternative and its cost.
+- [PRD.md](PRD.md) is the spec. A decision that differs from it goes into an ADR in [docs/adr](docs/adr/) with the alternative and its cost.
 - No domain words in Go code, tests included: types, fields and examples live in config and `examples/vault`. `TestNoDomainWords` checks against `internal/testvault/testdata/forbidden-words.txt`.
 - Tests never touch a real vault; they work on `testvault.Copy`.
 - Error messages say what to do next.

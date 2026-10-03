@@ -1,0 +1,12 @@
+# Frontmatter values: who decides how they are written (M2)
+- Decided: `JSONToNode` gives each node the tag and style that make the encoder write it the way a person would; `ApplyPatch` only encodes.
+  - A string that is a valid `YYYY-MM-DD` is tagged `!!timestamp`, which makes the encoder leave it plain, so Obsidian still sees a date.
+  - A string that plain YAML would read as anything else is double-quoted: numbers, `true`/`null`, lists (`[[x]]`), maps, comments, empty, leading/trailing space, and `yes`/`no`/`on`/`off`. A lone `y` or `n` is left plain, since YAML 1.2 tools (Obsidian) read them as strings.
+  - A list of scalars is written in flow style (`[x, y]`); a list holding lists or objects, or a mapping, in block style. Tag lists follow the rule below.
+  - Multi-line strings are written as block scalars by the encoder.
+- Comments: a rewritten key keeps its line comment, with one space before it. The original spacing is not kept; untouched lines are byte-identical, so aligned comments on other keys survive.
+- Setting a key to the value it already has (compared by what it says, not how it is quoted) is a no-op: no write, no `updated`.
+- `updated` is replaced in place when present, appended otherwise, and left alone when the patch sets or unsets it.
+- Tags: comparison is on normalised tags, so adding a tag that is already there, or removing one that is not, changes nothing. A tag list a patch touches is written back normalised in the style it had: a block list stays a block list at its own indent, anything else (flow list, comma string, absent, null) becomes a flow list. Comments on individual tag items are lost when the list is rewritten. Removing the last tag gives `tags: []`.
+- Removing a tag the document does not have is reported by the writer as a warning; `ApplyPatch` itself has no warnings channel.
+- Cost: the quoting rule is ours, not the encoder's, and needs its own tests. Rewriting a tag list drops item comments.

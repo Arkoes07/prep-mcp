@@ -202,7 +202,7 @@ Errors are returned as tool results with a clear message and the next action, e.
 
 ## 6. Design decisions
 
-Record each of these in `DESIGN.md` with the alternative considered, why it was chosen, and its cost. Any new decision made during implementation, or any change to one below, is added to `DESIGN.md` the same way.
+Record each of these as an ADR in `docs/adr/` with the alternative considered, why it was chosen, and its cost. Any new decision made during implementation, or any change to one below, is added to `docs/adr/` the same way.
 
 | Decision | Instead of | Why | Cost |
 |---|---|---|---|
@@ -221,7 +221,7 @@ Record each of these in `DESIGN.md` with the alternative considered, why it was 
 ## 7. Stack
 
 - Go 1.22+.
-- MCP over stdio. Use the official Go SDK (`github.com/modelcontextprotocol/go-sdk`) if its API is stable at build time; otherwise `github.com/mark3labs/mcp-go`. Pick one and note why in DESIGN.md.
+- MCP over stdio. Use the official Go SDK (`github.com/modelcontextprotocol/go-sdk`) if its API is stable at build time; otherwise `github.com/mark3labs/mcp-go`. Pick one and note why in an ADR.
 - YAML: `gopkg.in/yaml.v3`. Preserve key order when rewriting frontmatter (use `yaml.Node`, not a map).
 - Git: shell out to `git`. No go-git.
 - No other dependencies unless justified.
@@ -235,7 +235,7 @@ internal/write/      create, append, patch, replace, git
 internal/config/     load + validate prep.config.yaml
 internal/server/     MCP tool registration and handlers
 examples/vault/      fictional dataset + prep.config.yaml
-DESIGN.md
+docs/adr/
 README.md
 ```
 

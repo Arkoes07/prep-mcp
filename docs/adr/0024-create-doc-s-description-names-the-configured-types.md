@@ -1,0 +1,4 @@
+# `create_doc`'s description names the configured types; the description test uses a neutral config (M2)
+- Instead of: a static description, or checking descriptions against the example config.
+- Why: the description is generated from the config so the model never reads the config file, and descriptions must also be free of domain words. The example config's type names are domain words by design, so both cannot hold for the example vault. The Go code only ever adds words that come from the config; `TestDescriptionsAreDomainNeutral` therefore runs against a vault whose config uses neutral names, and a separate test checks that the description lists the example vault's types, patterns and required fields.
+- Cost: the neutrality check does not see what a real config puts into the description. That text is data the owner chose.

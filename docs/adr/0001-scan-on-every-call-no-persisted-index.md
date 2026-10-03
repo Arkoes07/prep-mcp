@@ -1,0 +1,4 @@
+# Scan on every call, no persisted index
+- Instead of: an in-memory index built at startup plus a `rebuild` tool (lethain/library-mcp), or a stored index file.
+- Why: this server writes. A startup index is stale the moment the AI logs something; a stored index is a second copy of the frontmatter that can drift, which is a dual write.
+- Cost: a full scan per call. Measured at 59 ms for 2,000 files (`go test -bench Scan -run ^$ ./internal/read`, Apple M4, 25 MB and 234k allocations per scan; 20 folders, about 1.2 KB per file, half with a `date`). `examples/vault` (8 documents) scans in 0.27 ms (`BenchmarkScanExample`, same machine, 118 KB and 1,162 allocations), and the first real vault, about 100 files, works out near 3 ms at the 2,000-file rate. That is far below anything a person notices next to a model call, so no cache. Add the mtime-keyed cache only if a real vault is measured slow.

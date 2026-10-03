@@ -1,0 +1,11 @@
+# Commit only when the vault is its git repo's root
+- Instead of: committing whenever the vault is anywhere inside a git work tree.
+- Why: the real vault is the root of its own private repo, so it commits. `examples/vault` sits inside the public prep-mcp repo and must never receive AI commits. Both paths are compared after `EvalSymlinks`. A vault that isn't a repo root gets the write plus a warning explaining how to fix it.
+- Also decided:
+  - The commit covers only the written paths (`git commit --only -- <paths>`), so a human's staged work is not swept in.
+  - The committer identity is set to the configured author too, so commits work without `user.name`.
+  - Hooks stay enabled, with a 10 s timeout and `GIT_TERMINAL_PROMPT=0`.
+  - Any git failure is a warning, never a failed write.
+  - Never push.
+- Where the vault path lives: in the MCP registration (`claude mcp add --scope user prep -- prep-mcp --root ~/prep`), not in `prep.config.yaml`, which lives inside the vault.
+- Cost: a vault kept in a subfolder of a bigger repo gets no commits until an opt-in setting is added. An uncommitted human edit to the same file is included in the AI's commit, because a commit covers the whole file.
