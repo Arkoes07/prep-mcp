@@ -57,7 +57,7 @@ func TestContextGolden(t *testing.T) {
 			t.Errorf("output is %d bytes, want under 16 KB", len(got))
 		}
 
-		// Sections appear in PRD order: rules, week, open items, recent, tags.
+		// Sections appear in order: rules, week, open items, recent, tags.
 		header := regexp.MustCompile(`(?m)^==== (.+) ====$`)
 		var names []string
 		for _, m := range header.FindAllStringSubmatch(got, -1) {

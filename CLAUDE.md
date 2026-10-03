@@ -1,14 +1,11 @@
-# Building prep-mcp
+# Working on prep-mcp
 
-Read PRD.md first. It is the spec. This file is how to work on it.
-
-- Go, standard layout from PRD section 7. Keep dependencies to the ones listed.
-- Plan the build before coding. Ship read tools first so they can be used read-only before writes exist.
-- Write the tests in PRD section 8 alongside the code, not after. Tests run against a temp copy of `examples/vault`, never against a real vault.
+- No new dependencies without asking.
+- Write tests alongside the code, not after. Tests run against a temp copy of `examples/vault`, never against a real vault.
 - Nothing in the Go code may mention interviews, stories, sessions or applications. Those words live only in config and example data.
-- Every design decision that differs from the PRD goes into a new ADR in `docs/adr/` with the alternative and the cost.
+- Code says what. A short why is a comment where the code does it. A why that is long, or a decision that is hard to reverse, surprising and a real trade-off, is an ADR in `docs/adr/`.
 - Error messages must say what to do next.
-- Do not add tools beyond PRD section 5 without asking.
+- Do not add tools without asking.
 
 ## Agent skills
 

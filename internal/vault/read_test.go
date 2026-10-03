@@ -53,7 +53,7 @@ func TestReadFile(t *testing.T) {
 	})
 
 	t.Run("outside_the_vault", func(t *testing.T) {
-		_, _, err := v.ReadFile("../../PRD.md")
+		_, _, err := v.ReadFile("../../README.md")
 		if err == nil || !strings.Contains(err.Error(), "outside the vault") {
 			t.Errorf("error = %v, want one saying the path is outside the vault", err)
 		}

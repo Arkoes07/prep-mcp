@@ -10,6 +10,8 @@ Most markdown MCP servers are read-only. This one is built for the harder case: 
 - Every AI write is a git commit, and `batch` makes many writes one: checked first, all or nothing. No delete tool. Paths confined to the vault.
 - Document types live in a config file, so it works for any vault.
 
+Not in scope: a UI (Obsidian is the reading and editing surface), a database or index (files on disk are the only source of truth), deleting files (a human does that), multiple users, auth or a network transport.
+
 ## Install
 
 You need Go 1.25 or newer, and git if you want a commit per write.
@@ -216,23 +218,7 @@ go test -bench Scan -run '^$' ./internal/read       # scan cost: 2,000 generated
 go build -ldflags "-X main.version=v0.1.0" ./cmd/prep-mcp
 ```
 
-| Path | What lives there |
-|---|---|
-| `cmd/prep-mcp` | Flags, config loading, wiring |
-| `internal/config` | Parsing and validating `prep.config.yaml` |
-| `internal/vault` | Confined file access through `os.Root`, frontmatter, tags |
-| `internal/read` | Scan, filters, search, tag counts, `get_context` |
-| `internal/write` | The four writes as ops, the all-or-nothing batch engine they all run through, atomic writes, git |
-| `internal/server` | MCP tool registration and descriptions |
-| `internal/testvault` | Test helpers: a temp copy of the example vault, a frozen clock |
-| `examples/vault` | The fictional vault the tests and the quick start use |
-
-Rules ([CLAUDE.md](CLAUDE.md) has them all):
-
-- [PRD.md](PRD.md) is the spec. A decision that differs from it goes into an ADR in [docs/adr](docs/adr/) with the alternative and its cost.
-- No domain words in Go code, tests included: types, fields and examples live in config and `examples/vault`. `TestNoDomainWords` checks against `internal/testvault/testdata/forbidden-words.txt`.
-- Tests never touch a real vault; they work on `testvault.Copy`.
-- Error messages say what to do next.
+Rules for working on the code are in [CLAUDE.md](CLAUDE.md).
 
 To try a change in a client, run `go install ./cmd/prep-mcp` and restart the client so it starts the new binary. To talk to the server without a client:
 

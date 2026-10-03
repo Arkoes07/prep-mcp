@@ -156,7 +156,7 @@ func TestReadErrorsAreToolResultsWithHints(t *testing.T) {
 		args map[string]any
 		want string
 	}{
-		{"path_outside_vault", "read_doc", map[string]any{"path": "../../PRD.md"}, "outside the vault; use a path relative"},
+		{"path_outside_vault", "read_doc", map[string]any{"path": "../../README.md"}, "outside the vault; use a path relative"},
 		{"missing_file", "read_doc", map[string]any{"path": "nope.md"}, "use list_docs or search_text"},
 		{"bad_since", "list_docs", map[string]any{"since": "13-01-2026"}, "since: use YYYY-MM-DD"},
 		{"bad_date", "get_context", map[string]any{"date": "yesterday"}, "date: use YYYY-MM-DD"},
