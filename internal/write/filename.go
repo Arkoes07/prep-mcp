@@ -39,7 +39,9 @@ var placeholderRE = regexp.MustCompile(`\{([^{}]+)\}`)
 // RenderFilename fills the filename pattern of type spec. {slug} comes from
 // the slug argument, else the title field; {date} from the type's date field,
 // else today; any other placeholder from the field of that name. Every value
-// is slugified, so the result can never contain a path separator.
+// is slugified, so the result can never contain a path separator and is
+// always lowercase. On a case-sensitive file system an existing uppercase file
+// of the same name is not detected.
 func RenderFilename(spec config.TypeSpec, fm *yaml.Node, slug string, today time.Time) (string, error) {
 	date := today.Format(time.DateOnly)
 	if d := Slugify(vault.FieldText(fm, spec.DateField)); d != "" {

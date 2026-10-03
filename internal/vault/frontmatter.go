@@ -94,6 +94,7 @@ func parseBlock(src []byte, fm *Frontmatter) (*Frontmatter, error) {
 	default:
 		fm.Map = doc.Content[0]
 	}
+	// yaml.v3 does not reject duplicate keys when decoding into a Node.
 	seen := make(map[string]bool, len(fm.Map.Content)/2)
 	for k := range Pairs(fm.Map) {
 		if seen[k.Value] {

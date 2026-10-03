@@ -113,7 +113,8 @@ func vaultRoot(flagValue string, getenv func(string) string) (string, error) {
 
 // loadConfig loads the config at path, or <root>/prep.config.yaml when path
 // is empty. A missing default config means an empty one, so reads still
-// work; a missing explicit config is an error.
+// work; a missing explicit config is an error. It is loaded once, so an invalid
+// config fails at startup with every problem listed; edits need a restart.
 func loadConfig(path, root string, logger *slog.Logger) (*config.Config, error) {
 	explicit := path != ""
 	if !explicit {

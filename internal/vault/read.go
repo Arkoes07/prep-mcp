@@ -9,7 +9,8 @@ import (
 )
 
 // ReadFile returns a file's cleaned path and bytes. Any .md file in the vault
-// can be read, including templates/, but not dot-folders.
+// can be read, including templates/ so the model can follow a template's
+// structure, but not dot-folders.
 func (v *Vault) ReadFile(p string) (rel string, content []byte, err error) {
 	rel, err = v.Resolve(p, AccessRead)
 	if err != nil {

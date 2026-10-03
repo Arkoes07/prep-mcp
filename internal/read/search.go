@@ -29,7 +29,8 @@ type Line struct {
 }
 
 // Search finds documents whose body or title field contains q, ignoring case.
-// Other frontmatter fields and file names are not searched. Hits are ordered
+// Other frontmatter fields (list_docs answers those) and file names are not
+// searched, or every document carrying a tag would match. Hits are ordered
 // by path. typ, when set, limits the search to one type.
 func (r *Reader) Search(q, typ string, limit int) ([]Hit, error) {
 	if strings.TrimSpace(q) == "" {

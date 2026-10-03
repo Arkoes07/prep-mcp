@@ -127,6 +127,8 @@ func (g *Git) Commit(ctx context.Context, dir string, paths []string, msg string
 	} else if ctx.Err() != nil {
 		return problem("git diff", "", err)
 	}
+	// A failed commit leaves the paths staged. No git reset: it is one more call
+	// that can fail in a repo already in an odd state, and they belong in the next commit.
 	commit := []string{"commit", "--only", "-m", msg, "--author=" + name + " <" + email + ">", "--"}
 	if out, err := r.run(ctx, append(commit, paths...)...); err != nil {
 		return problem("git commit", out, err)

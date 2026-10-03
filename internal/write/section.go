@@ -37,7 +37,8 @@ func InsertSection(src []byte, heading, content string) ([]byte, error) {
 		return []byte(text + newSection(text, heading, block, eol)), nil
 	}
 
-	// Insert after the last non-blank line of the section.
+	// Insert after the last non-blank line of the section, so blank lines before
+	// the next heading stay where they were.
 	end := sectionEnd(lines, match)
 	last := match
 	for i := match + 1; i < end; i++ {

@@ -1,9 +1,0 @@
-# A git lock: warn, never delete; flag it at session start (2026-10-02)
-- Instead of: deleting a stale `index.lock` or `HEAD.lock`, or passing git's raw message on as the warning.
-- Why: a live lock cannot be told from a stale one, and deleting the lock of a running git (a GUI, the Obsidian Git plugin, an open commit editor) can corrupt the index. The lock is the human's to remove. On the first day a manual commit left locks that would have blocked every later AI commit, behind a generic warning on each write.
-- How: when git says `Unable to create '<path>.lock': File exists`, the write's warning names the lock, says whether the change was staged, and says to delete the lock once no git process is running, with the command that commits afterwards: paths shell-quoted (or `<the paths in results>` past five), the write's message and the configured author, so it runs as shown and keeps the AI author. Timeout and cancel warnings carry the same command. `get_context` lists `.git/HEAD.lock` and `.git/index.lock` under Problems when commits are on. It only looks.
-- Cost: until the human removes the lock, every AI write is saved but not committed.
-  - With `index.lock`, `git add` fails, so nothing is staged: the writes are plain working-tree changes.
-  - With `HEAD.lock` (or a branch's ref lock), `git add` succeeds and only the commit fails, so each write stays staged. The next successful AI commit of the same path picks it up; other paths stay staged.
-  - Either way, writes the human commits by hand without that command lose the AI author.
-  - The write warning relies on git's English message, which `LC_ALL=C` pins and a test checks. The session-start check knows only those two lock names, and only in a `.git` folder: a vault that is a worktree or submodule (`.git` is a file) gets no session-start check, though its write warnings still name the lock.

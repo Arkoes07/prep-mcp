@@ -18,9 +18,10 @@ import (
 	"github.com/Arkoes07/prep-mcp/internal/vault"
 )
 
-// Writer applies safe changes to one vault. Writes are serialised, every
-// write goes through the batch engine (batch.go, Apply and Batch), and every
-// file is replaced atomically. A nil Git means no commits and no commit warnings.
+// Writer applies safe changes to one vault. Writes are serialised, since tool
+// calls may overlap; every write goes through the batch engine (batch.go, Apply
+// and Batch), and every file is replaced atomically. A nil Git means no commits
+// and no commit warnings, so tests do not depend on git state.
 type Writer struct {
 	mu  sync.Mutex
 	v   *vault.Vault
@@ -157,6 +158,8 @@ func (w *Writer) patchDoc(old []byte, patch Patch) ([]byte, []string, error) {
 	if err != nil || fm == nil {
 		return old, warnings, err
 	}
+	// Checked on every write, not only create, so no write can leave a document
+	// that create_doc would reject.
 	if spec, ok := w.cfg.Types[vault.FieldText(fm.Map, "type")]; ok {
 		if missing := missingFields(spec.Required, fm.Map); len(missing) > 0 {
 			parts := make([]string, len(missing))
@@ -172,7 +175,8 @@ func (w *Writer) patchDoc(old []byte, patch Patch) ([]byte, []string, error) {
 
 // replace checks a full rewrite of docPath against the file as the batch sees
 // it. expectedHash is of the file as the caller read it, so a path an earlier
-// op in the batch changed cannot be replaced.
+// op in the batch changed cannot be replaced. A type that is not configured
+// gets no required-field check, so a typo in type is accepted silently.
 func (p *batchPlan) replace(docPath, content, expectedHash string) (*file, []string, error) {
 	expected := strings.ToLower(strings.TrimSpace(expectedHash))
 	if expected == "" {
@@ -236,7 +240,8 @@ func (w *Writer) commit(ctx context.Context, paths []string, msg string) (string
 }
 
 // tagWarnings names the closest known tag for each added tag that is not in
-// the vocabulary. Without a vocabulary there is nothing to check against.
+// the vocabulary. Only added tags: warning about tags a human already had
+// would nag on every write. Without a vocabulary there is nothing to check against.
 func (w *Writer) tagWarnings(added []string) []string {
 	voc, err := w.v.Vocabulary(w.cfg.TagsFile)
 	if err != nil {

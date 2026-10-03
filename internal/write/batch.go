@@ -19,7 +19,8 @@ import (
 // writing. Then each changed file is written once, with its final content,
 // and if a write fails the files already written are put back. A file that
 // changes under the engine between its check and its rename makes it put
-// back what it wrote and start over once.
+// back what it wrote and start over once, so a human's save in Obsidian at that
+// moment is kept.
 
 // MaxBatchOps is the most ops one Batch takes.
 const MaxBatchOps = 200

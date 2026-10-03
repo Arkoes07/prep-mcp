@@ -36,7 +36,7 @@ type Problem struct {
 // Scan reads every typed document under the vault, sorted by path. It skips
 // dot-folders and dot-files, the root templates/ folder, symlinks, and files
 // without frontmatter or without a type. A file with broken frontmatter is
-// skipped and reported as a Problem.
+// skipped and reported as a Problem, so a typo neither hides it nor fails every query.
 func (r *Reader) Scan() ([]*Doc, []Problem, error) {
 	var docs []*Doc
 	var problems []Problem

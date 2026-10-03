@@ -14,7 +14,8 @@ func ISOWeek(t time.Time) string {
 
 // ParseDate parses YYYY-MM-DD, or a timestamp starting with one. It returns
 // the calendar date as written, at local midnight; anything after the date
-// (a time of day, a zone) is dropped unread.
+// (a time of day, a zone) is dropped unread, so the same vault gives the same
+// answers in every timezone.
 func ParseDate(s string) (time.Time, error) {
 	d := strings.TrimSpace(s)
 	if len(d) > 10 && (d[10] == 'T' || d[10] == ' ') {

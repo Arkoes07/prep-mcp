@@ -16,6 +16,8 @@ import (
 // target and renamed into place, after a last check that the target is still
 // what the caller expects. A check that refuses returns the error the caller
 // acts on (a *ConflictError, or "file exists"), and nothing is written.
+// A crash never leaves a half-written note, and a hard link to a file outside
+// the vault is replaced rather than written through.
 
 // beforeRename is a test seam: it runs after the temp file is written and
 // before it is renamed into place. Production leaves it nil.
@@ -46,7 +48,9 @@ func (w *Writer) replaceFile(rel string, data []byte, oldHash string) error {
 	})
 }
 
-// createFile writes a new file and refuses to replace an existing one.
+// createFile writes a new file and refuses to replace an existing one. A file
+// created in the instant between the last check and the rename is replaced:
+// a rename cannot refuse to overwrite.
 func (w *Writer) createFile(rel string, data []byte) error {
 	absent := func() error {
 		_, err := w.v.Root().Lstat(rel)

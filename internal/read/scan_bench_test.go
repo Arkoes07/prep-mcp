@@ -11,8 +11,7 @@ import (
 )
 
 // BenchmarkScan measures one full scan of a generated vault. It is the number
-// behind ADR-0001, the "scan on every call" decision: PRD section 6 says to add a
-// cache only if this is measured slow.
+// behind ADR-0001: add a cache only if this is measured slow.
 func BenchmarkScan(b *testing.B) {
 	const docs = 2000
 	dir := b.TempDir()

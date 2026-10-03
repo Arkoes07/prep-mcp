@@ -149,7 +149,8 @@ func section(name, content string) string {
 }
 
 // weekSection finds the week document for day by field value (not by file
-// name) and renders it in full, as scanned, or says how to create it.
+// name, so week files a human names by hand are found too) and renders it in
+// full, as scanned, or says how to create it.
 func (r *Reader) weekSection(docs []*Doc, day time.Time) (string, []Problem) {
 	cs := r.cfg.Context
 	week := ISOWeek(day)

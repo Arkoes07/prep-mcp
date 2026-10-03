@@ -3,6 +3,8 @@
 //
 // Every file access goes through an *os.Root, so the kernel confines it to
 // the vault even if a path check is wrong. Resolve adds the readable errors.
+//
+// It imports no other package of this module: read and write both build on it.
 package vault
 
 import (

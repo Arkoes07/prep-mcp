@@ -1,3 +1,0 @@
-# Replacing a document (M2)
-- Rules: the hash is checked first, then the new content. Content that is not valid frontmatter, or misses a required field of a configured type, is rejected. Content with no frontmatter, or no `type`, is accepted with a warning that the document will no longer appear in queries. A type that is not configured is accepted and only checked for valid YAML. Tag warnings cover only tags the new content adds compared with the old file.
-- Cost: an unconfigured type gets no required-field check, so a typo in `type` (for example `wek`) is accepted without a warning. `create_doc` is stricter because the type is an argument and must be configured. `update_frontmatter` skips the required-field check for a type that is not configured, for the same reason.
