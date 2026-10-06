@@ -219,12 +219,20 @@ func (w *Writer) editDoc(src []byte, docPath, old, replacement string) ([]byte, 
 		)
 	}
 	next := bytes.Replace(src, []byte(old), []byte(replacement), 1)
+	before, srcErr := typeOf(src)
 	after, err := typeOf(next)
 	if err != nil {
+		var fe *vault.FrontmatterError
+		if srcErr == nil && errors.As(err, &fe) {
+			return nil, nil, fmt.Errorf("this edit breaks the frontmatter: %s; "+
+				"change new so the frontmatter stays valid", fe.Reason)
+		}
+		// It was broken before the edit, so the parser's advice to fix it stands.
 		return nil, nil, err
 	}
-	// Unlike replace_doc, an edit is a small change: one that alters the type is a mistake.
-	if before, _ := typeOf(src); before != after {
+	// Unlike replace_doc, an edit is a small change: one that alters the type is
+	// a mistake. Frontmatter that did not parse has no type to keep: the edit repairs it.
+	if srcErr == nil && before != after {
 		return nil, nil, fmt.Errorf("this edit changes the type %q to %q; keep the frontmatter's type line as it is",
 			before, after)
 	}

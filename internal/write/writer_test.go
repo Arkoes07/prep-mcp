@@ -525,6 +525,24 @@ func TestWriterEdit(t *testing.T) {
 		}
 	})
 
+	// A file whose frontmatter does not parse has no type to keep, so an edit
+	// may repair it; an edit elsewhere is refused with the parse error.
+	t.Run("broken_frontmatter", func(t *testing.T) {
+		const broken = "---\ntype: week\nweek: 2026-W03\nfocus: [x\n---\nbody\n"
+		e := newEnv(t)
+		testvault.Write(t, e.root, p, broken)
+
+		_, err := e.w.Apply(ctx, write.EditOp(p, "body", "more body"))
+		mustContain(t, err, "invalid frontmatter", "fix it in the file, then retry")
+
+		if _, err := e.w.Apply(ctx, write.EditOp(p, "focus: [x\n", "focus: [x]\n")); err != nil {
+			t.Fatalf("repairing edit: %v", err)
+		}
+		if got, want := e.read(t, p), strings.Replace(broken, "[x\n", "[x]\n", 1); got != want {
+			t.Errorf("file:\n%q\nwant:\n%q", got, want)
+		}
+	})
+
 	t.Run("error_names_the_resolved_path", func(t *testing.T) {
 		e := newEnv(t)
 		_, err := e.w.Apply(ctx, write.EditOp("./weeks//2026-w03.md", "nope", "x"))
@@ -545,7 +563,13 @@ func TestWriterEdit(t *testing.T) {
 			[]string{`"Mon" appears 2 times in ` + p + `; include more surrounding text so it matches once`},
 		},
 		{"empty_old", "", "x", []string{"old is empty"}},
-		{"breaks_frontmatter", "focus: [Headline first, State the cost]", "focus: [x", []string{"invalid frontmatter"}},
+		{
+			"breaks_frontmatter", "focus: [Headline first, State the cost]", "focus: [x",
+			[]string{
+				"this edit breaks the frontmatter: invalid frontmatter",
+				"change new so the frontmatter stays valid",
+			},
+		},
 		{"removes_required", "week: 2026-W03\n", "", []string{"missing required fields for week: week"}},
 		{"changes_type", "type: week", "type: learning", []string{`type "week" to "learning"`}},
 		{"removes_frontmatter", "---\ntype: week", "type: week", []string{`type "week" to ""`}},
