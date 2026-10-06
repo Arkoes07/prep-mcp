@@ -50,7 +50,8 @@ func registerWriteTools(s *mcp.Server, h *handlers) {
 			"add_tags / remove_tags: change the tag list. " +
 			"updated is set to today. Required fields cannot be removed or emptied and type cannot be unset. " +
 			"set.tags cannot be combined with add_tags/remove_tags. " +
-			"To clear a field, use unset; set with \"\" keeps the key with an empty value, which where filters treat differently from a missing key. " +
+			"To clear a field, use unset; set with \"\" keeps the key with an empty value, " +
+			"which where filters treat differently from a missing key. " +
 			"A patch that changes nothing writes nothing. Returns path, new hash and warnings such as unknown tags.",
 		Annotations: additive,
 	}, writeTool[updateFrontmatterIn](h, write.ToolPatch))
