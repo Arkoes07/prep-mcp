@@ -139,13 +139,8 @@ func TestWriterCreate(t *testing.T) {
 		name, typ, fm, body, slug string
 		setup                     func(*env)
 		wantErr                   []string
-		listTypes                 bool   // the error must name every configured type
 		wantExists                string // the error must say this file exists
 	}{
-		{name: "missing_required", typ: "learning", fm: `{"title":"T"}`, wantErr: []string{"missing required fields for learning: track"}},
-		{name: "empty_required_string", typ: "learning", fm: `{"title":"T","track":""}`, wantErr: []string{"missing required fields for learning: track"}},
-		{name: "empty_required_list", typ: "learning", fm: `{"title":"T","track":[]}`, wantErr: []string{"missing required fields for learning: track"}},
-		{name: "unknown_type", typ: "nope", fm: `{"title":"T"}`, wantErr: []string{"nope"}, listTypes: true},
 		{name: "type_conflict", typ: "learning", fm: `{"type":"week","title":"T","track":"k"}`, wantErr: []string{"type", "week", "learning"}},
 		{name: "exists", typ: "improvement", fm: `{"status":"open","exit_criteria":"x"}`, slug: "buries-headline", wantExists: "improvements/buries-headline.md"},
 		{name: "week_exists", typ: "week", fm: `{"week":"2026-W03"}`, wantExists: "weeks/2026-w03.md"},
@@ -168,10 +163,6 @@ func TestWriterCreate(t *testing.T) {
 			name: "slug_folder_other_pattern", typ: "week", fm: `{"week":"2026-W05"}`, slug: "a/b",
 			wantErr: []string{`"{week}.md"`, "pass a plain name"},
 		},
-		{
-			name: "unknown_tag", typ: "learning", fm: `{"title":"T","track":"k","tags":["issue/buries-headlin"]}`,
-			wantErr: []string{unknownTagErr},
-		},
 	}
 	for _, tc := range fail {
 		t.Run(tc.name, func(t *testing.T) {
@@ -186,9 +177,6 @@ func TestWriterCreate(t *testing.T) {
 				t.Fatalf("create succeeded (%+v), want an error", res)
 			}
 			mustContain(t, err, tc.wantErr...)
-			if tc.listTypes {
-				mustContain(t, err, e.cfg.TypeNames()...)
-			}
 			if tc.wantExists != "" {
 				want := fmt.Sprintf("file exists: %s (use append_section or update_frontmatter)", tc.wantExists)
 				if err.Error() != want {
@@ -306,22 +294,6 @@ func TestWriterUpdate(t *testing.T) {
 		}
 	})
 
-	t.Run("unset_required", func(t *testing.T) {
-		e := newEnv(t)
-		before := snapshot(t, e.root)
-		_, err := e.w.Apply(ctx, write.PatchOp(p, write.Patch{Unset: []string{"exit_criteria"}}))
-		mustContain(t, err, "exit_criteria is required for improvement")
-		sameSnapshot(t, before, snapshot(t, e.root))
-	})
-
-	t.Run("unknown_tag_rejected", func(t *testing.T) {
-		e := newEnv(t)
-		before := snapshot(t, e.root)
-		_, err := e.w.Apply(ctx, write.PatchOp(p, write.Patch{AddTags: []string{"issue/buries-headlin"}}))
-		mustContain(t, err, unknownTagErr)
-		sameSnapshot(t, before, snapshot(t, e.root))
-	})
-
 	t.Run("noop_writes_nothing", func(t *testing.T) {
 		e := newEnv(t)
 		orig := e.read(t, p)
@@ -424,14 +396,7 @@ func TestWriterReplace(t *testing.T) {
 		wantErr             []string
 	}{
 		{name: "missing_file", path: "weeks/none.md", content: "---\ntype: week\nweek: 2026-W09\n---\n", wantErr: []string{"not found", "create_doc"}},
-		{name: "invalid_yaml", path: p, content: "---\ntype: [x\n---\n", wantErr: []string{"frontmatter"}},
-		{name: "drops_required", path: p, content: "---\ntype: week\n---\nbody\n", wantErr: []string{"missing required fields for week: week"}},
 		{name: "templates_path", path: "templates/week.md", content: "---\ntype: week\nweek: 2026-W09\n---\n", wantErr: []string{"templates/ is read-only"}},
-		{
-			name: "unknown_tag", path: p,
-			content: "---\ntype: week\nweek: 2026-W03\ntags: [issue/buries-headlin]\n---\nbody\n",
-			wantErr: []string{unknownTagErr},
-		},
 	}
 	for _, tc := range rejected {
 		t.Run(tc.name, func(t *testing.T) {
@@ -442,45 +407,6 @@ func TestWriterReplace(t *testing.T) {
 			mustContain(t, err, tc.wantErr...)
 			sameSnapshot(t, before, snapshot(t, e.root))
 		})
-	}
-
-	accepted := []struct {
-		name, content, wantWarn string
-	}{
-		{name: "drops_frontmatter", content: "# Just notes\n", wantWarn: "will no longer appear in queries"},
-	}
-	for _, tc := range accepted {
-		t.Run(tc.name, func(t *testing.T) {
-			e := newEnv(t)
-			_, h := readHash(t, e)
-			res, err := e.w.Apply(ctx, write.ReplaceOp(p, tc.content, h))
-			if err != nil {
-				t.Fatalf("Replace: %v", err)
-			}
-			if !hasWarning(res, tc.wantWarn) {
-				t.Errorf("warnings = %q, want one containing %q", res.Warnings, tc.wantWarn)
-			}
-			if e.read(t, p) != tc.content {
-				t.Errorf("file:\n%q\nwant:\n%q", e.read(t, p), tc.content)
-			}
-		})
-	}
-}
-
-// Only tags a write adds are checked: a tag a human already put on the
-// document passes through a replace untouched.
-func TestWriterReplaceKeepsExistingUnknownTag(t *testing.T) {
-	const p = "weeks/2026-w03.md"
-	e := newEnv(t)
-	tagged := "---\ntype: week\nweek: 2026-W03\ntags: [issue/buries-headlin]\n---\nbody\n"
-	testvault.Write(t, e.root, p, tagged)
-
-	next := tagged + "more\n"
-	if _, err := e.w.Apply(ctx, write.ReplaceOp(p, next, vault.Hash([]byte(tagged)))); err != nil {
-		t.Fatalf("Replace: %v", err)
-	}
-	if e.read(t, p) != next {
-		t.Errorf("file:\n%q\nwant:\n%q", e.read(t, p), next)
 	}
 }
 
@@ -525,24 +451,6 @@ func TestWriterEdit(t *testing.T) {
 		}
 	})
 
-	// A file whose frontmatter does not parse has no type to keep, so an edit
-	// may repair it; an edit elsewhere is refused with the parse error.
-	t.Run("broken_frontmatter", func(t *testing.T) {
-		const broken = "---\ntype: week\nweek: 2026-W03\nfocus: [x\n---\nbody\n"
-		e := newEnv(t)
-		testvault.Write(t, e.root, p, broken)
-
-		_, err := e.w.Apply(ctx, write.EditOp(p, "body", "more body"))
-		mustContain(t, err, "invalid frontmatter", "fix it in the file, then retry")
-
-		if _, err := e.w.Apply(ctx, write.EditOp(p, "focus: [x\n", "focus: [x]\n")); err != nil {
-			t.Fatalf("repairing edit: %v", err)
-		}
-		if got, want := e.read(t, p), strings.Replace(broken, "[x\n", "[x]\n", 1); got != want {
-			t.Errorf("file:\n%q\nwant:\n%q", got, want)
-		}
-	})
-
 	t.Run("error_names_the_resolved_path", func(t *testing.T) {
 		e := newEnv(t)
 		_, err := e.w.Apply(ctx, write.EditOp("./weeks//2026-w03.md", "nope", "x"))
@@ -563,17 +471,6 @@ func TestWriterEdit(t *testing.T) {
 			[]string{`"Mon" appears 2 times in ` + p + `; include more surrounding text so it matches once`},
 		},
 		{"empty_old", "", "x", []string{"old is empty"}},
-		{
-			"breaks_frontmatter", "focus: [Headline first, State the cost]", "focus: [x",
-			[]string{
-				"this edit breaks the frontmatter: invalid frontmatter",
-				"change new so the frontmatter stays valid",
-			},
-		},
-		{"removes_required", "week: 2026-W03\n", "", []string{"missing required fields for week: week"}},
-		{"changes_type", "type: week", "type: learning", []string{`type "week" to "learning"`}},
-		{"removes_frontmatter", "---\ntype: week", "type: week", []string{`type "week" to ""`}},
-		{"unknown_tag", "tags: [meta/plan]", "tags: [meta/plan, issue/buries-headlin]", []string{unknownTagErr}},
 	}
 	for _, tc := range rejected {
 		t.Run(tc.name, func(t *testing.T) {

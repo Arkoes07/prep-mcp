@@ -64,16 +64,23 @@ func (p *batchPlan) create(d Draft) (*file, []byte, []string, error) {
 	w := p.w
 	spec, ok := w.cfg.Types[d.Type]
 	if !ok {
-		return nil, nil, nil, fmt.Errorf("unknown type %q; configured types: %s", d.Type, w.cfg.TypeList())
+		return nil, nil, nil, errors.New(w.unknownType(d.Type))
 	}
 	day := w.now()
 	doc, err := newFrontmatter(d.Type, d.Frontmatter, day.Format(time.DateOnly))
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	if missing := missingFields(spec.Required, doc); len(missing) > 0 {
-		return nil, nil, nil, fmt.Errorf("missing required fields for %s: %s; add them to frontmatter and retry",
-			d.Type, strings.Join(missing, ", "))
+	body := d.Body
+	if body != "" && !strings.HasSuffix(body, "\n") {
+		body += "\n"
+	}
+	data := []byte("---\n" + encode(doc) + "---\n" + body)
+	// Before the file name, which may need a field the rules find missing: one
+	// error then names every missing field.
+	warnings, err := w.check(createRules, nil, data)
+	if err != nil {
+		return nil, nil, nil, err
 	}
 
 	name, err := RenderFilename(
@@ -89,17 +96,6 @@ func (p *batchPlan) create(d Draft) (*file, []byte, []string, error) {
 	if err != nil {
 		return nil, nil, nil, err
 	}
-
-	body := d.Body
-	if body != "" && !strings.HasSuffix(body, "\n") {
-		body += "\n"
-	}
-	data := []byte("---\n" + encode(doc) + "---\n" + body)
-	if _, err := reread(data); err != nil {
-		return nil, nil, nil, fmt.Errorf("internal error: the new frontmatter did not re-read (%w); "+
-			"nothing was written. Report this as a bug", err)
-	}
-
 	f, err := p.file(rel)
 	if err != nil {
 		return nil, nil, nil, err
@@ -107,7 +103,7 @@ func (p *batchPlan) create(d Draft) (*file, []byte, []string, error) {
 	if f.exists {
 		return nil, nil, nil, fmt.Errorf("file exists: %s (use append_section or update_frontmatter)", rel)
 	}
-	return f, data, nil, nil
+	return f, data, warnings, nil
 }
 
 // newFrontmatter builds a new document's frontmatter: type first, then the
@@ -144,128 +140,58 @@ func newFrontmatter(typ string, fm *yaml.Node, today string) (*yaml.Node, error)
 // returns old.
 func (w *Writer) patchDoc(old []byte, patch Patch) ([]byte, []string, error) {
 	var warnings []string
-	oldTags := tagsOf(old)
+	oldTags := stateOf(old).tags
 	for _, t := range vault.NormalizeTagList(patch.RemoveTags) {
 		if !slices.Contains(oldTags, t) {
 			warnings = append(warnings,
 				fmt.Sprintf("tag %q is not on this document, so there was nothing to remove", t))
 		}
 	}
-	next, fm, err := ApplyPatch(old, patch, w.now().Format(time.DateOnly))
-	if err != nil || fm == nil {
-		return old, warnings, err
-	}
-	// Checked on every write, not only create, so no write can leave a document
-	// that create_doc would reject.
-	if spec, ok := w.cfg.Types[vault.FieldText(fm.Map, "type")]; ok {
-		if missing := missingFields(spec.Required, fm.Map); len(missing) > 0 {
-			parts := make([]string, len(missing))
-			for i, f := range missing {
-				parts[i] = fmt.Sprintf("%s is required for %s", f, vault.FieldText(fm.Map, "type"))
-			}
-			return nil, nil, fmt.Errorf("%s; give the field a value with set instead of removing or emptying it",
-				strings.Join(parts, "; "))
-		}
+	next, _, err := ApplyPatch(old, patch, w.now().Format(time.DateOnly))
+	if err != nil {
+		return nil, nil, err
 	}
 	return next, warnings, nil
 }
 
-// replace checks a full rewrite of docPath against the file as the batch sees
-// it. expectedHash is of the file as the caller read it, so a path an earlier
-// op in the batch changed cannot be replaced. A type that is not configured
-// gets no required-field check, so a typo in type is accepted silently.
-func (p *batchPlan) replace(docPath, content, expectedHash string) (*file, []byte, []string, error) {
+// replaceContent is content as f's new bytes, but only while f holds the file
+// the caller read: expectedHash is of that file, so a path an earlier op in
+// the batch changed cannot be replaced.
+func replaceContent(f *file, content, expectedHash string) ([]byte, error) {
 	expected := strings.ToLower(strings.TrimSpace(expectedHash))
 	if expected == "" {
-		return nil, nil, nil, errors.New("expected_hash is required; get it from read_doc")
-	}
-	f, err := p.existing(docPath)
-	if err != nil {
-		return nil, nil, nil, err
+		return nil, errors.New("expected_hash is required; get it from read_doc")
 	}
 	if f.changed() {
-		return nil, nil, nil, fmt.Errorf("an earlier op in this batch changed %s; "+
+		return nil, fmt.Errorf("an earlier op in this batch changed %s; "+
 			"put replace_doc first for %s, or fold that change into its content", f.rel, f.rel)
 	}
 	if cur := vault.Hash(f.cur); cur != expected {
-		return nil, nil, nil, &ConflictError{Path: f.rel, Current: cur}
+		return nil, &ConflictError{Path: f.rel, Current: cur}
 	}
-
-	data := []byte(content)
-	warnings, err := p.w.checkRewrite(data)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	return f, data, warnings, nil
+	return []byte(content), nil
 }
 
-// editDoc replaces the one occurrence of old in the document at docPath,
-// whose bytes are src, with replacement. It needs no hash: if the text changed
-// under the caller, old does not match.
-func (w *Writer) editDoc(src []byte, docPath, old, replacement string) ([]byte, []string, error) {
+// editText replaces the one occurrence of old in src, the file rel, with
+// replacement. It needs no hash: if the text changed under the caller, old
+// does not match.
+func editText(src []byte, rel, old, replacement string) ([]byte, error) {
 	if old == "" {
-		return nil, nil, errors.New("old is empty; pass the exact text to replace, copied from read_doc")
+		return nil, errors.New("old is empty; pass the exact text to replace, copied from read_doc")
 	}
 	switch n := bytes.Count(src, []byte(old)); n {
 	case 0:
-		return nil, nil, fmt.Errorf("%q not found in %s; read_doc it and copy the text exactly", old, docPath)
+		return nil, fmt.Errorf("%q not found in %s; read_doc it and copy the text exactly", old, rel)
 	case 1:
 	default:
-		return nil, nil, fmt.Errorf(
+		return nil, fmt.Errorf(
 			"%q appears %d times in %s; include more surrounding text so it matches once",
 			old,
 			n,
-			docPath,
+			rel,
 		)
 	}
-	next := bytes.Replace(src, []byte(old), []byte(replacement), 1)
-	before, srcErr := typeOf(src)
-	after, err := typeOf(next)
-	if err != nil {
-		var fe *vault.FrontmatterError
-		if srcErr == nil && errors.As(err, &fe) {
-			return nil, nil, fmt.Errorf("this edit breaks the frontmatter: %s; "+
-				"change new so the frontmatter stays valid", fe.Reason)
-		}
-		// It was broken before the edit, so the parser's advice to fix it stands.
-		return nil, nil, err
-	}
-	// Unlike replace_doc, an edit is a small change: one that alters the type is
-	// a mistake. Frontmatter that did not parse has no type to keep: the edit repairs it.
-	if srcErr == nil && before != after {
-		return nil, nil, fmt.Errorf("this edit changes the type %q to %q; keep the frontmatter's type line as it is",
-			before, after)
-	}
-	warnings, err := w.checkRewrite(next)
-	if err != nil {
-		return nil, nil, err
-	}
-	return next, warnings, nil
-}
-
-// checkRewrite checks the new content of an existing file: valid frontmatter
-// and the type's required fields. Content without a typed frontmatter passes
-// with a warning.
-func (w *Writer) checkRewrite(data []byte) ([]string, error) {
-	fm, err := vault.SplitFrontmatter(data)
-	if err != nil {
-		return nil, err
-	}
-	var warnings []string
-	typ := ""
-	if fm != nil {
-		typ = vault.FieldText(fm.Map, "type")
-	}
-	if typ == "" {
-		warnings = append(warnings, "the new content has no frontmatter with a type, "+
-			"so this document will no longer appear in queries (list_docs, search_text, get_context)")
-	} else if spec, ok := w.cfg.Types[typ]; ok {
-		if missing := missingFields(spec.Required, fm.Map); len(missing) > 0 {
-			return nil, fmt.Errorf("missing required fields for %s: %s; keep them in the frontmatter",
-				typ, strings.Join(missing, ", "))
-		}
-	}
-	return warnings, nil
+	return bytes.Replace(src, []byte(old), []byte(replacement), 1), nil
 }
 
 // commit commits paths with msg when commits are on and anything was written,
@@ -284,84 +210,4 @@ func (w *Writer) commit(ctx context.Context, paths []string, msg string) (string
 		return hash, nil
 	}
 	return hash, []string{warning}
-}
-
-// checkTags rejects each added tag that is not in the vocabulary, naming the
-// closest known one. Only added tags: rejecting tags a human already had would
-// block every write to that document. Without a vocabulary there is nothing to
-// check against.
-func (w *Writer) checkTags(added []string) error {
-	if len(added) == 0 {
-		return nil
-	}
-	voc, err := w.v.Vocabulary(w.cfg.TagsFile)
-	if err != nil {
-		return err
-	}
-	if len(voc.Tags()) == 0 {
-		return nil
-	}
-	var errs []error
-	for _, t := range added {
-		if voc.Known(t) {
-			continue
-		}
-		errs = append(errs, fmt.Errorf(
-			"unknown tag %q; closest known tag: %q. Use a known tag (list_tags shows them all), or add it to %s first",
-			t,
-			voc.Closest(t),
-			w.cfg.TagsFile,
-		))
-	}
-	return errors.Join(errs...)
-}
-
-// reread parses the frontmatter of a file this package built, which must have one.
-func reread(src []byte) (*vault.Frontmatter, error) {
-	fm, err := vault.SplitFrontmatter(src)
-	if err != nil {
-		return nil, err
-	}
-	if fm == nil {
-		return nil, errors.New("no frontmatter found")
-	}
-	return fm, nil
-}
-
-// typeOf returns the type in src's frontmatter, or "" if it has none.
-func typeOf(src []byte) (string, error) {
-	fm, err := vault.SplitFrontmatter(src)
-	if err != nil || fm == nil {
-		return "", err
-	}
-	return vault.FieldText(fm.Map, "type"), nil
-}
-
-func tagsOf(src []byte) []string {
-	fm, err := vault.SplitFrontmatter(src)
-	if err != nil || fm == nil {
-		return nil
-	}
-	return vault.NormalizeTags(vault.Field(fm.Map, "tags"))
-}
-
-// newTags returns the tags in now that were not in before.
-func newTags(before, now []string) []string {
-	var out []string
-	for _, t := range now {
-		if !slices.Contains(before, t) {
-			out = append(out, t)
-		}
-	}
-	return out
-}
-
-func missingFields(required []string, m *yaml.Node) []string {
-	var out []string
-	for _, r := range required {
-		if isMissing(vault.Field(m, r)) {
-			out = append(out, r)
-		}
-	}
-	return out
 }

@@ -14,6 +14,13 @@ import (
 	"github.com/Arkoes07/prep-mcp/internal/write"
 )
 
+// documentRules ends the description of each tool that changes an existing
+// file: what fails and what warns (ADR-0015).
+const documentRules = "Document rules: the frontmatter parses, type is a configured type, " +
+	"the type's required fields have values, and tags are in the vocabulary file. " +
+	"A write that breaks one fails and writes nothing (an unknown tag names the closest known one); " +
+	"one the document already broke is only a warning, so the write still goes through and can fix it."
+
 // registerWriteTools adds the five write tools and batch. Each write tool is a
 // batch of one: buildOp turns its arguments into the op. Their descriptions
 // are what the model sees, so create_doc's is generated from the config: the
@@ -38,7 +45,7 @@ func registerWriteTools(s *mcp.Server, h *handlers) {
 			"if the file has no such section, a new \"## heading\" section is added at the end. " +
 			"Only level-2 headings match, exactly. " +
 			"Frontmatter and all existing text stay byte for byte. Returns path, new hash, warnings and commit. " +
-			"This is the default way to add to a document.",
+			"This is the default way to add to a document. " + documentRules,
 		Annotations: additive,
 	}, writeTool[appendSectionIn](h, write.ToolAppend))
 
@@ -48,12 +55,12 @@ func registerWriteTools(s *mcp.Server, h *handlers) {
 		Description: "Change frontmatter only; the body stays byte for byte and so do untouched keys. " +
 			"set: object of top-level keys to set (new keys are added at the end); unset: keys to remove; " +
 			"add_tags / remove_tags: change the tag list. " +
-			"updated is set to today. Required fields cannot be removed or emptied and type cannot be unset. " +
-			"set.tags cannot be combined with add_tags/remove_tags. " +
+			"updated is set to today. set.tags cannot be combined with add_tags/remove_tags. " +
 			"To clear a field, use unset; set with \"\" keeps the key with an empty value, " +
 			"which where filters treat differently from a missing key. " +
-			"Adding a tag missing from the vocabulary file fails, naming the closest known tag. " +
-			"A patch that changes nothing writes nothing. Returns path, new hash and warnings.",
+			"Setting type to another configured type needs all of that type's required fields in the same call. " +
+			"Frontmatter that does not parse cannot be patched; fix it with edit_text. " +
+			"A patch that changes nothing writes nothing. Returns path, new hash and warnings. " + documentRules,
 		Annotations: additive,
 	}, writeTool[updateFrontmatterIn](h, write.ToolPatch))
 
@@ -65,8 +72,7 @@ func registerWriteTools(s *mcp.Server, h *handlers) {
 			"nothing is written and the error carries the current hash: " +
 			"re-read with read_doc, merge the changes, and retry. " +
 			"Prefer append_section or update_frontmatter for small changes, and edit_text to change a few words. " +
-			"The new content must keep valid frontmatter and the type's required fields. " +
-			"Returns path, new hash and warnings.",
+			"Returns path, new hash and warnings. " + documentRules,
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes, OpenWorldHint: &no},
 	}, writeTool[replaceDocIn](h, write.ToolReplace))
 
@@ -79,9 +85,7 @@ func registerWriteTools(s *mcp.Server, h *handlers) {
 			"old must appear exactly once in the file, byte for byte as read_doc showed it; " +
 			"if it is missing or appears several times, nothing is written and the error says which. " +
 			"An empty new deletes old. No hash is needed: if the file changed, old simply does not match. " +
-			"The result must keep valid frontmatter, the type and its required fields; " +
-			"an added tag missing from the vocabulary file fails. " +
-			"Returns path, new hash, warnings and commit.",
+			"The type cannot change. Returns path, new hash, warnings and commit. " + documentRules,
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes, OpenWorldHint: &no},
 	}, writeTool[editTextIn](h, write.ToolEdit))
 
@@ -113,7 +117,7 @@ func createDocDescription(cfg *config.Config) string {
 		"Use this, not local memory or notes files, to save a new record that belongs in the vault. " +
 		"The path is built from the type's folder and filename pattern. " +
 		"Fails if the file already exists (the error names it). Sets created to today if absent. " +
-		"Required fields must be present and not empty. " +
+		"Required fields must be present and not empty, and one error names every missing field. " +
 		"tags may be a list or a comma-separated string; " +
 		"a tag missing from the vocabulary file fails the call, naming the closest known tag. " +
 		"Returns path, hash, warnings and commit.\n")

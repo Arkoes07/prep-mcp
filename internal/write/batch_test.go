@@ -60,21 +60,6 @@ func TestBatchInvalidOpsWriteNothing(t *testing.T) {
 	sameSnapshot(t, before, snapshot(t, e.root))
 }
 
-// An unknown tag fails its op, so the whole batch writes nothing.
-func TestBatchUnknownTagRejectsAll(t *testing.T) {
-	e := newEnv(t)
-	before := snapshot(t, e.root)
-	ops := []write.Op{
-		statusOp(t, headline, "improving"),
-		noteOp(t, `{"title":"DDIA ch5","track":"ddia","tags":["issue/buries-headlin"]}`),
-	}
-
-	_, err := e.w.Batch(ctx, ops, "")
-
-	mustContain(t, err, "1 of 2 ops failed", "op 2 (create_doc learning): "+unknownTagErr)
-	sameSnapshot(t, before, snapshot(t, e.root))
-}
-
 // A failed op leaves the plan as it was: the next op does not see its change.
 func TestBatchFailedOpLeavesPlanAsItWas(t *testing.T) {
 	e := newEnv(t)

@@ -189,6 +189,8 @@ ae0dfba | Claude | batch: 2 append_section, 1 update_frontmatter
 
 **Rewriting a whole file** takes the hash that `read_doc` returned. If someone changed the file since, `replace_doc` writes nothing and returns the current hash, so the assistant re-reads the file and merges.
 
+**Every write keeps the document rules**: the frontmatter parses, the type is one the config defines, the type's required fields have values, and the tags are in the vocabulary. A write that breaks one fails and writes nothing. One the document already broke, say a field a human left empty or a tag from before the vocabulary, is only a warning: the write goes through, and can fix it. A file without a type, such as the vault's working rules, is not warned about for having none.
+
 ## Tools
 
 | Tool | What it does |

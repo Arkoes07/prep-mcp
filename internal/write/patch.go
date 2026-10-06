@@ -74,8 +74,6 @@ func checkPatch(p Patch) ([]string, error) {
 		switch {
 		case slices.Contains(setKeys, k):
 			return nil, fmt.Errorf("%s is in both set and unset; choose one", k)
-		case k == "type":
-			return nil, errors.New("type cannot be unset: every document needs a type (set it to change it)")
 		case k == "tags" && p.hasTagOps():
 			return nil, errors.New("tags is unset and also changed by add_tags/remove_tags; use one or the other")
 		}
@@ -411,4 +409,16 @@ func verifyPatch(src, out []byte, old *vault.Frontmatter, pl *patchPlan) (*vault
 		return nil, bug("tags differ")
 	}
 	return re, nil
+}
+
+// reread parses the frontmatter of a file this package built, which must have one.
+func reread(src []byte) (*vault.Frontmatter, error) {
+	fm, err := vault.SplitFrontmatter(src)
+	if err != nil {
+		return nil, err
+	}
+	if fm == nil {
+		return nil, errors.New("no frontmatter found")
+	}
+	return fm, nil
 }

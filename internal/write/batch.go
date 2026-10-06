@@ -56,8 +56,8 @@ func CreateOp(d Draft) Op {
 // section at the end of the file.
 func AppendOp(path, heading, content string) Op {
 	return Op{tool: ToolAppend, target: path, apply: func(p *batchPlan) (*file, []byte, []string, error) {
-		return p.modify(path, func(_ string, old []byte) ([]byte, []string, error) {
-			next, err := InsertSection(old, heading, content)
+		return p.modify(path, contentRules, func(f *file) ([]byte, []string, error) {
+			next, err := InsertSection(f.cur, heading, content)
 			return next, nil, err
 		})
 	}}
@@ -66,8 +66,8 @@ func AppendOp(path, heading, content string) Op {
 // PatchOp changes frontmatter keys and tags, leaving the body's bytes alone.
 func PatchOp(path string, patch Patch) Op {
 	return Op{tool: ToolPatch, target: path, apply: func(p *batchPlan) (*file, []byte, []string, error) {
-		return p.modify(path, func(_ string, old []byte) ([]byte, []string, error) {
-			return p.w.patchDoc(old, patch)
+		return p.modify(path, patchRules, func(f *file) ([]byte, []string, error) {
+			return p.w.patchDoc(f.cur, patch)
 		})
 	}}
 }
@@ -76,7 +76,10 @@ func PatchOp(path string, patch Patch) Op {
 // hash the caller read.
 func ReplaceOp(path, content, expectedHash string) Op {
 	return Op{tool: ToolReplace, target: path, apply: func(p *batchPlan) (*file, []byte, []string, error) {
-		return p.replace(path, content, expectedHash)
+		return p.modify(path, contentRules, func(f *file) ([]byte, []string, error) {
+			next, err := replaceContent(f, content, expectedHash)
+			return next, nil, err
+		})
 	}}
 }
 
@@ -84,8 +87,9 @@ func ReplaceOp(path, content, expectedHash string) Op {
 // empty replacement deletes it.
 func EditOp(path, old, replacement string) Op {
 	return Op{tool: ToolEdit, target: path, apply: func(p *batchPlan) (*file, []byte, []string, error) {
-		return p.modify(path, func(rel string, cur []byte) ([]byte, []string, error) {
-			return p.w.editDoc(cur, rel, old, replacement)
+		return p.modify(path, editRules, func(f *file) ([]byte, []string, error) {
+			next, err := editText(f.cur, f.rel, old, replacement)
+			return next, nil, err
 		})
 	}}
 }
@@ -278,14 +282,11 @@ func (w *Writer) run(ops []Op) (*batchPlan, []opError, error) {
 
 // plan checks every op in order against the vault as the earlier ops leave
 // it, and stores what each op that passes works out. A failed op leaves the
-// plan as it was. No op may add a tag missing from the vocabulary.
+// plan as it was. create and modify hold each op to the document rules.
 func (w *Writer) plan(ops []Op) *batchPlan {
 	p := &batchPlan{w: w, byPath: map[string]*file{}, results: make([]Result, len(ops))}
 	for i, op := range ops {
 		f, next, warnings, err := op.apply(p)
-		if err == nil {
-			err = w.checkTags(newTags(tagsOf(f.cur), tagsOf(next)))
-		}
 		if err != nil {
 			p.failed = append(p.failed, opError{op: i, err: err})
 			continue
@@ -302,20 +303,25 @@ func (w *Writer) plan(ops []Op) *batchPlan {
 }
 
 // modify runs transform on the existing file at path as the batch sees it,
-// passing its resolved vault-relative path for error messages.
+// and holds the result to the document rules as r says.
 func (p *batchPlan) modify(
 	path string,
-	transform func(rel string, old []byte) (next []byte, warnings []string, err error),
+	r opRules,
+	transform func(f *file) (next []byte, warnings []string, err error),
 ) (*file, []byte, []string, error) {
 	f, err := p.existing(path)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	next, warnings, err := transform(f.rel, f.cur)
+	next, warnings, err := transform(f)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	return f, next, warnings, nil
+	found, err := p.w.check(r, f.cur, next)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return f, next, append(warnings, found...), nil
 }
 
 // write writes every file the plan changed, in order, and returns the ones it

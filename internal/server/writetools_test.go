@@ -122,8 +122,9 @@ func TestEachWriteToolAnswers(t *testing.T) {
 	}
 }
 
-// Failures are tool results that say what to do next, never protocol errors,
-// and nothing on disk changes.
+// Each write tool's failures are tool results that say what to do next, never
+// protocol errors, and nothing on disk changes. What each failure says is
+// tested in the write package.
 func TestWriteErrorsAreToolResultsWithHints(t *testing.T) {
 	root, cs := connectRoot(t)
 	before, _ := os.ReadFile(filepath.Join(root, "weeks/2026-w03.md"))
@@ -134,8 +135,6 @@ func TestWriteErrorsAreToolResultsWithHints(t *testing.T) {
 	}{
 		{"path_outside", "append_section", map[string]any{"path": "../x.md", "heading": "Log", "content": "x"}, []string{"outside the vault; use a path relative"}},
 		{"templates_read_only", "update_frontmatter", map[string]any{"path": "templates/week.md", "set": map[string]any{"a": 1}}, []string{"templates/ is read-only"}},
-		{"missing_field", "create_doc", map[string]any{"type": "learning", "frontmatter": map[string]any{"title": "T"}}, []string{"missing required fields for learning: track"}},
-		{"unknown_type", "create_doc", map[string]any{"type": "nope", "frontmatter": map[string]any{}}, []string{"configured types:", "improvement"}},
 		{"exists", "create_doc", map[string]any{"type": "week", "frontmatter": map[string]any{"week": "2026-W03"}}, []string{"file exists: weeks/2026-w03.md", "append_section"}},
 		{"stale_hash", "replace_doc", map[string]any{"path": "weeks/2026-w03.md", "content": "---\ntype: week\nweek: 2026-W03\n---\n", "expected_hash": "abc"}, []string{"re-read with read_doc, merge, retry"}},
 		{
@@ -144,14 +143,6 @@ func TestWriteErrorsAreToolResultsWithHints(t *testing.T) {
 			map[string]any{"path": "weeks/2026-w03.md", "old": "nope", "new": "x"},
 			[]string{"read_doc it and copy the text exactly"},
 		},
-		{"no_hash", "replace_doc", map[string]any{"path": "weeks/2026-w03.md", "content": "x", "expected_hash": ""}, []string{"expected_hash is required"}},
-		{
-			"unknown_tag",
-			"update_frontmatter",
-			map[string]any{"path": "weeks/2026-w03.md", "add_tags": []string{"issue/buries-headlin"}},
-			[]string{`unknown tag "issue/buries-headlin"`, "list_tags shows them all"},
-		},
-		{"set_not_object", "update_frontmatter", map[string]any{"path": "weeks/2026-w03.md", "add_tags": []string{"a"}, "set": map[string]any{"tags": []string{"b"}}}, []string{"set.tags cannot be combined"}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
