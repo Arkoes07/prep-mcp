@@ -70,6 +70,32 @@ func TestRenderFilename(t *testing.T) {
 		{name: "kind_traversal", pattern: "{kind}.md", fm: `kind: "../../x"`, want: "x.md"},
 		{name: "kind_list", pattern: "{kind}.md", fm: "kind: [a, b]", wantErr: "kind"},
 		{name: "kind_only_punctuation", pattern: "{kind}.md", fm: `kind: "!!!"`, wantErr: "kind"},
+		{name: "slug_folder", pattern: "{slug}.md", slug: "ddia/ch05-replication", want: "ddia/ch05-replication.md"},
+		{
+			name:    "slug_folders_kebab",
+			pattern: "{slug}.md",
+			slug:    "DDIA/Ch05 Replication",
+			want:    "ddia/ch05-replication.md",
+		},
+		{name: "slug_deep", pattern: "{slug}.md", slug: "a/b c/d", want: "a/b-c/d.md"},
+		{name: "title_slash_flattens", pattern: "{slug}.md", fm: "title: A/B", want: "a-b.md"},
+		{name: "slug_dotdot", pattern: "{slug}.md", slug: "../../x", wantErr: "pass folder/name"},
+		{name: "slug_dotdot_inside", pattern: "{slug}.md", slug: "a/../b", wantErr: "pass folder/name"},
+		{name: "slug_dot", pattern: "{slug}.md", slug: "./a", wantErr: "pass folder/name"},
+		{name: "slug_empty_segment", pattern: "{slug}.md", slug: "a//b", wantErr: "pass folder/name"},
+		{name: "slug_leading_slash", pattern: "{slug}.md", slug: "/a", wantErr: "pass folder/name"},
+		{name: "slug_trailing_slash", pattern: "{slug}.md", slug: "a/", wantErr: "pass folder/name"},
+		{name: "slug_backslash", pattern: "{slug}.md", slug: `a\b`, wantErr: "pass folder/name"},
+		{name: "slug_segment_punctuation", pattern: "{slug}.md", slug: "ddia/!!!", wantErr: "pass folder/name"},
+		{name: "slug_blank_segment", pattern: "{slug}.md", slug: "ddia/ /x", wantErr: "pass folder/name"},
+		{
+			name:    "slug_folder_other_pattern",
+			pattern: "{date}-{kind}-{slug}.md",
+			fm:      "kind: k",
+			slug:    "a/b",
+			wantErr: `builds names from "{date}-{kind}-{slug}.md", so slug cannot contain "/" or "\"; pass a plain name`,
+		},
+		{name: "slug_folder_prefix_pattern", pattern: "x-{slug}.md", slug: "a/b", wantErr: "pass a plain name"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

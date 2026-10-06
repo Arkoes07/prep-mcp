@@ -133,7 +133,8 @@ func createDocDescription(cfg *config.Config) string {
 	b.WriteString("In a pattern, {slug} is the slug argument, else the title field; " +
 		"{date} is the type's date field (date unless the config names another), else today; " +
 		"any other {name} is the frontmatter field of that name. " +
-		"Every value becomes lowercase kebab-case.")
+		"Every value becomes lowercase kebab-case. " +
+		"For a type named {slug}.md, slug may hold folders (folder/name); each part is kebab-cased.")
 	return b.String()
 }
 

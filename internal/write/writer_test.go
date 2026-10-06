@@ -55,8 +55,13 @@ func TestWriterCreate(t *testing.T) {
 			wantPath: "learning/custom.md", wantBytes: head + "title: DDIA ch5\ntrack: ddia\n" + created + "x\n",
 		},
 		{
-			name: "slug_traversal", typ: "learning", fm: `{"title":"T","track":"k"}`, slug: "../../x",
-			wantPath: "learning/x.md", wantBytes: head + "title: T\ntrack: k\n" + created,
+			name: "slug_folder", typ: "learning", fm: `{"title":"T","track":"k"}`, slug: "DDIA/Ch05 Replication",
+			wantPath: "learning/ddia/ch05-replication.md", newFolder: true,
+			wantBytes: head + "title: T\ntrack: k\n" + created,
+		},
+		{
+			name: "title_slash_flattens", typ: "learning", fm: `{"title":"A/B","track":"k"}`,
+			wantPath: "learning/a-b.md", wantBytes: head + "title: A/B\ntrack: k\n" + created,
 		},
 		{
 			name: "key_order", typ: "learning", fm: `{"track":"ddia","title":"T"}`,
@@ -132,6 +137,7 @@ func TestWriterCreate(t *testing.T) {
 
 	fail := []struct {
 		name, typ, fm, body, slug string
+		setup                     func(*env)
 		wantErr                   []string
 		listTypes                 bool   // the error must name every configured type
 		wantExists                string // the error must say this file exists
@@ -144,6 +150,25 @@ func TestWriterCreate(t *testing.T) {
 		{name: "exists", typ: "improvement", fm: `{"status":"open","exit_criteria":"x"}`, slug: "buries-headline", wantExists: "improvements/buries-headline.md"},
 		{name: "week_exists", typ: "week", fm: `{"week":"2026-W03"}`, wantExists: "weeks/2026-w03.md"},
 		{
+			name: "nested_exists", typ: "improvement", fm: `{"status":"open","exit_criteria":"x"}`,
+			slug: "Improvements/Buries Headline", wantExists: "improvements/improvements/buries-headline.md",
+			setup: func(e *env) {
+				testvault.Write(t, e.root, "improvements/improvements/buries-headline.md", "x\n")
+			},
+		},
+		{
+			name: "slug_traversal", typ: "learning", fm: `{"title":"T","track":"k"}`, slug: "../../x",
+			wantErr: []string{"pass folder/name"},
+		},
+		{
+			name: "slug_backslash", typ: "learning", fm: `{"title":"T","track":"k"}`, slug: `..\\x`,
+			wantErr: []string{"pass folder/name"},
+		},
+		{
+			name: "slug_folder_other_pattern", typ: "week", fm: `{"week":"2026-W05"}`, slug: "a/b",
+			wantErr: []string{`"{week}.md"`, "pass a plain name"},
+		},
+		{
 			name: "unknown_tag", typ: "learning", fm: `{"title":"T","track":"k","tags":["issue/buries-headlin"]}`,
 			wantErr: []string{unknownTagErr},
 		},
@@ -151,6 +176,9 @@ func TestWriterCreate(t *testing.T) {
 	for _, tc := range fail {
 		t.Run(tc.name, func(t *testing.T) {
 			e := newEnv(t)
+			if tc.setup != nil {
+				tc.setup(e)
+			}
 			before := snapshot(t, e.root)
 			d := write.Draft{Type: tc.typ, Frontmatter: node(t, tc.fm), Body: tc.body, Slug: tc.slug}
 			res, err := e.w.Apply(ctx, write.CreateOp(d))
@@ -168,6 +196,35 @@ func TestWriterCreate(t *testing.T) {
 				}
 			}
 			sameSnapshot(t, before, snapshot(t, e.root))
+		})
+	}
+}
+
+// TestWriterCreateHostileSlug proves a slug with folders cannot leave the
+// type folder: each slug either fails or lands under learning/.
+func TestWriterCreateHostileSlug(t *testing.T) {
+	slugs := []string{
+		"../../etc/passwd",
+		"a/../../b",
+		"/etc/x",
+		`..\..\x`,
+		"a/%2e%2e/b",
+		"a/…/b",
+		"C:/x",
+		"a/.git/config",
+		"~/x",
+	}
+	for _, slug := range slugs {
+		t.Run(slug, func(t *testing.T) {
+			e := newEnv(t)
+			d := write.Draft{Type: "learning", Frontmatter: node(t, `{"title":"T","track":"k"}`), Slug: slug}
+			res, err := e.w.Apply(ctx, write.CreateOp(d))
+			if err != nil {
+				return
+			}
+			if !strings.HasPrefix(res.Path, "learning/") || strings.Contains(res.Path, "..") {
+				t.Errorf("slug %q wrote %q, want a path under learning/", slug, res.Path)
+			}
 		})
 	}
 }

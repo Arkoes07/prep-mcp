@@ -33,6 +33,7 @@ func TestCreateDocDescriptionComesFromConfig(t *testing.T) {
 		"- week: weeks/{week}.md; required: week",
 		"- learning: learning/{slug}.md; required: title, track",
 		"lowercase kebab-case",
+		"slug may hold folders (folder/name)",
 	} {
 		if !strings.Contains(desc, want) {
 			t.Errorf("create_doc description lacks %q:\n%s", want, desc)

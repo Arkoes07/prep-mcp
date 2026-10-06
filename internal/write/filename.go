@@ -39,10 +39,15 @@ var placeholderRE = regexp.MustCompile(`\{([^{}]+)\}`)
 // RenderFilename fills the filename pattern of type spec. {slug} comes from
 // the slug argument, else the title field; {date} from the type's date field,
 // else today; any other placeholder from the field of that name. Every value
-// is slugified, so the result can never contain a path separator and is
-// always lowercase. On a case-sensitive file system an existing uppercase file
-// of the same name is not detected.
+// is slugified and always lowercase. Only a pattern of exactly "{slug}.md"
+// lets a slug argument hold folders ("folder/name"); each part is slugified
+// alone, so the result stays below the type folder. Every other value can
+// never contain a path separator. On a case-sensitive file system an existing
+// uppercase file of the same name is not detected.
 func RenderFilename(spec config.TypeSpec, fm *yaml.Node, slug string, today time.Time) (string, error) {
+	if strings.ContainsAny(slug, `/\`) {
+		return folderFilename(spec.Filename, slug)
+	}
 	date := today.Format(time.DateOnly)
 	if d := Slugify(vault.FieldText(fm, spec.DateField)); d != "" {
 		date = d
@@ -101,6 +106,26 @@ func placeholderValue(name string, fm *yaml.Node, slug, date string) (string, er
 			name, n.Value)
 	}
 	return s, nil
+}
+
+// folderFilename builds "folder/name.md" from a slug that holds folders,
+// slugifying each "/"-separated part. A part that slugifies to nothing ("",
+// ".", "..") fails, and so does "\\", which would otherwise slugify to "-".
+func folderFilename(pattern, slug string) (string, error) {
+	if pattern != "{slug}.md" {
+		return "", fmt.Errorf("this type builds names from %q, so slug cannot contain \"/\" or \"\\\"; "+
+			"pass a plain name", pattern)
+	}
+	parts := strings.Split(slug, "/")
+	for i, part := range parts {
+		s := Slugify(part)
+		if s == "" || strings.Contains(part, `\`) {
+			return "", fmt.Errorf("slug %q has a part %q with no letters or digits, or with \"\\\"; "+
+				"pass folder/name with letters and digits in each part", slug, part)
+		}
+		parts[i] = s
+	}
+	return strings.Join(parts, "/") + ".md", nil
 }
 
 // isMissing is the "required field" test: absent, null, "", [] and {} all count as missing.
