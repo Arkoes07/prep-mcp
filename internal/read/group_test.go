@@ -40,19 +40,12 @@ func TestGroup(t *testing.T) {
 	_, r := copyOpen(t)
 	for _, tc := range f.Cases {
 		t.Run(tc.Name, func(t *testing.T) {
-			flt := read.Filter{Type: tc.Type, Tags: tc.Tags, Where: tc.Where}
-			for _, bound := range []struct {
-				text string
-				dst  **time.Time
-			}{{tc.Since, &flt.Since}, {tc.Until, &flt.Until}} {
-				if bound.text == "" {
-					continue
-				}
-				d, err := read.ParseDate(bound.text)
-				if err != nil {
-					t.Fatal(err)
-				}
-				*bound.dst = &d
+			flt := read.Filter{
+				Type:  tc.Type,
+				Tags:  tc.Tags,
+				Where: tc.Where,
+				Since: parseDay(t, tc.Since),
+				Until: parseDay(t, tc.Until),
 			}
 			got, problems, err := r.Group(flt, tc.GroupBy)
 			if err != nil {
@@ -68,6 +61,19 @@ func TestGroup(t *testing.T) {
 			}
 		})
 	}
+}
+
+// parseDay parses a YYYY-MM-DD test date; "" is no date.
+func parseDay(t *testing.T, s string) *time.Time {
+	t.Helper()
+	if s == "" {
+		return nil
+	}
+	d, err := read.ParseDate(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &d
 }
 
 func TestGroupReportsProblems(t *testing.T) {

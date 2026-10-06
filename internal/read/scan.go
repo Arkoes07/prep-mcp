@@ -58,7 +58,7 @@ func (r *Reader) Scan() ([]*Doc, []Problem, error) {
 	})
 	problems = append(problems, walkProblems...)
 	if err != nil {
-		return nil, nil, fmt.Errorf("scan vault: %w", err)
+		return nil, nil, fmt.Errorf("scan vault: %w; check that the vault folder exists and is readable", err)
 	}
 	slices.SortFunc(docs, func(a, b *Doc) int { return strings.Compare(a.Path, b.Path) })
 	slices.SortFunc(problems, func(a, b Problem) int { return strings.Compare(a.Path, b.Path) })

@@ -176,7 +176,7 @@ func (h *handlers) listDocs(
 		return nil, nil, err
 	}
 	if len(in.GroupBy) > 0 {
-		return h.groupDocs(f, in.GroupBy, in.Type)
+		return h.groupDocs(f, in.GroupBy)
 	}
 	docs, problems, err := h.r.List(f)
 	if err != nil {
@@ -213,7 +213,7 @@ func (h *handlers) typeNote(typ string, empty bool) string {
 
 // groupDocs is list_docs with group_by: counts per combination of values
 // instead of documents.
-func (h *handlers) groupDocs(f read.Filter, fields []string, typ string) (*mcp.CallToolResult, any, error) {
+func (h *handlers) groupDocs(f read.Filter, fields []string) (*mcp.CallToolResult, any, error) {
 	groups, problems, err := h.r.Group(f, fields)
 	if err != nil {
 		return nil, nil, err
@@ -223,7 +223,7 @@ func (h *handlers) groupDocs(f read.Filter, fields []string, typ string) (*mcp.C
 		Groups   []read.Group   `json:"groups"`
 		Note     string         `json:"note,omitempty"`
 		Problems []read.Problem `json:"problems,omitempty"`
-	}{GroupBy: fields, Groups: groups, Note: h.typeNote(typ, len(groups) == 0), Problems: problems})
+	}{GroupBy: fields, Groups: groups, Note: h.typeNote(f.Type, len(groups) == 0), Problems: problems})
 }
 
 func (in listDocsIn) filter() (read.Filter, error) {
