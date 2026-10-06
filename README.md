@@ -194,7 +194,7 @@ ae0dfba | Claude | batch: 2 append_section, 1 update_frontmatter
 | Tool | What it does |
 |---|---|
 | `get_context` | Working rules, current week, open items, recent activity |
-| `list_docs` | Metadata query: type, tags, any_tags, where, since, until; `fields` picks what is shown |
+| `list_docs` | Metadata query: type, tags, any_tags, where, since, until; `fields` picks what is shown; `group_by` returns counts instead |
 | `read_doc` | Full file plus content hash, by path or by `[[name]]` |
 | `search_text` | Substring search with matching lines |
 | `list_tags` | Tags with counts and last use |

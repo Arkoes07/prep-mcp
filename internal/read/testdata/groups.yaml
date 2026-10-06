@@ -1,0 +1,105 @@
+# Data-driven cases for TestGroup, run against a temp copy of examples/vault.
+# The example has 8 typed documents; see queries.yaml for them.
+#
+# Fields
+#   filter:   type, tags, where, since, until (YYYY-MM-DD)
+#   group_by: the fields to group by
+#   want:     rows in order: the values (in group_by order) and the count
+
+cases:
+  - name: one_field
+    group_by: [type]
+    want:
+      - {values: [improvement], count: 2}
+      - {values: [session], count: 2}
+      - {values: [application], count: 1}
+      - {values: [reference], count: 1}
+      - {values: [story], count: 1}
+      - {values: [week], count: 1}
+
+  - name: missing_value_is_none
+    group_by: [status]
+    want:
+      - {values: ["(none)"], count: 5}
+      - {values: [active], count: 1}
+      - {values: [improving], count: 1}
+      - {values: [open], count: 1}
+
+  - name: two_fields
+    group_by: [type, kind]
+    want:
+      - {values: [improvement, "(none)"], count: 2}
+      - {values: [session, deep-dive], count: 2}
+      - {values: [application, "(none)"], count: 1}
+      - {values: [reference, "(none)"], count: 1}
+      - {values: [story, "(none)"], count: 1}
+      - {values: [week, "(none)"], count: 1}
+
+  - name: nested_value_is_none
+    type: session
+    group_by: [metrics]
+    want:
+      - {values: ["(none)"], count: 2}
+
+  - name: filter_first
+    type: improvement
+    group_by: [status]
+    want:
+      - {values: [improving], count: 1}
+      - {values: [open], count: 1}
+
+  - name: tags_filter_first
+    tags: [issue/missing-tradeoff]
+    group_by: [type]
+    want:
+      - {values: [session], count: 2}
+
+  - name: where_filter_first
+    where: {status: [open, improving]}
+    group_by: [type]
+    want:
+      - {values: [improvement], count: 2}
+
+  - name: until_before_grouping
+    type: session
+    until: 2026-01-12
+    group_by: [date]
+    want:
+      - {values: [2026-01-12], count: 1}
+
+  - name: tags_once_per_value
+    type: session
+    group_by: [tags]
+    want:
+      - {values: [issue/missing-tradeoff], count: 2}
+      - {values: [q/hardest-project], count: 2}
+      - {values: [issue/buries-headline], count: 1}
+
+  - name: since_before_grouping
+    type: session
+    since: 2026-01-13
+    group_by: [tags]
+    want:
+      - {values: [issue/missing-tradeoff], count: 1}
+      - {values: [q/hardest-project], count: 1}
+
+  - name: empty_list_is_none
+    type: improvement
+    group_by: [tags]
+    want:
+      - {values: ["(none)"], count: 2}
+
+  - name: list_field_once_per_value
+    type: week
+    group_by: [focus]
+    want:
+      - {values: [Headline first], count: 1}
+      - {values: [State the cost], count: 1}
+
+  - name: list_field_with_another
+    type: session
+    group_by: [kind, tags]
+    want:
+      - {values: [deep-dive, issue/missing-tradeoff], count: 2}
+      - {values: [deep-dive, q/hardest-project], count: 2}
+      - {values: [deep-dive, issue/buries-headline], count: 1}

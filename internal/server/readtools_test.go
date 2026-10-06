@@ -25,6 +25,14 @@ func TestEachReadToolAnswers(t *testing.T) {
 		{"get_context", nil, []string{"==== Current week: "}},
 		{"list_docs", map[string]any{"tags": []string{"issue/buries-headline"}}, []string{`"count":1`, `2026-01-12`}},
 		{"list_docs", map[string]any{"where": map[string]any{"status": []string{"open", "improving"}}}, []string{`"count":2`}},
+		{"list_docs", map[string]any{"type": "improvement", "group_by": []string{"status"}}, []string{
+			`"group_by":["status"]`,
+			`"groups":[{"values":["improving"],"count":1},{"values":["open"],"count":1}]`,
+		}},
+		{"list_docs", map[string]any{"type": "nope", "group_by": []string{"status"}}, []string{
+			`"groups":[]`,
+			`type \"nope\" is not configured`,
+		}},
 		{"read_doc", map[string]any{"path": "weeks/2026-w03.md"}, []string{"path: weeks/2026-w03.md", "hash: ", "## Log"}},
 		{"read_doc", map[string]any{"path": "[[2026-W03]]"}, []string{"path: weeks/2026-w03.md", "## Log"}},
 		{"search_text", map[string]any{"query": "trade-off"}, []string{`"count":5`}},

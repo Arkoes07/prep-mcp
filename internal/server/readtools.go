@@ -88,7 +88,11 @@ func listDocsDescription(cfg *config.Config) string {
 		"date and since/until use each type's date field (date unless the config names another), " +
 		"else the file modification time, which date_source then says. " +
 		"since/until: inclusive YYYY-MM-DD. " +
-		"sort: date_desc (default), date_asc or title. limit: default 50, at most 500."
+		"sort: date_desc (default), date_asc or title. limit: default 50, at most 500. " +
+		"group_by: field names; instead of documents, returns one row per distinct combination of their values " +
+		"with its count, most first, after the filters (sort and limit do not apply). " +
+		"A missing or empty value counts as (none); a list field such as tags counts a document " +
+		"once under each of its values, so counts can add up to more than the documents."
 }
 
 func listOrNone(fields []string) string {
@@ -146,6 +150,7 @@ type listDocsIn struct {
 	Sort    string         `json:"sort,omitempty" jsonschema:"date_desc (default), date_asc or title."`
 	Limit   int            `json:"limit,omitempty" jsonschema:"Maximum results. Default 50, at most 500."`
 	Fields  []string       `json:"fields,omitempty" jsonschema:"Field names to show under fields for every document, instead of each type's configured ones. [] shows none."`
+	GroupBy []string       `json:"group_by,omitempty" jsonschema:"Field names to count documents by, instead of listing them, for example [\"type\", \"status\"]."`
 }
 
 type docMeta struct {
@@ -168,6 +173,9 @@ func (h *handlers) listDocs(
 	if err != nil {
 		return nil, nil, err
 	}
+	if len(in.GroupBy) > 0 {
+		return h.groupDocs(f, in.GroupBy, in.Type)
+	}
 	docs, problems, err := h.r.List(f)
 	if err != nil {
 		return nil, nil, err
@@ -186,12 +194,34 @@ func (h *handlers) listDocs(
 		}
 		out.Docs = append(out.Docs, metaOf(d, fields))
 	}
-	if in.Type != "" {
-		if _, ok := h.cfg.Types[in.Type]; !ok && len(docs) == 0 {
-			out.Note = fmt.Sprintf("type %q is not configured; configured types: %s", in.Type, h.cfg.TypeList())
-		}
-	}
+	out.Note = h.typeNote(in.Type, len(docs) == 0)
 	return jsonResult(out)
+}
+
+// typeNote explains an empty result for a type that is not configured, and is
+// empty otherwise.
+func (h *handlers) typeNote(typ string, empty bool) string {
+	_, known := h.cfg.Types[typ]
+	unknownAndEmpty := typ != "" && !known && empty
+	if !unknownAndEmpty {
+		return ""
+	}
+	return fmt.Sprintf("type %q is not configured; configured types: %s", typ, h.cfg.TypeList())
+}
+
+// groupDocs is list_docs with group_by: counts per combination of values
+// instead of documents.
+func (h *handlers) groupDocs(f read.Filter, fields []string, typ string) (*mcp.CallToolResult, any, error) {
+	groups, problems, err := h.r.Group(f, fields)
+	if err != nil {
+		return nil, nil, err
+	}
+	return jsonResult(struct {
+		GroupBy  []string       `json:"group_by"`
+		Groups   []read.Group   `json:"groups"`
+		Note     string         `json:"note,omitempty"`
+		Problems []read.Problem `json:"problems,omitempty"`
+	}{GroupBy: fields, Groups: groups, Note: h.typeNote(typ, len(groups) == 0), Problems: problems})
 }
 
 func (in listDocsIn) filter() (read.Filter, error) {
