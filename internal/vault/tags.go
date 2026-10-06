@@ -11,44 +11,35 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// NormalizeTags reads the value of a tags: key. It accepts a YAML list, a
-// comma-separated string (optionally in brackets), or a single scalar, and
-// returns lowercase, trimmed, de-duplicated tags in first-seen order. Nested
-// lists and maps are ignored.
-func NormalizeTags(n *yaml.Node) []string {
+// normalizeTags reads the value node of a tags: key, with aliases already
+// followed. It accepts a YAML list, a comma-separated string (optionally in
+// brackets), or a single scalar, and returns lowercase, trimmed,
+// de-duplicated tags in first-seen order. Nested lists and maps are ignored.
+func normalizeTags(n *yaml.Node) []string {
 	if n == nil {
-		return nil
+		return []string{}
 	}
-	if n.Kind == yaml.AliasNode && n.Alias != nil {
-		n = n.Alias
-	}
-	var raw []string
 	switch n.Kind {
+	case yaml.SequenceNode:
+		return NormalizeTagList(scalarTexts(n.Content))
 	case yaml.ScalarNode:
-		if n.Tag == "!!null" {
-			return nil
-		}
-		s := strings.TrimSpace(n.Value)
+		s := scalarText(n)
 		if strings.HasPrefix(s, "[") && strings.HasSuffix(s, "]") {
 			s = s[1 : len(s)-1]
 		}
-		for part := range strings.SplitSeq(s, ",") {
-			raw = append(raw, strings.Trim(strings.TrimSpace(part), `"'`))
+		parts := strings.Split(s, ",")
+		for i, part := range parts {
+			parts[i] = strings.Trim(strings.TrimSpace(part), `"'`)
 		}
-	case yaml.SequenceNode:
-		for _, c := range n.Content {
-			if c.Kind == yaml.ScalarNode && c.Tag != "!!null" {
-				raw = append(raw, c.Value)
-			}
-		}
+		return NormalizeTagList(parts)
 	}
-	return NormalizeTagList(raw)
+	return []string{}
 }
 
 // NormalizeTagList lowercases and trims tags, drops empty ones and removes
 // duplicates, keeping the first.
 func NormalizeTagList(in []string) []string {
-	var out []string
+	out := make([]string, 0, len(in))
 	for _, t := range in {
 		t = strings.ToLower(strings.TrimSpace(t))
 		if t != "" && !slices.Contains(out, t) {

@@ -15,6 +15,8 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/Arkoes07/prep-mcp/internal/vault"
 )
 
 const (
@@ -65,40 +67,24 @@ type Query struct {
 }
 
 // Conditions maps a frontmatter field to the values it may equal. In YAML
-// each value is one scalar or a list of them.
+// each value is one scalar or a list of them, read as a field's values are
+// (vault.Values), so tags compare normalised.
 type Conditions map[string][]string
 
 var _ yaml.Unmarshaler = (*Conditions)(nil)
 
 func (c *Conditions) UnmarshalYAML(n *yaml.Node) error {
-	var raw map[string]scalarOrList
+	// Decoding into a map first rejects a non-mapping and duplicate keys.
+	var raw map[string]yaml.Node
 	if err := n.Decode(&raw); err != nil {
 		return err
 	}
 	*c = make(Conditions, len(raw))
 	for k, v := range raw {
-		(*c)[k] = v
-	}
-	return nil
-}
-
-type scalarOrList []string
-
-var _ yaml.Unmarshaler = (*scalarOrList)(nil)
-
-func (s *scalarOrList) UnmarshalYAML(n *yaml.Node) error {
-	switch n.Kind {
-	case yaml.ScalarNode:
-		*s = []string{n.Value}
-	case yaml.SequenceNode:
-		for _, c := range n.Content {
-			if c.Kind != yaml.ScalarNode {
-				return fmt.Errorf("line %d: a where value must be a scalar or a list of scalars", c.Line)
-			}
-			*s = append(*s, c.Value)
+		if !vault.IsScalarOrList(&v) {
+			return fmt.Errorf("line %d: a where value must be a scalar or a list of scalars", v.Line)
 		}
-	default:
-		return fmt.Errorf("line %d: a where value must be a scalar or a list of scalars", n.Line)
+		(*c)[k] = vault.Values(n, k)
 	}
 	return nil
 }

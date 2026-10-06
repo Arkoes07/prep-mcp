@@ -49,7 +49,7 @@ func RenderFilename(spec config.TypeSpec, fm *yaml.Node, slug string, today time
 		return folderFilename(spec.Filename, slug)
 	}
 	date := today.Format(time.DateOnly)
-	if d := Slugify(vault.FieldText(fm, spec.DateField)); d != "" {
+	if d := Slugify(vault.Text(fm, spec.DateField)); d != "" {
 		date = d
 	}
 	var firstErr error
@@ -84,7 +84,7 @@ func placeholderValue(name string, fm *yaml.Node, slug, date string) (string, er
 			return "", fmt.Errorf("slug %q has no letters or digits to build a filename from; pass a different slug",
 				slug)
 		}
-		if title := vault.FieldText(fm, "title"); title != "" {
+		if title := vault.Text(fm, "title"); title != "" {
 			if s := Slugify(title); s != "" {
 				return s, nil
 			}
@@ -93,17 +93,17 @@ func placeholderValue(name string, fm *yaml.Node, slug, date string) (string, er
 	case "date":
 		return date, nil
 	}
-	n := vault.Field(fm, name)
+	vals := vault.Values(fm, name)
 	switch {
-	case isMissing(n):
+	case !vault.HasValue(fm, name):
 		return "", fmt.Errorf("%s is required to build the filename; set %s in the frontmatter", name, name)
-	case n.Kind != yaml.ScalarNode:
+	case len(vals) != 1:
 		return "", fmt.Errorf("%s must be a single value to build the filename, not a list or mapping", name)
 	}
-	s := Slugify(n.Value)
+	s := Slugify(vals[0])
 	if s == "" {
 		return "", fmt.Errorf("%s (%q) has no letters or digits to build a filename from; use a different value",
-			name, n.Value)
+			name, vals[0])
 	}
 	return s, nil
 }
@@ -126,21 +126,4 @@ func folderFilename(pattern, slug string) (string, error) {
 		parts[i] = s
 	}
 	return strings.Join(parts, "/") + ".md", nil
-}
-
-// isMissing is the "required field" test: absent, null, "", [] and {} all count as missing.
-func isMissing(n *yaml.Node) bool {
-	if n == nil {
-		return true
-	}
-	if n.Kind == yaml.AliasNode && n.Alias != nil {
-		n = n.Alias
-	}
-	switch n.Kind {
-	case yaml.ScalarNode:
-		return n.Tag == "!!null" || strings.TrimSpace(n.Value) == ""
-	case yaml.SequenceNode, yaml.MappingNode:
-		return len(n.Content) == 0
-	}
-	return false
 }

@@ -172,6 +172,12 @@ func TestReadErrorsAreToolResultsWithHints(t *testing.T) {
 		{"bad_since", "list_docs", map[string]any{"since": "13-01-2026"}, "since: use YYYY-MM-DD"},
 		{"bad_date", "get_context", map[string]any{"date": "yesterday"}, "date: use YYYY-MM-DD"},
 		{"bad_sort", "list_docs", map[string]any{"sort": "newest"}, "date_desc"},
+		{
+			"where_nested",
+			"list_docs",
+			map[string]any{"where": map[string]any{"status": map[string]any{"a": "b"}}},
+			"where.status: use a string, number, boolean or a list of them",
+		},
 		{"empty_query", "search_text", map[string]any{"query": ""}, "pass the text to search for"},
 	}
 	for _, tc := range tests {
@@ -263,10 +269,52 @@ func TestListDocsDescriptionNamesShownFields(t *testing.T) {
 	}
 }
 
+// where reads its values from the arguments as sent, the way a field is read:
+// a number keeps its text, so 1.0 is not 1, and tags compare normalised.
+func TestListDocsWhereReadsArgumentsAsWritten(t *testing.T) {
+	root := testvault.Copy(t)
+	testvault.Write(t, root, "probe/float.md", "---\ntype: probe\nscore: 1.0\ntags: [a]\n---\n")
+	testvault.Write(t, root, "probe/int.md", "---\ntype: probe\nscore: 1\n---\n")
+	cs := connectAt(t, root)
+	tests := []struct {
+		where string
+		want  []string
+	}{
+		{where: `{"score": 1.0}`, want: []string{"probe/float.md"}},
+		{where: `{"score": 1}`, want: []string{"probe/int.md"}},
+		{where: `{"tags": " A "}`, want: []string{"probe/float.md"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.where, func(t *testing.T) {
+			out, isErr := call(t, cs, "list_docs", json.RawMessage(`{"type": "probe", "where": `+tc.where+`}`))
+			if isErr {
+				t.Fatal(out)
+			}
+			var got struct {
+				Docs []struct {
+					Path string `json:"path"`
+				} `json:"docs"`
+			}
+			if err := json.Unmarshal([]byte(out), &got); err != nil {
+				t.Fatalf("result is not JSON: %v\n%s", err, out)
+			}
+			paths := make([]string, 0, len(got.Docs))
+			for _, d := range got.Docs {
+				paths = append(paths, d.Path)
+			}
+			if !slices.Equal(paths, tc.want) {
+				t.Errorf("where %s matched %v, want %v", tc.where, paths, tc.want)
+			}
+		})
+	}
+}
+
 // fields comes from each document's type (its show list, else
 // summary_fields); the fields argument replaces it for every document.
 func TestListDocsFields(t *testing.T) {
-	cs := connect(t)
+	root := testvault.Copy(t)
+	testvault.Write(t, root, "probe/alias.md", "---\ntype: probe\nbase: &s draft\nstatus: *s\n---\n")
+	cs := connectAt(t, root)
 	tests := []struct {
 		name     string
 		args     map[string]any
@@ -297,6 +345,12 @@ func TestListDocsFields(t *testing.T) {
 			},
 			wantKeys: []string{"exit_criteria"},
 			wantVals: map[string]string{"exit_criteria": "Cost stated in 5 project answers in a row"},
+		},
+		{
+			name:     "alias_read_through",
+			args:     map[string]any{"type": "probe"},
+			wantKeys: []string{"status"},
+			wantVals: map[string]string{"status": "draft"},
 		},
 		{
 			name:     "empty_argument_shows_none",

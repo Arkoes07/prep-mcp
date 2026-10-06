@@ -12,6 +12,7 @@ import (
 
 	"github.com/Arkoes07/prep-mcp/internal/read"
 	"github.com/Arkoes07/prep-mcp/internal/testvault"
+	"github.com/Arkoes07/prep-mcp/internal/vault"
 )
 
 type scanDoc struct {
@@ -87,9 +88,8 @@ func TestScan(t *testing.T) {
 				t.Errorf("%s: Date = %s (from mtime %v), want %s from the date field", w.Path, d.Date.Format(time.DateOnly), d.DateFromMtime, w.Date)
 			}
 			for k, wantVal := range w.Fields {
-				n := d.Fields[k]
-				if n == nil || n.Value != wantVal {
-					t.Errorf("%s: Fields[%q] = %v, want %q", w.Path, k, n, wantVal)
+				if got := vault.Text(d.Frontmatter, k); got != wantVal {
+					t.Errorf("%s: field %s = %q, want %q", w.Path, k, got, wantVal)
 				}
 			}
 			if w.BodyLine != 0 {

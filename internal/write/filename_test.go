@@ -69,6 +69,7 @@ func TestRenderFilename(t *testing.T) {
 		{name: "kind_missing", pattern: "{kind}.md", fm: "a: 1", wantErr: "kind"},
 		{name: "kind_traversal", pattern: "{kind}.md", fm: `kind: "../../x"`, want: "x.md"},
 		{name: "kind_list", pattern: "{kind}.md", fm: "kind: [a, b]", wantErr: "kind"},
+		{name: "kind_alias", pattern: "{kind}.md", fm: "base: &k Deep Dive\nkind: *k", want: "deep-dive.md"},
 		{name: "kind_only_punctuation", pattern: "{kind}.md", fm: `kind: "!!!"`, wantErr: "kind"},
 		{name: "slug_folder", pattern: "{slug}.md", slug: "ddia/ch05-replication", want: "ddia/ch05-replication.md"},
 		{

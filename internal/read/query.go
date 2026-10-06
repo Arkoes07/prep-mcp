@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/Arkoes07/prep-mcp/internal/vault"
 )
 
 const (
@@ -88,7 +90,8 @@ func matches(d *Doc, f Filter) bool {
 		return false
 	}
 	for key, want := range f.Where {
-		if !slices.ContainsFunc(d.Texts(key), func(t string) bool { return slices.Contains(want, t) }) {
+		vals := vault.Values(d.Frontmatter, key)
+		if !slices.ContainsFunc(vals, func(v string) bool { return slices.Contains(want, v) }) {
 			return false
 		}
 	}

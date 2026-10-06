@@ -70,8 +70,8 @@ func stateOf(src []byte) docState {
 	}
 	return docState{
 		fm:   fm.Map,
-		typ:  vault.FieldText(fm.Map, "type"),
-		tags: vault.NormalizeTags(vault.Field(fm.Map, "tags")),
+		typ:  vault.Text(fm.Map, "type"),
+		tags: vault.Values(fm.Map, "tags"),
 	}
 }
 
@@ -201,7 +201,7 @@ func (w *Writer) checkTags(v *verdict, was, now docState) {
 func missingFields(required []string, m *yaml.Node) []string {
 	var out []string
 	for _, r := range required {
-		if isMissing(vault.Field(m, r)) {
+		if !vault.HasValue(m, r) {
 			out = append(out, r)
 		}
 	}

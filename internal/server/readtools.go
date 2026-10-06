@@ -2,8 +2,8 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -11,6 +11,8 @@ import (
 
 	"github.com/Arkoes07/prep-mcp/internal/config"
 	"github.com/Arkoes07/prep-mcp/internal/read"
+	"github.com/Arkoes07/prep-mcp/internal/vault"
+	"github.com/Arkoes07/prep-mcp/internal/write"
 )
 
 func registerReadTools(s *mcp.Server, h *handlers) {
@@ -85,8 +87,10 @@ func listDocsDescription(cfg *config.Config) string {
 		"All filters combine with AND. tags: every tag must match; any_tags: at least one; " +
 		"a trailing / matches a prefix (issue/ matches every issue tag). " +
 		"where: frontmatter equality such as {\"status\": [\"open\", \"improving\"]}; a list means any of, " +
-		"and a list field matches if any item does. Values compare trimmed; " +
-		"\"\" matches an empty or null value but not a missing key. " +
+		"and a list field matches if any item does. Values compare as text, trimmed: " +
+		"a number matches as written (1.0 does not match 1), and tags compare normalised " +
+		"(lowercase; a comma-separated string is a list). " +
+		"\"\" or null matches an empty or null value but not a missing key. " +
 		"date and since/until use each type's date field (date unless the config names another), " +
 		"else the file modification time, which date_source then says. " +
 		"since/until: inclusive YYYY-MM-DD. " +
@@ -141,7 +145,8 @@ func (h *handlers) getContext(
 }
 
 // The jsonschema tags are the argument descriptions the model reads, and a
-// struct tag cannot be split, so these lines stay long.
+// struct tag cannot be split, so these lines stay long. Where only gives the
+// schema: filter reads where from the raw arguments.
 type listDocsIn struct {
 	Type    string         `json:"type,omitempty" jsonschema:"Only documents of this type."`
 	Tags    []string       `json:"tags,omitempty" jsonschema:"All of these tags must match. A trailing / is a prefix match."`
@@ -168,10 +173,10 @@ type docMeta struct {
 
 func (h *handlers) listDocs(
 	_ context.Context,
-	_ *mcp.CallToolRequest,
+	req *mcp.CallToolRequest,
 	in listDocsIn,
 ) (*mcp.CallToolResult, any, error) {
-	f, err := in.filter()
+	f, err := in.filter(req.Params.Arguments)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -226,7 +231,9 @@ func (h *handlers) groupDocs(f read.Filter, fields []string) (*mcp.CallToolResul
 	}{GroupBy: fields, Groups: groups, Note: h.typeNote(f.Type, len(groups) == 0), Problems: problems})
 }
 
-func (in listDocsIn) filter() (read.Filter, error) {
+// filter builds the Filter, taking where from args, the call's raw JSON:
+// in.Where has been through float64, which turns 1.0 into 1.
+func (in listDocsIn) filter(args json.RawMessage) (read.Filter, error) {
 	f := read.Filter{Type: in.Type, Tags: in.Tags, AnyTags: in.AnyTags, Sort: in.Sort, Limit: in.Limit}
 	var err error
 	if f.Since, err = parseDay("since", in.Since); err != nil {
@@ -235,15 +242,34 @@ func (in listDocsIn) filter() (read.Filter, error) {
 	if f.Until, err = parseDay("until", in.Until); err != nil {
 		return read.Filter{}, err
 	}
-	if len(in.Where) > 0 {
-		f.Where = make(map[string][]string, len(in.Where))
-		for k, val := range in.Where {
-			if f.Where[k], err = whereValues(k, val); err != nil {
-				return read.Filter{}, err
-			}
-		}
+	if f.Where, err = whereOf(args); err != nil {
+		return read.Filter{}, err
 	}
 	return f, nil
+}
+
+// whereOf reads the where argument as frontmatter, so its values are read the
+// way the documents' fields are. It is empty when the call has no where.
+func whereOf(args json.RawMessage) (map[string][]string, error) {
+	raw, err := rawArg(args, "where")
+	if err != nil {
+		return nil, err
+	}
+	where := map[string][]string{}
+	if raw == nil {
+		return where, nil
+	}
+	m, err := write.JSONToNode(raw)
+	if err != nil {
+		return nil, fmt.Errorf("where: %w", err)
+	}
+	for k, val := range vault.Pairs(m) {
+		if !vault.IsScalarOrList(val) {
+			return nil, fmt.Errorf("where.%s: use a string, number, boolean or a list of them", k.Value)
+		}
+		where[k.Value] = vault.Values(m, k.Value)
+	}
+	return where, nil
 }
 
 // metaOf is the list_docs entry for d: its date with where it came from, and
@@ -256,45 +282,15 @@ func metaOf(d *read.Doc, fields []string) docMeta {
 		Tags:       append([]string{}, d.Tags...),
 		Date:       d.Date.Format(time.DateOnly),
 		DateSource: d.DateSource(),
-		Updated:    d.Text("updated"),
+		Updated:    vault.Text(d.Frontmatter, "updated"),
 		Fields:     map[string]string{},
 	}
 	for _, k := range fields {
-		if v := d.Text(k); v != "" {
+		if v := vault.Text(d.Frontmatter, k); v != "" {
 			m.Fields[k] = v
 		}
 	}
 	return m
-}
-
-// whereValues turns a JSON scalar or list of scalars into the texts to compare.
-func whereValues(key string, val any) ([]string, error) {
-	one := func(x any) (string, bool) {
-		switch t := x.(type) {
-		case string:
-			return t, true
-		case bool:
-			return strconv.FormatBool(t), true
-		case float64:
-			return strconv.FormatFloat(t, 'f', -1, 64), true
-		}
-		return "", false
-	}
-	if s, ok := one(val); ok {
-		return []string{s}, nil
-	}
-	if list, ok := val.([]any); ok {
-		out := make([]string, 0, len(list))
-		for _, x := range list {
-			s, ok := one(x)
-			if !ok {
-				return nil, fmt.Errorf("where.%s: list items must be strings, numbers or booleans", key)
-			}
-			out = append(out, s)
-		}
-		return out, nil
-	}
-	return nil, fmt.Errorf("where.%s: use a string, number, boolean or a list of them", key)
 }
 
 type readDocIn struct {

@@ -418,11 +418,12 @@ context:
   open_items:
     - {type: note, where: {status: open}}
     - {type: note, where: {status: [a, b]}}
+    - {type: note, where: {tags: "Meta/Plan, x"}}
 `,
 			check: func(t *testing.T, c *config.Config) {
 				items := c.Context.OpenItems
-				if len(items) != 2 {
-					t.Fatalf("OpenItems = %d, want 2", len(items))
+				if len(items) != 3 {
+					t.Fatalf("OpenItems = %d, want 3", len(items))
 				}
 				if got := items[0].Where["status"]; !slices.Equal(got, []string{"open"}) {
 					t.Errorf("scalar where = %v, want [open]", got)
@@ -430,7 +431,21 @@ context:
 				if got := items[1].Where["status"]; !slices.Equal(got, []string{"a", "b"}) {
 					t.Errorf("list where = %v, want [a b]", got)
 				}
+				if got := items[2].Where["tags"]; !slices.Equal(got, []string{"meta/plan", "x"}) {
+					t.Errorf("tags where = %v, want them normalised: [meta/plan x]", got)
+				}
 			},
+		},
+		{
+			name: "where_nested_value",
+			yaml: `
+types:
+  note: {folder: notes, filename: "{slug}.md"}
+context:
+  open_items:
+    - {type: note, where: {status: {a: b}}}
+`,
+			wantErr: []string{"a where value must be a scalar or a list of scalars"},
 		},
 		{
 			name: "query_tags",

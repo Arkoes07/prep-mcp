@@ -363,6 +363,18 @@ func TestDocumentRules(t *testing.T) {
 	}
 }
 
+// Tags that normalise to none have no value, so a type that requires tags
+// misses them.
+func TestRequiredTagsWithoutATag(t *testing.T) {
+	e := newEnv(t)
+	spec := e.cfg.Types["week"]
+	spec.Required = append(spec.Required, "tags")
+	e.cfg.Types["week"] = spec
+
+	_, err := e.w.Apply(ctx, write.EditOp(week, "tags: [meta/plan]", `tags: " , "`))
+	mustContain(t, err, "missing required fields for week: tags; keep them in the frontmatter")
+}
+
 // runOne runs op through Apply, or through Batch as a batch of one, and
 // returns the op's warnings.
 func runOne(t *testing.T, e *env, op write.Op, batched bool) ([]string, error) {

@@ -118,15 +118,15 @@ func newFrontmatter(typ string, fm *yaml.Node, today string) (*yaml.Node, error)
 	for key, val := range vault.Pairs(fm) {
 		switch key.Value {
 		case "type":
-			if val.Kind != yaml.ScalarNode || val.Value != typ {
+			if got := vault.Text(fm, "type"); got != typ {
 				return nil, fmt.Errorf("frontmatter type %q conflicts with type %q; "+
-					"drop it from frontmatter or make them match", val.Value, typ)
+					"drop it from frontmatter or make them match", got, typ)
 			}
 			continue
 		case "created":
 			hasCreated = true
 		case "tags":
-			val = tagsNode(vault.NormalizeTags(val))
+			val = tagsNode(vault.Values(fm, "tags"))
 		}
 		doc.Content = append(doc.Content, key, val)
 	}

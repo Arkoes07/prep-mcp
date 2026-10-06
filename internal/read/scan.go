@@ -19,7 +19,7 @@ type Doc struct {
 	Tags              []string
 	Date              time.Time // the type's date field, else the file's modification time
 	DateFromMtime     bool
-	Fields            map[string]*yaml.Node
+	Frontmatter       *yaml.Node // the mapping; read its fields with vault.Values
 	Body              []byte
 	BodyLine          int // 1-based file line where Body starts
 
@@ -125,7 +125,7 @@ func (r *Reader) parseDoc(p string, d fs.DirEntry, src []byte) (*Doc, []Problem)
 	if fm == nil {
 		return nil, nil
 	}
-	typ := vault.FieldText(fm.Map, "type")
+	typ := vault.Text(fm.Map, "type")
 	if typ == "" {
 		return nil, nil
 	}
@@ -142,37 +142,32 @@ func (r *Reader) parseDoc(p string, d fs.DirEntry, src []byte) (*Doc, []Problem)
 		Path:          p,
 		Type:          typ,
 		Title:         strings.TrimSuffix(name, path.Ext(name)),
-		Fields:        make(map[string]*yaml.Node, len(fm.Map.Content)/2),
+		Frontmatter:   fm.Map,
 		Body:          src[fm.BodyOffset:],
 		src:           src,
 		BodyLine:      fm.BodyLine,
-		Tags:          vault.NormalizeTags(vault.Field(fm.Map, "tags")),
+		Tags:          vault.Values(fm.Map, "tags"),
 		Date:          info.ModTime(),
 		DateFromMtime: true,
 	}
-	for k, val := range vault.Pairs(fm.Map) {
-		doc.Fields[k.Value] = val
-	}
-	if tn := vault.Field(fm.Map, "title"); tn != nil {
-		if t := strings.TrimSpace(vault.Scalar(tn)); t != "" {
-			doc.Title = t
-			doc.titleLine = tn.Line + 1
-		}
+	if t := vault.Text(fm.Map, "title"); t != "" {
+		doc.Title = t
+		doc.titleLine = vault.Field(fm.Map, "title").Line + 1
 	}
 	field := r.cfg.DateField(typ)
-	dn := vault.Field(fm.Map, field)
-	if dn == nil || strings.TrimSpace(vault.Scalar(dn)) == "" {
+	day := vault.Text(fm.Map, field)
+	if day == "" {
 		return doc, nil
 	}
-	t, err := ParseDate(vault.Scalar(dn))
+	t, err := ParseDate(day)
 	if err != nil {
 		return doc, []Problem{{
 			Path: p,
 			Msg: fmt.Sprintf(
 				"line %d: %s %q is not a date; use YYYY-MM-DD (using the file's modification time meanwhile)",
-				dn.Line+1,
+				vault.Field(fm.Map, field).Line+1,
 				field,
-				vault.Scalar(dn),
+				day,
 			),
 		}}
 	}
@@ -187,28 +182,4 @@ func (d *Doc) DateSource() string {
 		return "mtime"
 	}
 	return "field"
-}
-
-// Text returns the trimmed text of a scalar frontmatter field, or "" if the
-// field is missing, null or not a scalar.
-func (d *Doc) Text(key string) string {
-	return strings.TrimSpace(vault.Scalar(d.Fields[key]))
-}
-
-// Texts returns the trimmed texts of a frontmatter field: one for a scalar,
-// one per scalar item for a list. A null counts as ""; a missing or nested
-// field has none.
-func (d *Doc) Texts(key string) []string {
-	n := d.Fields[key]
-	items := []*yaml.Node{n}
-	if n != nil && n.Kind == yaml.SequenceNode {
-		items = n.Content
-	}
-	var out []string
-	for _, c := range items {
-		if c != nil && c.Kind == yaml.ScalarNode {
-			out = append(out, strings.TrimSpace(vault.Scalar(c)))
-		}
-	}
-	return out
 }

@@ -3,60 +3,11 @@ package vault_test
 import (
 	"os"
 	"path/filepath"
-	"slices"
 	"testing"
-
-	"gopkg.in/yaml.v3"
 
 	"github.com/Arkoes07/prep-mcp/internal/testvault"
 	"github.com/Arkoes07/prep-mcp/internal/vault"
 )
-
-// tagsNode parses "tags: <value>" and returns the value node.
-func tagsNode(t *testing.T, value string) *yaml.Node {
-	t.Helper()
-	var doc yaml.Node
-	if err := yaml.Unmarshal([]byte("tags: "+value+"\n"), &doc); err != nil {
-		t.Fatalf("bad test YAML %q: %v", value, err)
-	}
-	return doc.Content[0].Content[1]
-}
-
-func TestNormalizeTags(t *testing.T) {
-	tests := []struct {
-		name  string
-		value string // YAML text of the tags value
-		want  []string
-	}{
-		{"list", `[a, b]`, []string{"a", "b"}},
-		{"list_mixed_case_spaces", `[A, " B "]`, []string{"a", "b"}},
-		{"comma_string", `"a, b"`, []string{"a", "b"}},
-		{"comma_string_spaces", `"A,  B ,c"`, []string{"a", "b", "c"}},
-		{"bracketed_string", `"[a, 'b']"`, []string{"a", "b"}},
-		{"single_scalar", `a`, []string{"a"}},
-		{"null", `null`, nil},
-		{"empty_list", `[]`, nil},
-		{"empty_entries", `"a,,b,"`, []string{"a", "b"}},
-		{"dedupe_keeps_first", `[a, A, "a "]`, []string{"a"}},
-		{"scalars_stringified", `[2026, true]`, []string{"2026", "true"}},
-		{"nested_ignored", `[a, [b], {c: d}]`, []string{"a"}},
-		{"path_like", `"Issue/Buries-Headline"`, []string{"issue/buries-headline"}},
-		{"control_whitespace", `["\ta\n"]`, []string{"a"}},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			got := vault.NormalizeTags(tagsNode(t, tc.value))
-			if !slices.Equal(got, tc.want) {
-				t.Errorf("NormalizeTags(%s) = %q, want %q", tc.value, got, tc.want)
-			}
-		})
-	}
-	t.Run("key_missing", func(t *testing.T) {
-		if got := vault.NormalizeTags(nil); len(got) != 0 {
-			t.Errorf("NormalizeTags(nil) = %q, want none", got)
-		}
-	})
-}
 
 func TestParseVocabulary(t *testing.T) {
 	t.Run("example", func(t *testing.T) {

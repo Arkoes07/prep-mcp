@@ -4,6 +4,8 @@ import (
 	"cmp"
 	"slices"
 	"strings"
+
+	"github.com/Arkoes07/prep-mcp/internal/vault"
 )
 
 // noValue stands for a missing or empty field in a Group.
@@ -66,16 +68,10 @@ func combinations(d *Doc, fields []string) [][]string {
 	return combos
 }
 
-// fieldValues returns the distinct texts of d's field, or noValue alone if it
-// has none. tags are the normalised tags; null and nested values count as none.
+// fieldValues returns the distinct values of d's field that are not "", or
+// noValue alone if there are none.
 func fieldValues(d *Doc, field string) []string {
-	if field == "tags" {
-		if len(d.Tags) == 0 {
-			return []string{noValue}
-		}
-		return d.Tags
-	}
-	vals := slices.DeleteFunc(d.Texts(field), func(v string) bool { return v == "" })
+	vals := slices.DeleteFunc(vault.Values(d.Frontmatter, field), func(v string) bool { return v == "" })
 	if len(vals) == 0 {
 		return []string{noValue}
 	}

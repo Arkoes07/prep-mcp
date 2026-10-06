@@ -138,36 +138,39 @@ func TestApplyLimitCap(t *testing.T) {
 	}
 }
 
-// where reads a field as group_by does: trimmed, null as "", each list item on
-// its own. A missing or nested field matches nothing, not even "".
-func TestWhereReadsValuesLikeGroupBy(t *testing.T) {
+// where lists exactly the documents group_by counts under a value: both read
+// a field through vault.Values, so tags compare normalised and an alias reads
+// as what it points to.
+func TestWhereMatchesWhatGroupByCounts(t *testing.T) {
 	root, r := copyOpen(t)
-	for name, field := range map[string]string{
-		"padded": `status: " open "`,
-		"list":   `status: [" open", done]`,
-		"null":   "status: null",
-		"blank":  "status:",
-		"empty":  `status: ""`,
-		"nested": "status: {a: b}",
-		"none":   "other: x",
+	for name, tags := range map[string]string{
+		"list":   "tags: [A]",
+		"string": `tags: "a, b"`,
+		"alias":  "base: &t B\ntags: *t",
 	} {
-		testvault.Write(t, root, "probe/"+name+".md", "---\ntype: probe\n"+field+"\n---\n")
+		testvault.Write(t, root, "probe/"+name+".md", "---\ntype: probe\n"+tags+"\n---\n")
 	}
 
-	tests := []struct {
-		where string
-		want  []string
-	}{
-		{"open", []string{"probe/list.md", "probe/padded.md"}},
-		{"", []string{"probe/blank.md", "probe/empty.md", "probe/null.md"}},
+	groups, _, err := r.Group(read.Filter{Type: "probe"}, []string{"tags"})
+	if err != nil {
+		t.Fatalf("Group: %v", err)
 	}
-	for _, tc := range tests {
-		docs, _, err := r.List(read.Filter{Type: "probe", Where: map[string][]string{"status": {tc.where}}})
+	wantGroups := []read.Group{{Values: []string{"a"}, Count: 2}, {Values: []string{"b"}, Count: 2}}
+	if !slices.EqualFunc(groups, wantGroups, func(a, b read.Group) bool {
+		return a.Count == b.Count && slices.Equal(a.Values, b.Values)
+	}) {
+		t.Fatalf("group_by tags = %v, want %v", groups, wantGroups)
+	}
+	for tag, want := range map[string][]string{
+		"a": {"probe/list.md", "probe/string.md"},
+		"b": {"probe/alias.md", "probe/string.md"},
+	} {
+		docs, _, err := r.List(read.Filter{Type: "probe", Where: map[string][]string{"tags": {tag}}})
 		if err != nil {
 			t.Fatalf("List: %v", err)
 		}
-		if got := slices.Sorted(slices.Values(paths(docs))); !slices.Equal(got, tc.want) {
-			t.Errorf("where status: %q matched %v, want %v", tc.where, got, tc.want)
+		if got := slices.Sorted(slices.Values(paths(docs))); !slices.Equal(got, want) {
+			t.Errorf("where tags: %q matched %v, want %v", tag, got, want)
 		}
 	}
 }

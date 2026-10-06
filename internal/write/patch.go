@@ -158,9 +158,9 @@ func (pl *patchPlan) changeTags(m *yaml.Node) {
 		return
 	}
 	pl.hasTagChange = true
-	cur := vault.NormalizeTags(vault.Field(m, "tags"))
+	cur := vault.Values(m, "tags")
 	if setTags {
-		pl.wantTags = vault.NormalizeTags(vault.Field(p.Set, "tags"))
+		pl.wantTags = vault.Values(p.Set, "tags")
 	} else {
 		want := slices.Clone(cur)
 		for _, t := range vault.NormalizeTagList(p.AddTags) {
@@ -405,7 +405,7 @@ func verifyPatch(src, out []byte, old *vault.Frontmatter, pl *patchPlan) (*vault
 			return nil, bug("%s is still present", k)
 		}
 	}
-	if pl.hasTagChange && !slices.Equal(vault.NormalizeTags(vault.Field(re.Map, "tags")), pl.wantTags) {
+	if pl.hasTagChange && !slices.Equal(vault.Values(re.Map, "tags"), pl.wantTags) {
 		return nil, bug("tags differ")
 	}
 	return re, nil

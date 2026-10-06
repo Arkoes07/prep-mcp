@@ -154,7 +154,7 @@ func (r *Reader) weekSection(docs []*Doc, day time.Time) (string, []Problem) {
 
 	var found []*Doc
 	for _, d := range docs {
-		if d.Type == cs.CurrentWeekType && strings.EqualFold(d.Text(cs.CurrentWeekField), week) {
+		if d.Type == cs.CurrentWeekType && strings.EqualFold(vault.Text(d.Frontmatter, cs.CurrentWeekField), week) {
 			found = append(found, d)
 		}
 	}
@@ -234,7 +234,7 @@ func metaLine(d *Doc, fields []string) string {
 		attrs = append(attrs, "date_source="+d.DateSource())
 	}
 	for _, k := range fields {
-		if val := d.Text(k); val != "" {
+		if val := vault.Text(d.Frontmatter, k); val != "" {
 			attrs = append(attrs, k+"="+oneLine(val))
 		}
 	}
