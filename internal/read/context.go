@@ -234,7 +234,7 @@ func metaLine(d *Doc, fields []string) string {
 		attrs = append(attrs, "date_source="+d.DateSource())
 	}
 	for _, k := range fields {
-		if val := vault.Text(d.Frontmatter, k); val != "" {
+		if val := d.Shown(k); val != "" {
 			attrs = append(attrs, k+"="+oneLine(val))
 		}
 	}

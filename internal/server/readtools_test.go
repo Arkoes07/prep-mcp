@@ -241,9 +241,13 @@ func TestListDocsDescriptionNamesShownFields(t *testing.T) {
 		want, notWant []string
 	}{
 		{
-			name:    "show_lists",
-			root:    root,
-			want:    []string{"by default status; for memo none; for note priority, owner)", "fields: field names"},
+			name: "show_lists",
+			root: root,
+			want: []string{
+				"by default status; for memo none; for note priority, owner)",
+				`A list field shows its values joined by ", ".`,
+				"fields: field names",
+			},
 			notWant: []string{"for log"},
 		},
 		{
@@ -313,7 +317,12 @@ func TestListDocsWhereReadsArgumentsAsWritten(t *testing.T) {
 // summary_fields); the fields argument replaces it for every document.
 func TestListDocsFields(t *testing.T) {
 	root := testvault.Copy(t)
-	testvault.Write(t, root, "probe/alias.md", "---\ntype: probe\nbase: &s draft\nstatus: *s\n---\n")
+	testvault.Write(
+		t,
+		root,
+		"probe/x.md",
+		"---\ntype: probe\nbase: &s draft\nstatus: *s\nstage: [one, \"\", two]\n---\n",
+	)
 	cs := connectAt(t, root)
 	tests := []struct {
 		name     string
@@ -347,10 +356,10 @@ func TestListDocsFields(t *testing.T) {
 			wantVals: map[string]string{"exit_criteria": "Cost stated in 5 project answers in a row"},
 		},
 		{
-			name:     "alias_read_through",
+			name:     "alias_and_list",
 			args:     map[string]any{"type": "probe"},
-			wantKeys: []string{"status"},
-			wantVals: map[string]string{"status": "draft"},
+			wantKeys: []string{"stage", "status"},
+			wantVals: map[string]string{"stage": "one, two", "status": "draft"},
 		},
 		{
 			name:     "empty_argument_shows_none",

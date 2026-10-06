@@ -23,7 +23,8 @@ func registerReadTools(s *mcp.Server, h *handlers) {
 		Title: "Get start-of-conversation context",
 		Description: "Start-of-conversation bundle in one call: the vault's working rules (CLAUDE.md), " +
 			"the current ISO week's document in full, " +
-			"metadata for open items and recent documents, and the most used tags of the last 30 days. " +
+			"metadata for open items and recent documents (with the fields list_docs shows, " +
+			"a list field's values joined by \", \"), and the most used tags of the last 30 days. " +
 			"Call this first. " +
 			"Optional date (YYYY-MM-DD) builds the bundle as of another day.",
 		Annotations: readOnly,
@@ -83,7 +84,8 @@ func listDocsDescription(cfg *config.Config) string {
 	}
 	return "List document metadata (path, type, title, tags, date, date_source (field or mtime), updated, " +
 		"and under fields the configured fields each document sets: " + strings.Join(shown, "; ") + "), " +
-		"never bodies. fields: field names to show instead, for this call; [] shows none. " +
+		"never bodies. A list field shows its values joined by \", \". " +
+		"fields: field names to show instead, for this call; [] shows none. " +
 		"All filters combine with AND. tags: every tag must match; any_tags: at least one; " +
 		"a trailing / matches a prefix (issue/ matches every issue tag). " +
 		"where: frontmatter equality such as {\"status\": [\"open\", \"improving\"]}; a list means any of, " +
@@ -286,7 +288,7 @@ func metaOf(d *read.Doc, fields []string) docMeta {
 		Fields:     map[string]string{},
 	}
 	for _, k := range fields {
-		if v := vault.Text(d.Frontmatter, k); v != "" {
+		if v := d.Shown(k); v != "" {
 			m.Fields[k] = v
 		}
 	}

@@ -183,3 +183,14 @@ func (d *Doc) DateSource() string {
 	}
 	return "field"
 }
+
+// Shown is field as a listing shows it: its values that are not "", joined
+// by ", ", or "" when there are none.
+func (d *Doc) Shown(field string) string {
+	return strings.Join(d.values(field), ", ")
+}
+
+// values returns the values of field that are not "".
+func (d *Doc) values(field string) []string {
+	return slices.DeleteFunc(vault.Values(d.Frontmatter, field), func(v string) bool { return v == "" })
+}

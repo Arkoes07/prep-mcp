@@ -137,16 +137,24 @@ func TestContextSummaryFields(t *testing.T) {
 }
 
 // A type's show list replaces summary_fields on its lines, in its own order;
-// an empty one shows only the date.
+// an empty one shows only the date. A list field shows its values joined.
 func TestContextShowFields(t *testing.T) {
 	const line = "- improvements/missing-tradeoff.md | Trade-off not stated | date=2026-01-10 date_source=mtime "
 	const criteria = "exit_criteria=Cost stated in 5 project answers in a row"
 	tests := []struct {
 		name, show, want string
+		doc              string // replaces the document's content when set
 	}{
 		{name: "replaces_summary_fields", show: "[exit_criteria]", want: line + criteria + " | -"},
 		{name: "own_order", show: "[status, exit_criteria]", want: line + "status=improving " + criteria + " | -"},
 		{name: "empty_hides", show: "[]", want: line + "| -"},
+		{
+			name: "list_joined",
+			show: "[exit_criteria]",
+			doc: "---\ntype: improvement\ntitle: Trade-off not stated\nstatus: improving\n" +
+				"exit_criteria: [a, \"\", b]\n---\n",
+			want: line + "exit_criteria=a, b | -",
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -158,6 +166,9 @@ func TestContextShowFields(t *testing.T) {
 				"required: [status, exit_criteria]",
 				"required: [status, exit_criteria]\n    show: "+tc.show,
 			)
+			if tc.doc != "" {
+				testvault.Write(t, root, "improvements/missing-tradeoff.md", tc.doc)
+			}
 			got, err := openAt(t, root).Context(day)
 			if err != nil {
 				t.Fatalf("Context: %v", err)
