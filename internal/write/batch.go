@@ -56,7 +56,7 @@ func CreateOp(d Draft) Op {
 // section at the end of the file.
 func AppendOp(path, heading, content string) Op {
 	return Op{tool: ToolAppend, target: path, apply: func(p *batchPlan) (*file, []byte, []string, error) {
-		return p.modify(path, func(old []byte) ([]byte, []string, error) {
+		return p.modify(path, func(_ string, old []byte) ([]byte, []string, error) {
 			next, err := InsertSection(old, heading, content)
 			return next, nil, err
 		})
@@ -66,7 +66,7 @@ func AppendOp(path, heading, content string) Op {
 // PatchOp changes frontmatter keys and tags, leaving the body's bytes alone.
 func PatchOp(path string, patch Patch) Op {
 	return Op{tool: ToolPatch, target: path, apply: func(p *batchPlan) (*file, []byte, []string, error) {
-		return p.modify(path, func(old []byte) ([]byte, []string, error) {
+		return p.modify(path, func(_ string, old []byte) ([]byte, []string, error) {
 			return p.w.patchDoc(old, patch)
 		})
 	}}
@@ -84,8 +84,8 @@ func ReplaceOp(path, content, expectedHash string) Op {
 // empty replacement deletes it.
 func EditOp(path, old, replacement string) Op {
 	return Op{tool: ToolEdit, target: path, apply: func(p *batchPlan) (*file, []byte, []string, error) {
-		return p.modify(path, func(cur []byte) ([]byte, []string, error) {
-			return p.w.editDoc(cur, path, old, replacement)
+		return p.modify(path, func(rel string, cur []byte) ([]byte, []string, error) {
+			return p.w.editDoc(cur, rel, old, replacement)
 		})
 	}}
 }
@@ -301,16 +301,17 @@ func (w *Writer) plan(ops []Op) *batchPlan {
 	return p
 }
 
-// modify runs transform on the existing file at path as the batch sees it.
+// modify runs transform on the existing file at path as the batch sees it,
+// passing its resolved vault-relative path for error messages.
 func (p *batchPlan) modify(
 	path string,
-	transform func(old []byte) (next []byte, warnings []string, err error),
+	transform func(rel string, old []byte) (next []byte, warnings []string, err error),
 ) (*file, []byte, []string, error) {
 	f, err := p.existing(path)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	next, warnings, err := transform(f.cur)
+	next, warnings, err := transform(f.rel, f.cur)
 	if err != nil {
 		return nil, nil, nil, err
 	}

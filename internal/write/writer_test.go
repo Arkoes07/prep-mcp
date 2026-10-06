@@ -525,6 +525,12 @@ func TestWriterEdit(t *testing.T) {
 		}
 	})
 
+	t.Run("error_names_the_resolved_path", func(t *testing.T) {
+		e := newEnv(t)
+		_, err := e.w.Apply(ctx, write.EditOp("./weeks//2026-w03.md", "nope", "x"))
+		mustContain(t, err, `"nope" not found in `+p+`;`)
+	})
+
 	// Every row must leave the vault exactly as it was.
 	rejected := []struct {
 		name, old, replacement string
