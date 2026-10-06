@@ -99,7 +99,8 @@ func registerWriteTools(s *mcp.Server, h *handlers) {
 			"and every failure is listed by op number. " +
 			fmt.Sprintf("At most %d ops per call. ", write.MaxBatchOps) +
 			"message: the commit message (default: the number of ops per tool). " +
-			"Returns per op the path and the file's hash after the whole batch, its warnings, then the commit and its warnings.",
+			"Returns per op the path and the file's hash after the whole batch, its warnings, " +
+			"then the commit and its warnings.",
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes, OpenWorldHint: &no},
 	}, guard("batch", h.batch))
 }

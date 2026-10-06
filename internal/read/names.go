@@ -9,9 +9,9 @@ import (
 )
 
 // linkTarget returns the target of a [[wikilink]] or bare name: brackets, an
-// Obsidian |alias or #heading and a .md extension removed. ok is false when s
-// is a path instead: unbracketed and ending in .md, such as tags.md.
-func linkTarget(s string) (target string, ok bool) {
+// Obsidian |alias or #heading and a .md extension removed. isLink is false
+// when s is a path instead: unbracketed and ending in .md, such as tags.md.
+func linkTarget(s string) (target string, isLink bool) {
 	bracketed := strings.HasPrefix(s, "[[") && strings.HasSuffix(s, "]]")
 	if !bracketed && strings.EqualFold(path.Ext(s), ".md") {
 		return "", false
