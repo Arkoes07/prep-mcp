@@ -17,7 +17,8 @@ import (
 // documentRules ends the description of each tool that changes an existing
 // file: what fails and what warns (ADR-0015).
 const documentRules = "Document rules: the frontmatter parses, type is a configured type, " +
-	"the type's required fields have values, and tags are in the vocabulary file. " +
+	"the type's required fields have values, the type's date field (date unless the config names another) " +
+	"holds a date, YYYY-MM-DD, when set, and tags are in the vocabulary file. " +
 	"A write that breaks one fails and writes nothing (an unknown tag names the closest known one); " +
 	"one the document already broke is only a warning, so the write still goes through and can fix it."
 
@@ -118,6 +119,7 @@ func createDocDescription(cfg *config.Config) string {
 		"The path is built from the type's folder and filename pattern. " +
 		"Fails if the file already exists (the error names it). Sets created to today if absent. " +
 		"Required fields must be present and not empty, and one error names every missing field. " +
+		"The type's date field (date unless the config names another) must hold a date, YYYY-MM-DD, when set. " +
 		"tags may be a list or a comma-separated string; " +
 		"a tag missing from the vocabulary file fails the call, naming the closest known tag. " +
 		"Returns path, hash, warnings and commit.\n")
@@ -136,7 +138,7 @@ func createDocDescription(cfg *config.Config) string {
 		fmt.Fprintf(&b, "- %s: %s/%s; required: %s\n", name, t.Folder, t.Filename, required)
 	}
 	b.WriteString("In a pattern, {slug} is the slug argument, else the title field; " +
-		"{date} is the type's date field (date unless the config names another), else today; " +
+		"{date} is the day the type's date field holds (a timestamp is cut to its date), else today; " +
 		"any other {name} is the frontmatter field of that name. " +
 		"Every value becomes lowercase kebab-case. " +
 		"For a type named {slug}.md, slug may hold folders (folder/name); each part is kebab-cased.")

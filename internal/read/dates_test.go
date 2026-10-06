@@ -27,27 +27,3 @@ func TestISOWeek(t *testing.T) {
 		}
 	}
 }
-
-// ParseDate returns the calendar date as written: whatever the input format,
-// Format(time.DateOnly) of the result is the date in the input. Any time of day
-// in the input is ignored.
-func TestParseDate(t *testing.T) {
-	// A YAML-quoted date reaches ParseDate already unquoted, so the quoted
-	// form is covered by TestScan (date: "2026-01-12").
-	ok := []string{"2026-01-12", "2026-01-12T09:30:00Z", " 2026-01-12 09:30 "}
-	for _, in := range ok {
-		got, err := read.ParseDate(in)
-		if err != nil {
-			t.Errorf("ParseDate(%s): %v", in, err)
-			continue
-		}
-		if s := got.Format(time.DateOnly); s != "2026-01-12" {
-			t.Errorf("ParseDate(%s) = %s, want 2026-01-12", in, s)
-		}
-	}
-	for _, in := range []string{"12/01/2026", "garbage", "", "2026-13-01"} {
-		if got, err := read.ParseDate(in); err == nil {
-			t.Errorf("ParseDate(%q) = %v, want an error", in, got)
-		}
-	}
-}

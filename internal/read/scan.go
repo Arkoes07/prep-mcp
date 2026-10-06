@@ -155,23 +155,20 @@ func (r *Reader) parseDoc(p string, d fs.DirEntry, src []byte) (*Doc, []Problem)
 		doc.titleLine = vault.Field(fm.Map, "title").Line + 1
 	}
 	field := r.cfg.DateField(typ)
-	day := vault.Text(fm.Map, field)
-	if day == "" {
-		return doc, nil
-	}
-	t, err := ParseDate(day)
+	day, err := vault.Day(fm.Map, field)
 	if err != nil {
 		return doc, []Problem{{
 			Path: p,
 			Msg: fmt.Sprintf(
-				"line %d: %s %q is not a date; use YYYY-MM-DD (using the file's modification time meanwhile)",
+				"line %d: %v (using the file's modification time meanwhile)",
 				vault.Field(fm.Map, field).Line+1,
-				field,
-				day,
+				err,
 			),
 		}}
 	}
-	doc.Date, doc.DateFromMtime = t, false
+	if !day.IsZero() {
+		doc.Date, doc.DateFromMtime = day, false
+	}
 	return doc, nil
 }
 

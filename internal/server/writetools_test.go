@@ -33,6 +33,7 @@ func TestCreateDocDescriptionComesFromConfig(t *testing.T) {
 		"- week: weeks/{week}.md; required: week",
 		"- learning: learning/{slug}.md; required: title, track",
 		"lowercase kebab-case",
+		"must hold a date, YYYY-MM-DD, when set",
 		"slug may hold folders (folder/name)",
 	} {
 		if !strings.Contains(desc, want) {

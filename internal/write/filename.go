@@ -37,21 +37,26 @@ func Slugify(s string) string {
 var placeholderRE = regexp.MustCompile(`\{([^{}]+)\}`)
 
 // RenderFilename fills the filename pattern of type spec. {slug} comes from
-// the slug argument, else the title field; {date} from the type's date field,
-// else today; any other placeholder from the field of that name. Every value
-// is slugified and always lowercase. Only a pattern of exactly "{slug}.md"
-// lets a slug argument hold folders ("folder/name"); each part is slugified
-// alone, so the result stays below the type folder. Every other value can
-// never contain a path separator. On a case-sensitive file system an existing
-// uppercase file of the same name is not detected.
+// the slug argument, else the title field; {date} is the day the type's date
+// field holds (YYYY-MM-DD), else today, and a date field that holds no date
+// fails; any other placeholder comes from the field of that name. Values
+// other than {date} are slugified and always lowercase. Only a pattern of
+// exactly "{slug}.md" lets a slug argument hold folders ("folder/name"); each
+// part is slugified alone, so the result stays below the type folder. Every
+// other value can never contain a path separator. On a case-sensitive file
+// system an existing uppercase file of the same name is not detected.
 func RenderFilename(spec config.TypeSpec, fm *yaml.Node, slug string, today time.Time) (string, error) {
 	if strings.ContainsAny(slug, `/\`) {
 		return folderFilename(spec.Filename, slug)
 	}
-	date := today.Format(time.DateOnly)
-	if d := Slugify(vault.Text(fm, spec.DateField)); d != "" {
-		date = d
+	day, err := vault.Day(fm, spec.DateField)
+	if err != nil {
+		return "", err
 	}
+	if day.IsZero() {
+		day = today
+	}
+	date := day.Format(time.DateOnly)
 	var firstErr error
 	out := placeholderRE.ReplaceAllStringFunc(spec.Filename, func(m string) string {
 		name := m[1 : len(m)-1]

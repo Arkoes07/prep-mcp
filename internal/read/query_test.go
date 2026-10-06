@@ -13,6 +13,7 @@ import (
 	"github.com/Arkoes07/prep-mcp/internal/config"
 	"github.com/Arkoes07/prep-mcp/internal/read"
 	"github.com/Arkoes07/prep-mcp/internal/testvault"
+	"github.com/Arkoes07/prep-mcp/internal/vault"
 )
 
 type listCase struct {
@@ -57,7 +58,7 @@ func TestList(t *testing.T) {
 				Where:   tc.Where,
 			}
 			if tc.Since != "" {
-				d, err := read.ParseDate(tc.Since)
+				d, err := vault.ParseDate(tc.Since)
 				if tc.ParseErr {
 					if err == nil {
 						t.Fatalf("ParseDate(%q) = %v, want an error", tc.Since, d)
@@ -70,7 +71,7 @@ func TestList(t *testing.T) {
 				flt.Since = &d
 			}
 			if tc.Until != "" {
-				d, err := read.ParseDate(tc.Until)
+				d, err := vault.ParseDate(tc.Until)
 				if err != nil {
 					t.Fatalf("ParseDate(until %q): %v", tc.Until, err)
 				}

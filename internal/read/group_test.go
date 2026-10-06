@@ -11,6 +11,7 @@ import (
 	"github.com/Arkoes07/prep-mcp/internal/config"
 	"github.com/Arkoes07/prep-mcp/internal/read"
 	"github.com/Arkoes07/prep-mcp/internal/testvault"
+	"github.com/Arkoes07/prep-mcp/internal/vault"
 )
 
 func TestGroup(t *testing.T) {
@@ -69,7 +70,7 @@ func parseDay(t *testing.T, s string) *time.Time {
 	if s == "" {
 		return nil
 	}
-	d, err := read.ParseDate(s)
+	d, err := vault.ParseDate(s)
 	if err != nil {
 		t.Fatal(err)
 	}

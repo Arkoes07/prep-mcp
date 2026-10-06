@@ -115,7 +115,7 @@ func parseDay(name, s string) (*time.Time, error) {
 	if strings.TrimSpace(s) == "" {
 		return nil, nil
 	}
-	t, err := read.ParseDate(s)
+	t, err := vault.ParseDate(s)
 	if err != nil {
 		return nil, fmt.Errorf("%s: use YYYY-MM-DD (got %q)", name, s)
 	}

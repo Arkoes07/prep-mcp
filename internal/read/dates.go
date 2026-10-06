@@ -2,7 +2,6 @@ package read
 
 import (
 	"fmt"
-	"strings"
 	"time"
 )
 
@@ -10,22 +9,6 @@ import (
 func ISOWeek(t time.Time) string {
 	y, w := t.ISOWeek()
 	return fmt.Sprintf("%d-W%02d", y, w)
-}
-
-// ParseDate parses YYYY-MM-DD, or a timestamp starting with one. It returns
-// the calendar date as written, at local midnight; anything after the date
-// (a time of day, a zone) is dropped unread, so the same vault gives the same
-// answers in every timezone.
-func ParseDate(s string) (time.Time, error) {
-	d := strings.TrimSpace(s)
-	if len(d) > 10 && (d[10] == 'T' || d[10] == ' ') {
-		d = d[:10]
-	}
-	t, err := time.ParseInLocation(time.DateOnly, d, time.Local)
-	if err != nil {
-		return time.Time{}, fmt.Errorf("%q is not a date; use YYYY-MM-DD", s)
-	}
-	return t, nil
 }
 
 // dayOf truncates t to local midnight of its calendar date.

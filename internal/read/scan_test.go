@@ -344,10 +344,13 @@ func TestScan(t *testing.T) {
 			},
 			check: func(t *testing.T, _ string, _ *read.Reader, docs []*read.Doc, problems []read.Problem) {
 				wantMtime(t, find(t, docs, "notes/f.md"))
-				isOne := len(problems) == 1 && problems[0].Path == "notes/f.md"
-				namesField := isOne && strings.Contains(problems[0].Msg, `finished "soon" is not a date`)
-				if !namesField {
-					t.Errorf("problems = %+v, want one for notes/f.md naming finished", problems)
+				want := []read.Problem{{
+					Path: "notes/f.md",
+					Msg: `line 5: finished "soon" is not a date; use YYYY-MM-DD ` +
+						"(using the file's modification time meanwhile)",
+				}}
+				if !slices.Equal(problems, want) {
+					t.Errorf("problems = %+v, want %+v", problems, want)
 				}
 			},
 		},

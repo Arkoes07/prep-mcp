@@ -12,10 +12,11 @@ import (
 )
 
 // The document rules (CONTEXT.md): the frontmatter parses, the type is
-// configured, the type's required fields have values and the tags are in the
-// vocabulary. The plan holds every op to them once, against the file as the
-// earlier ops leave it: an op fails only on a rule it breaks, and a rule the
-// file already broke is a warning (ADR-0015).
+// configured, the type's required fields have values, the type's date field
+// holds a date and the tags are in the vocabulary. The plan holds every op to
+// them once, against the file as the earlier ops leave it: an op fails only
+// on a rule it breaks, and a rule the file already broke is a warning
+// (ADR-0015).
 
 // opRules is how one tool is held to the document rules: whether it may
 // change the type, and what to do next when it breaks a rule.
@@ -100,6 +101,7 @@ func (w *Writer) check(r opRules, before, after []byte) ([]string, error) {
 	var v verdict
 	w.checkType(&v, r, was, now)
 	w.checkRequired(&v, r, was, now)
+	w.checkDate(&v, was, now)
 	w.checkTags(&v, was, now)
 	if len(v.errs) > 0 {
 		return nil, errors.Join(v.errs...)
@@ -163,6 +165,26 @@ func (w *Writer) checkRequired(v *verdict, r opRules, was, now docState) {
 		v.warnings = append(v.warnings, fmt.Sprintf("missing required fields for %s: %s; "+
 			"give them values with update_frontmatter", now.typ, strings.Join(missing, ", ")))
 	}
+}
+
+// checkDate holds the result to "the type's date field holds a date". A
+// changed type is checked like a new document.
+func (w *Writer) checkDate(v *verdict, was, now docState) {
+	spec, ok := w.cfg.Types[now.typ]
+	if !ok {
+		return
+	}
+	field := spec.DateField
+	_, err := vault.Day(now.fm, field)
+	if err == nil {
+		return
+	}
+	unchanged := was.typ == now.typ && slices.Equal(vault.Values(was.fm, field), vault.Values(now.fm, field))
+	if unchanged {
+		v.warnings = append(v.warnings, err.Error()+"; set it with update_frontmatter")
+		return
+	}
+	v.errs = append(v.errs, err)
 }
 
 // checkTags holds the result to "the tags are in the vocabulary", naming the

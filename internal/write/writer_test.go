@@ -76,6 +76,16 @@ func TestWriterCreate(t *testing.T) {
 			wantPath: "learning/t.md", wantBytes: head + "title: T\ntrack: k\ncreated: 2020-01-01\n---\n",
 		},
 		{
+			name: "date_timestamp", typ: "learning", fm: `{"title":"T","track":"k","date":"2026-01-12T09:00"}`,
+			setup: func(e *env) {
+				spec := e.cfg.Types["learning"]
+				spec.Filename = "{date}-{slug}.md"
+				e.cfg.Types["learning"] = spec
+			},
+			wantPath:  "learning/2026-01-12-t.md",
+			wantBytes: head + "title: T\ntrack: k\ndate: 2026-01-12T09:00\n" + created,
+		},
+		{
 			name: "week_param", typ: "week", fm: `{"week":"2026-W04"}`,
 			wantPath: "weeks/2026-w04.md", wantBytes: "---\ntype: week\nweek: 2026-W04\n" + created,
 		},

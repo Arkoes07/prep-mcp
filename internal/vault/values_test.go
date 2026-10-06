@@ -2,7 +2,9 @@ package vault_test
 
 import (
 	"slices"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/Arkoes07/prep-mcp/internal/vault"
 )
@@ -96,6 +98,60 @@ func TestValues(t *testing.T) {
 			}
 			if got := vault.Text(fm.Map, tc.key); got != wantText {
 				t.Errorf("Text = %q, want %q", got, wantText)
+			}
+		})
+	}
+}
+
+// TestDay is the table of the day a date field holds: the calendar date as
+// written, whatever follows it, or none when the field has no value.
+func TestDay(t *testing.T) {
+	const listErr = "d holds a list or mapping; use one date, YYYY-MM-DD"
+	tests := []struct {
+		name    string
+		fm      string // the frontmatter's YAML
+		want    string // the day as YYYY-MM-DD; "" for none
+		wantErr string
+	}{
+		{name: "date", fm: "d: 2026-01-12", want: "2026-01-12"},
+		{name: "quoted", fm: `d: "2026-01-12"`, want: "2026-01-12"},
+		{name: "timestamp_zone", fm: "d: 2026-01-12T09:30:00Z", want: "2026-01-12"},
+		{name: "timestamp_cut_unread", fm: "d: 2026-01-12T99:99", want: "2026-01-12"},
+		{name: "space_timestamp", fm: `d: " 2026-01-12 09:30 "`, want: "2026-01-12"},
+		{name: "list_of_one", fm: "d: [2026-01-12]", want: "2026-01-12"},
+		{name: "missing", fm: "x: 1"},
+		{name: "null", fm: "d: null"},
+		{name: "blank", fm: `d: " "`},
+		{name: "empty_list", fm: "d: []"},
+		{name: "words", fm: "d: next week", wantErr: `d "next week" is not a date; use YYYY-MM-DD`},
+		{name: "day_first", fm: "d: 12/01/2026", wantErr: "use YYYY-MM-DD"},
+		{name: "no_such_month", fm: "d: 2026-13-01", wantErr: "use YYYY-MM-DD"},
+		{name: "list_of_two", fm: "d: [2026-01-12, 2026-01-13]", wantErr: listErr},
+		{name: "list_with_null", fm: "d: [2026-01-12, null]", wantErr: listErr},
+		{name: "mapping", fm: "d: {a: 2026-01-12}", wantErr: listErr},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			fm, err := vault.SplitFrontmatter([]byte("---\n" + tc.fm + "\n---\n"))
+			if err != nil || fm == nil {
+				t.Fatalf("bad test frontmatter %q: %v", tc.fm, err)
+			}
+			day, err := vault.Day(fm.Map, "d")
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("Day = %v, %v; want an error containing %q", day, err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Day: %v", err)
+			}
+			got := ""
+			if !day.IsZero() {
+				got = day.Format(time.DateOnly)
+			}
+			if got != tc.want {
+				t.Errorf("Day = %q, want %q", got, tc.want)
 			}
 		})
 	}

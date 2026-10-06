@@ -56,8 +56,9 @@ func TestDocumentRules(t *testing.T) {
 	// brokenWeek's frontmatter does not parse, and it has a tag the vocabulary lacks.
 	const brokenWeek = "---\ntype: week\nweek: 2026-W03\ntags: [issue/buries-headlin]\nfocus: [x\n---\nbody\n"
 	const repairedWeek = "---\ntype: week\nweek: 2026-W03\ntags: [issue/buries-headlin]\nfocus: [x]\n---\nbody\n"
-	// lackingWeek already misses its required field and has a tag the vocabulary lacks.
-	const lackingWeek = "---\ntype: week\ntags: [issue/buries-headlin]\n---\n## Log\n- Mon\n"
+	// lackingWeek already misses its required field, has a date field that
+	// holds no date, and has a tag the vocabulary lacks.
+	const lackingWeek = "---\ntype: week\ndate: next week\ntags: [issue/buries-headlin]\n---\n## Log\n- Mon\n"
 	// oldType's type is not configured.
 	const oldType = "---\ntype: old\n---\n## Log\n- Mon\n"
 	const (
@@ -67,6 +68,8 @@ func TestDocumentRules(t *testing.T) {
 		unknownTagWarn = `unknown tag "issue/buries-headlin"; closest known tag: "issue/buries-headline". ` +
 			"Replace it with a known tag, or add it to tags.md"
 		missingWeekWarn = "missing required fields for week: week; give them values with update_frontmatter"
+		notADateErr     = `date "next week" is not a date; use YYYY-MM-DD`
+		notADateWarn    = notADateErr + "; set it with update_frontmatter"
 		oldTypeWarn     = `unknown type "old"; use one of the configured types: `
 		brokenWarn      = "fix the frontmatter with edit_text"
 	)
@@ -191,6 +194,23 @@ func TestDocumentRules(t *testing.T) {
 		},
 
 		{
+			name:    "date/create",
+			op:      createOf("learning", `{"title":"T","track":"k","date":"next week"}`),
+			wantErr: []string{notADateErr},
+		},
+		{name: "date/patch", op: patchOf(week, `{"date":"next week"}`), wantErr: []string{notADateErr}},
+		{
+			name:    "date/replace",
+			op:      replaceOf(week, "---\ntype: week\nweek: 2026-W03\ndate: next week\n---\nbody\n"),
+			wantErr: []string{notADateErr},
+		},
+		{
+			name:    "date/edit",
+			op:      editOf(week, "week: 2026-W03\n", "week: 2026-W03\ndate: next week\n"),
+			wantErr: []string{notADateErr},
+		},
+
+		{
 			name: "broken_by_op/replace",
 			op:   replaceOf(week, "---\ntype: [x\n---\n"),
 			wantErr: []string{
@@ -211,25 +231,25 @@ func TestDocumentRules(t *testing.T) {
 			name:     "already_broken/append",
 			files:    map[string]string{week: lackingWeek},
 			op:       appendOf(week),
-			wantWarn: []string{missingWeekWarn, unknownTagWarn},
+			wantWarn: []string{missingWeekWarn, notADateWarn, unknownTagWarn},
 		},
 		{
 			name:     "already_broken/patch",
 			files:    map[string]string{week: lackingWeek},
 			op:       patchOf(week, `{"start":"2026-01-12"}`),
-			wantWarn: []string{missingWeekWarn, unknownTagWarn},
+			wantWarn: []string{missingWeekWarn, notADateWarn, unknownTagWarn},
 		},
 		{
 			name:     "already_broken/replace",
 			files:    map[string]string{week: lackingWeek},
 			op:       replaceOf(week, lackingWeek+"- Tue\n"),
-			wantWarn: []string{missingWeekWarn, unknownTagWarn},
+			wantWarn: []string{missingWeekWarn, notADateWarn, unknownTagWarn},
 		},
 		{
 			name:     "already_broken/edit",
 			files:    map[string]string{week: lackingWeek},
 			op:       editOf(week, "- Mon", "- Tue"),
-			wantWarn: []string{missingWeekWarn, unknownTagWarn},
+			wantWarn: []string{missingWeekWarn, notADateWarn, unknownTagWarn},
 		},
 		{
 			name:  "already_broken/patch_cannot_empty_another",
@@ -238,6 +258,12 @@ func TestDocumentRules(t *testing.T) {
 			wantErr: []string{
 				"missing required fields for improvement: status; give them values with set",
 			},
+		},
+		{
+			name:    "already_broken/patch_cannot_set_another_non_date",
+			files:   map[string]string{week: lackingWeek},
+			op:      patchOf(week, `{"date":"later"}`),
+			wantErr: []string{`date "later" is not a date; use YYYY-MM-DD`},
 		},
 		{
 			name:      "already_unknown_type/append",
@@ -373,6 +399,26 @@ func TestRequiredTagsWithoutATag(t *testing.T) {
 
 	_, err := e.w.Apply(ctx, write.EditOp(week, "tags: [meta/plan]", `tags: " , "`))
 	mustContain(t, err, "missing required fields for week: tags; keep them in the frontmatter")
+}
+
+// Only the type's date field must hold a date: date is just another field
+// once the type names a different one, and created is never checked.
+func TestTypeDateField(t *testing.T) {
+	e := newEnv(t)
+	spec := e.cfg.Types["week"]
+	spec.DateField = "start"
+	e.cfg.Types["week"] = spec
+
+	_, err := e.w.Apply(ctx, write.PatchOp(week, write.Patch{Set: node(t, `{"start":"soon"}`)}))
+	mustContain(t, err, `start "soon" is not a date; use YYYY-MM-DD`)
+
+	res, err := e.w.Apply(ctx, write.PatchOp(week, write.Patch{Set: node(t, `{"date":"soon","created":"soon"}`)}))
+	if err != nil {
+		t.Fatalf("set date and created to non-dates: %v", err)
+	}
+	if len(res.Warnings) > 0 {
+		t.Errorf("warnings = %q, want none", res.Warnings)
+	}
 }
 
 // runOne runs op through Apply, or through Batch as a batch of one, and

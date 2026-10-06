@@ -1,17 +1,20 @@
 package vault
 
 import (
+	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
 
-// What a frontmatter field's values are, and whether it has a value, is
-// decided here; reads, writes and the where conditions of the server and the
-// config all ask these functions rather than look at the nodes. A value is
-// text, trimmed, with null as "". An alias reads as what it points to. tags
-// are the normalised tags, in whatever form they are written.
+// What a frontmatter field's values are, whether it has a value, and the day
+// a date field holds, is decided here; reads, writes and the where conditions
+// of the server and the config all ask these functions rather than look at
+// the nodes. A value is text, trimmed, with null as "". An alias reads as
+// what it points to. tags are the normalised tags, in whatever form they are
+// written.
 
 // Values returns the values of field key of the mapping m: one for a scalar,
 // one per scalar item of a list, and none for a missing field, [] or a nested
@@ -62,6 +65,41 @@ func Text(m *yaml.Node, key string) string {
 		return vals[0]
 	}
 	return ""
+}
+
+// Day returns the day the date field key of m holds, at local midnight, as
+// ParseDate reads it. It returns the zero time and no error when the field
+// has no value, and an error naming the field when it holds anything but one
+// date.
+func Day(m *yaml.Node, key string) (time.Time, error) {
+	if !HasValue(m, key) {
+		return time.Time{}, nil
+	}
+	s := Text(m, key)
+	if s == "" {
+		return time.Time{}, fmt.Errorf("%s holds a list or mapping; use one date, YYYY-MM-DD", key)
+	}
+	t, err := ParseDate(s)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("%s %w", key, err)
+	}
+	return t, nil
+}
+
+// ParseDate parses YYYY-MM-DD, or a timestamp starting with one. It returns
+// the calendar date as written, at local midnight; anything after the date
+// (a time of day, a zone) is dropped unread, so the same vault gives the same
+// answers in every timezone.
+func ParseDate(s string) (time.Time, error) {
+	d := strings.TrimSpace(s)
+	if len(d) > 10 && (d[10] == 'T' || d[10] == ' ') {
+		d = d[:10]
+	}
+	t, err := time.ParseInLocation(time.DateOnly, d, time.Local)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("%q is not a date; use YYYY-MM-DD", s)
+	}
+	return t, nil
 }
 
 // IsScalarOrList reports whether n is a scalar or a list of scalars, aliases
