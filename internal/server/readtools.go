@@ -37,8 +37,9 @@ func registerReadTools(s *mcp.Server, h *handlers) {
 	mcp.AddTool(s, &mcp.Tool{
 		Name:  "read_doc",
 		Title: "Read a document",
-		Description: "Read one markdown file by vault-relative path. " +
-			"Returns its path, its content hash (sha256, needed later to rewrite the file safely) " +
+		Description: "Read one markdown file by vault-relative path, or by name as in a [[wikilink]]: " +
+			"[[name]], name or [[folder/name]], case-insensitive. " +
+			"Returns its real path, its content hash (sha256, needed later to rewrite the file safely) " +
 			"and the full content. " +
 			"Any .md file in the vault can be read, including templates/.",
 		Annotations: readOnly,
@@ -261,7 +262,7 @@ func whereValues(key string, val any) ([]string, error) {
 }
 
 type readDocIn struct {
-	Path string `json:"path" jsonschema:"Vault-relative path of a .md file, for example notes/x.md."`
+	Path string `json:"path" jsonschema:"Vault-relative path such as notes/x.md, or a name: x, [[x]] or [[notes/x]]."`
 }
 
 func (h *handlers) readDoc(_ context.Context, _ *mcp.CallToolRequest, in readDocIn) (*mcp.CallToolResult, any, error) {

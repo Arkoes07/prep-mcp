@@ -23,7 +23,14 @@ func New(v *vault.Vault, cfg *config.Config, now func() time.Time) *Reader {
 
 func (r *Reader) Now() time.Time { return r.now() }
 
+// ReadDoc reads the file at a vault-relative path, or the one file a
+// [[wikilink]] or bare name points to.
 func (r *Reader) ReadDoc(p string) (rel string, content []byte, hash string, err error) {
+	if isLink(p) {
+		if p, err = r.resolveLink(p); err != nil {
+			return "", nil, "", err
+		}
+	}
 	rel, content, err = r.v.ReadFile(p)
 	if err != nil {
 		return "", nil, "", err

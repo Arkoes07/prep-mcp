@@ -41,12 +41,41 @@ func (r *Reader) Scan() ([]*Doc, []Problem, error) {
 	var docs []*Doc
 	var problems []Problem
 
+	walkProblems, err := r.walkMarkdown(func(p string, d fs.DirEntry) {
+		src, err := r.v.Root().ReadFile(p)
+		if err != nil {
+			problems = append(problems, Problem{
+				Path: p,
+				Msg:  fmt.Sprintf("cannot read: %v; check the file permissions", err),
+			})
+			return
+		}
+		doc, docProblems := r.parseDoc(p, d, src)
+		problems = append(problems, docProblems...)
+		if doc != nil {
+			docs = append(docs, doc)
+		}
+	})
+	problems = append(problems, walkProblems...)
+	if err != nil {
+		return nil, nil, fmt.Errorf("scan vault: %w", err)
+	}
+	slices.SortFunc(docs, func(a, b *Doc) int { return strings.Compare(a.Path, b.Path) })
+	slices.SortFunc(problems, func(a, b Problem) int { return strings.Compare(a.Path, b.Path) })
+	return docs, problems, nil
+}
+
+// walkMarkdown calls visit for every visible .md file under the vault, in
+// lexical order. It skips dot-folders, dot-files, the root templates/ folder
+// and symlinks. Unreadable entries come back as problems, so one bad folder
+// does not fail the walk.
+func (r *Reader) walkMarkdown(visit func(p string, d fs.DirEntry)) ([]Problem, error) {
+	var problems []Problem
 	err := fs.WalkDir(r.v.Root().FS(), ".", func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			if p == "." {
 				return err
 			}
-			// One unreadable folder or file must not fail every query.
 			problems = append(problems, Problem{
 				Path: p,
 				Msg:  fmt.Sprintf("cannot read: %v; check the permissions", err),
@@ -62,30 +91,12 @@ func (r *Reader) Scan() ([]*Doc, []Problem, error) {
 			}
 			return nil
 		}
-		if !isMarkdownFile(d) {
-			return nil
-		}
-		src, err := r.v.Root().ReadFile(p)
-		if err != nil {
-			problems = append(problems, Problem{
-				Path: p,
-				Msg:  fmt.Sprintf("cannot read: %v; check the file permissions", err),
-			})
-			return nil
-		}
-		doc, docProblems := r.parseDoc(p, d, src)
-		problems = append(problems, docProblems...)
-		if doc != nil {
-			docs = append(docs, doc)
+		if isMarkdownFile(d) {
+			visit(p, d)
 		}
 		return nil
 	})
-	if err != nil {
-		return nil, nil, fmt.Errorf("scan vault: %w", err)
-	}
-	slices.SortFunc(docs, func(a, b *Doc) int { return strings.Compare(a.Path, b.Path) })
-	slices.SortFunc(problems, func(a, b Problem) int { return strings.Compare(a.Path, b.Path) })
-	return docs, problems, nil
+	return problems, err
 }
 
 // skipDir reports whether the scan leaves out the folder at p: dot-folders

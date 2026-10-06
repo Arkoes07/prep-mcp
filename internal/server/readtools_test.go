@@ -26,6 +26,7 @@ func TestEachReadToolAnswers(t *testing.T) {
 		{"list_docs", map[string]any{"tags": []string{"issue/buries-headline"}}, []string{`"count":1`, `2026-01-12`}},
 		{"list_docs", map[string]any{"where": map[string]any{"status": []string{"open", "improving"}}}, []string{`"count":2`}},
 		{"read_doc", map[string]any{"path": "weeks/2026-w03.md"}, []string{"path: weeks/2026-w03.md", "hash: ", "## Log"}},
+		{"read_doc", map[string]any{"path": "[[2026-W03]]"}, []string{"path: weeks/2026-w03.md", "## Log"}},
 		{"search_text", map[string]any{"query": "trade-off"}, []string{`"count":5`}},
 		{"list_tags", map[string]any{"prefix": "issue/"}, []string{`"count":2`, `issue/missing-tradeoff`}},
 		{"list_tags", map[string]any{"prefix": "q/"}, []string{`{"tag":"q/failure","count":0}`}},
@@ -159,6 +160,7 @@ func TestReadErrorsAreToolResultsWithHints(t *testing.T) {
 	}{
 		{"path_outside_vault", "read_doc", map[string]any{"path": "../../README.md"}, "outside the vault; use a path relative"},
 		{"missing_file", "read_doc", map[string]any{"path": "nope.md"}, "use list_docs or search_text"},
+		{"unknown_name", "read_doc", map[string]any{"path": "[[nope]]"}, `no file named "nope"`},
 		{"bad_since", "list_docs", map[string]any{"since": "13-01-2026"}, "since: use YYYY-MM-DD"},
 		{"bad_date", "get_context", map[string]any{"date": "yesterday"}, "date: use YYYY-MM-DD"},
 		{"bad_sort", "list_docs", map[string]any{"sort": "newest"}, "date_desc"},
