@@ -35,17 +35,19 @@ const (
 )
 
 // Op is one write: the tool it stands for, what it targets (a path, or the
-// type for create_doc) and how it changes a plan. Build it with CreateOp,
-// AppendOp, PatchOp, ReplaceOp, EditOp or FailedOp, and run it with Apply or Batch.
+// type for create_doc) and the new content it works out for one file. Build it
+// with CreateOp, AppendOp, PatchOp, ReplaceOp, EditOp or FailedOp, and run it
+// with Apply or Batch.
 type Op struct {
 	tool, target string
-	apply        func(p *batchPlan) (*file, []string, error)
+	// apply works out next without touching f; plan stores it if the op passes.
+	apply func(p *batchPlan) (f *file, next []byte, warnings []string, err error)
 }
 
 // CreateOp makes a new document of a configured type. The path comes from the
 // type's folder and filename pattern.
 func CreateOp(d Draft) Op {
-	return Op{tool: ToolCreate, target: d.Type, apply: func(p *batchPlan) (*file, []string, error) {
+	return Op{tool: ToolCreate, target: d.Type, apply: func(p *batchPlan) (*file, []byte, []string, error) {
 		return p.create(d)
 	}}
 }
@@ -53,7 +55,7 @@ func CreateOp(d Draft) Op {
 // AppendOp adds content to the end of a "## heading" section, or adds the
 // section at the end of the file.
 func AppendOp(path, heading, content string) Op {
-	return Op{tool: ToolAppend, target: path, apply: func(p *batchPlan) (*file, []string, error) {
+	return Op{tool: ToolAppend, target: path, apply: func(p *batchPlan) (*file, []byte, []string, error) {
 		return p.modify(path, func(old []byte) ([]byte, []string, error) {
 			next, err := InsertSection(old, heading, content)
 			return next, nil, err
@@ -63,7 +65,7 @@ func AppendOp(path, heading, content string) Op {
 
 // PatchOp changes frontmatter keys and tags, leaving the body's bytes alone.
 func PatchOp(path string, patch Patch) Op {
-	return Op{tool: ToolPatch, target: path, apply: func(p *batchPlan) (*file, []string, error) {
+	return Op{tool: ToolPatch, target: path, apply: func(p *batchPlan) (*file, []byte, []string, error) {
 		return p.modify(path, func(old []byte) ([]byte, []string, error) {
 			return p.w.patchDoc(old, patch)
 		})
@@ -73,7 +75,7 @@ func PatchOp(path string, patch Patch) Op {
 // ReplaceOp rewrites a whole file, but only if it still has the content whose
 // hash the caller read.
 func ReplaceOp(path, content, expectedHash string) Op {
-	return Op{tool: ToolReplace, target: path, apply: func(p *batchPlan) (*file, []string, error) {
+	return Op{tool: ToolReplace, target: path, apply: func(p *batchPlan) (*file, []byte, []string, error) {
 		return p.replace(path, content, expectedHash)
 	}}
 }
@@ -81,15 +83,17 @@ func ReplaceOp(path, content, expectedHash string) Op {
 // EditOp replaces the one occurrence of old in a file with replacement. An
 // empty replacement deletes it.
 func EditOp(path, old, replacement string) Op {
-	return Op{tool: ToolEdit, target: path, apply: func(p *batchPlan) (*file, []string, error) {
-		return p.edit(path, old, replacement)
+	return Op{tool: ToolEdit, target: path, apply: func(p *batchPlan) (*file, []byte, []string, error) {
+		return p.modify(path, func(cur []byte) ([]byte, []string, error) {
+			return p.w.editDoc(cur, path, old, replacement)
+		})
 	}}
 }
 
 // FailedOp stands for an op of tool the caller could not build, for example
 // because its arguments did not decode. Apply and Batch report err as its failure.
 func FailedOp(tool string, err error) Op {
-	return Op{tool: tool, apply: func(*batchPlan) (*file, []string, error) { return nil, nil, err }}
+	return Op{tool: tool, apply: func(*batchPlan) (*file, []byte, []string, error) { return nil, nil, nil, err }}
 }
 
 // label names op number i (0-based) in an error: its position, tool and target.
@@ -273,15 +277,20 @@ func (w *Writer) run(ops []Op) (*batchPlan, []opError, error) {
 }
 
 // plan checks every op in order against the vault as the earlier ops leave
-// it. A failed op leaves the plan as it was.
+// it, and stores what each op that passes works out. A failed op leaves the
+// plan as it was. No op may add a tag missing from the vocabulary.
 func (w *Writer) plan(ops []Op) *batchPlan {
 	p := &batchPlan{w: w, byPath: map[string]*file{}, results: make([]Result, len(ops))}
 	for i, op := range ops {
-		f, warnings, err := op.apply(p)
+		f, next, warnings, err := op.apply(p)
+		if err == nil {
+			err = w.checkTags(newTags(tagsOf(f.cur), tagsOf(next)))
+		}
 		if err != nil {
 			p.failed = append(p.failed, opError{op: i, err: err})
 			continue
 		}
+		f.cur, f.exists = next, true
 		p.results[i] = Result{Path: f.rel, Warnings: append([]string{}, warnings...)}
 	}
 	for i := range p.results {
@@ -292,20 +301,20 @@ func (w *Writer) plan(ops []Op) *batchPlan {
 	return p
 }
 
+// modify runs transform on the existing file at path as the batch sees it.
 func (p *batchPlan) modify(
 	path string,
 	transform func(old []byte) (next []byte, warnings []string, err error),
-) (*file, []string, error) {
+) (*file, []byte, []string, error) {
 	f, err := p.existing(path)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	next, warnings, err := transform(f.cur)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	f.cur = next
-	return f, warnings, nil
+	return f, next, warnings, nil
 }
 
 // write writes every file the plan changed, in order, and returns the ones it

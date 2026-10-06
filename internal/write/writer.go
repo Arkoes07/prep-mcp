@@ -1,5 +1,5 @@
 // Package write changes files in a vault: create, append, patch frontmatter,
-// replace. Byte transforms are pure functions; Writer applies them safely.
+// edit text, replace. Byte transforms are pure functions; Writer applies them safely.
 package write
 
 import (
@@ -58,21 +58,21 @@ type Draft struct {
 	Slug        string // fills {slug} in the filename; empty means the title field
 }
 
-// create builds a new document and adds it to the plan. It fails if the file
+// create builds a new document's path and content. It fails if the file
 // exists on disk or was created earlier in the batch.
-func (p *batchPlan) create(d Draft) (*file, []string, error) {
+func (p *batchPlan) create(d Draft) (*file, []byte, []string, error) {
 	w := p.w
 	spec, ok := w.cfg.Types[d.Type]
 	if !ok {
-		return nil, nil, fmt.Errorf("unknown type %q; configured types: %s", d.Type, w.cfg.TypeList())
+		return nil, nil, nil, fmt.Errorf("unknown type %q; configured types: %s", d.Type, w.cfg.TypeList())
 	}
 	day := w.now()
 	doc, err := newFrontmatter(d.Type, d.Frontmatter, day.Format(time.DateOnly))
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	if missing := missingFields(spec.Required, doc); len(missing) > 0 {
-		return nil, nil, fmt.Errorf("missing required fields for %s: %s; add them to frontmatter and retry",
+		return nil, nil, nil, fmt.Errorf("missing required fields for %s: %s; add them to frontmatter and retry",
 			d.Type, strings.Join(missing, ", "))
 	}
 
@@ -83,35 +83,31 @@ func (p *batchPlan) create(d Draft) (*file, []string, error) {
 		day,
 	)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	rel, err := w.v.Resolve(path.Join(spec.Folder, name), vault.AccessWrite)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	body := d.Body
 	if body != "" && !strings.HasSuffix(body, "\n") {
 		body += "\n"
 	}
-	if err := w.checkTags(vault.NormalizeTags(vault.Field(doc, "tags"))); err != nil {
-		return nil, nil, err
-	}
 	data := []byte("---\n" + encode(doc) + "---\n" + body)
 	if _, err := reread(data); err != nil {
-		return nil, nil, fmt.Errorf("internal error: the new frontmatter did not re-read (%w); nothing was written. "+
-			"Report this as a bug", err)
+		return nil, nil, nil, fmt.Errorf("internal error: the new frontmatter did not re-read (%w); "+
+			"nothing was written. Report this as a bug", err)
 	}
 
 	f, err := p.file(rel)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	if f.exists {
-		return nil, nil, fmt.Errorf("file exists: %s (use append_section or update_frontmatter)", rel)
+		return nil, nil, nil, fmt.Errorf("file exists: %s (use append_section or update_frontmatter)", rel)
 	}
-	f.cur, f.exists = data, true
-	return f, nil, nil
+	return f, data, nil, nil
 }
 
 // newFrontmatter builds a new document's frontmatter: type first, then the
@@ -171,9 +167,6 @@ func (w *Writer) patchDoc(old []byte, patch Patch) ([]byte, []string, error) {
 				strings.Join(parts, "; "))
 		}
 	}
-	if err := w.checkTags(newTags(oldTags, tagsOf(next))); err != nil {
-		return nil, nil, err
-	}
 	return next, warnings, nil
 }
 
@@ -181,76 +174,71 @@ func (w *Writer) patchDoc(old []byte, patch Patch) ([]byte, []string, error) {
 // it. expectedHash is of the file as the caller read it, so a path an earlier
 // op in the batch changed cannot be replaced. A type that is not configured
 // gets no required-field check, so a typo in type is accepted silently.
-func (p *batchPlan) replace(docPath, content, expectedHash string) (*file, []string, error) {
+func (p *batchPlan) replace(docPath, content, expectedHash string) (*file, []byte, []string, error) {
 	expected := strings.ToLower(strings.TrimSpace(expectedHash))
 	if expected == "" {
-		return nil, nil, errors.New("expected_hash is required; get it from read_doc")
+		return nil, nil, nil, errors.New("expected_hash is required; get it from read_doc")
 	}
 	f, err := p.existing(docPath)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	if f.changed() {
-		return nil, nil, fmt.Errorf("an earlier op in this batch changed %s; "+
+		return nil, nil, nil, fmt.Errorf("an earlier op in this batch changed %s; "+
 			"put replace_doc first for %s, or fold that change into its content", f.rel, f.rel)
 	}
 	if cur := vault.Hash(f.cur); cur != expected {
-		return nil, nil, &ConflictError{Path: f.rel, Current: cur}
+		return nil, nil, nil, &ConflictError{Path: f.rel, Current: cur}
 	}
 
 	data := []byte(content)
-	warnings, err := p.w.checkRewrite(f.cur, data)
+	warnings, err := p.w.checkRewrite(data)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	f.cur = data
-	return f, warnings, nil
+	return f, data, warnings, nil
 }
 
-// edit replaces the one occurrence of old in docPath with replacement. It
-// needs no hash: if the text changed under the caller, old does not match.
-func (p *batchPlan) edit(docPath, old, replacement string) (*file, []string, error) {
+// editDoc replaces the one occurrence of old in the document at docPath,
+// whose bytes are src, with replacement. It needs no hash: if the text changed
+// under the caller, old does not match.
+func (w *Writer) editDoc(src []byte, docPath, old, replacement string) ([]byte, []string, error) {
 	if old == "" {
 		return nil, nil, errors.New("old is empty; pass the exact text to replace, copied from read_doc")
 	}
-	f, err := p.existing(docPath)
-	if err != nil {
-		return nil, nil, err
-	}
-	switch n := bytes.Count(f.cur, []byte(old)); n {
+	switch n := bytes.Count(src, []byte(old)); n {
 	case 0:
-		return nil, nil, fmt.Errorf("%q not found in %s; read_doc it and copy the text exactly", old, f.rel)
+		return nil, nil, fmt.Errorf("%q not found in %s; read_doc it and copy the text exactly", old, docPath)
 	case 1:
 	default:
 		return nil, nil, fmt.Errorf(
 			"%q appears %d times in %s; include more surrounding text so it matches once",
 			old,
 			n,
-			f.rel,
+			docPath,
 		)
 	}
-	data := bytes.Replace(f.cur, []byte(old), []byte(replacement), 1)
-	// A parse error first: broken frontmatter would otherwise read as a type change.
-	if _, err := vault.SplitFrontmatter(data); err != nil {
-		return nil, nil, err
-	}
-	// Unlike replace_doc, an edit is a small change: one that alters the type is a mistake.
-	if before, after := typeOf(f.cur), typeOf(data); before != after {
-		return nil, nil, fmt.Errorf("this edit changes the type %q to %q; keep the frontmatter's type line as it is",
-			before, after)
-	}
-	warnings, err := p.w.checkRewrite(f.cur, data)
+	next := bytes.Replace(src, []byte(old), []byte(replacement), 1)
+	after, err := typeOf(next)
 	if err != nil {
 		return nil, nil, err
 	}
-	f.cur = data
-	return f, warnings, nil
+	// Unlike replace_doc, an edit is a small change: one that alters the type is a mistake.
+	if before, _ := typeOf(src); before != after {
+		return nil, nil, fmt.Errorf("this edit changes the type %q to %q; keep the frontmatter's type line as it is",
+			before, after)
+	}
+	warnings, err := w.checkRewrite(next)
+	if err != nil {
+		return nil, nil, err
+	}
+	return next, warnings, nil
 }
 
-// checkRewrite checks new content for a file that held before: valid
-// frontmatter, the type's required fields, and known tags for added ones.
-// Content without a typed frontmatter passes with a warning.
-func (w *Writer) checkRewrite(before, data []byte) ([]string, error) {
+// checkRewrite checks the new content of an existing file: valid frontmatter
+// and the type's required fields. Content without a typed frontmatter passes
+// with a warning.
+func (w *Writer) checkRewrite(data []byte) ([]string, error) {
 	fm, err := vault.SplitFrontmatter(data)
 	if err != nil {
 		return nil, err
@@ -268,9 +256,6 @@ func (w *Writer) checkRewrite(before, data []byte) ([]string, error) {
 			return nil, fmt.Errorf("missing required fields for %s: %s; keep them in the frontmatter",
 				typ, strings.Join(missing, ", "))
 		}
-	}
-	if err := w.checkTags(newTags(tagsOf(before), tagsOf(data))); err != nil {
-		return nil, err
 	}
 	return warnings, nil
 }
@@ -336,12 +321,12 @@ func reread(src []byte) (*vault.Frontmatter, error) {
 }
 
 // typeOf returns the type in src's frontmatter, or "" if it has none.
-func typeOf(src []byte) string {
+func typeOf(src []byte) (string, error) {
 	fm, err := vault.SplitFrontmatter(src)
 	if err != nil || fm == nil {
-		return ""
+		return "", err
 	}
-	return vault.FieldText(fm.Map, "type")
+	return vault.FieldText(fm.Map, "type"), nil
 }
 
 func tagsOf(src []byte) []string {

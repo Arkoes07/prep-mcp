@@ -75,6 +75,25 @@ func TestBatchUnknownTagRejectsAll(t *testing.T) {
 	sameSnapshot(t, before, snapshot(t, e.root))
 }
 
+// A failed op leaves the plan as it was: the next op does not see its change.
+func TestBatchFailedOpLeavesPlanAsItWas(t *testing.T) {
+	e := newEnv(t)
+	ops := []write.Op{
+		write.EditOp(week, "tags: [meta/plan]", "tags: [meta/plan, issue/buries-headlin]"),
+		write.EditOp(week, "issue/buries-headlin", "issue/buries-headline"),
+	}
+
+	_, err := e.w.Batch(ctx, ops, "")
+
+	mustContain(
+		t,
+		err,
+		"2 of 2 ops failed",
+		"op 1 (edit_text "+week+"): "+unknownTagErr,
+		`op 2 (edit_text `+week+`): "issue/buries-headlin" not found`,
+	)
+}
+
 // An op the caller could not build (for example arguments that did not
 // decode) is reported in the same list as the ops that failed their checks.
 func TestBatchFailedOpReportedWithOthers(t *testing.T) {
