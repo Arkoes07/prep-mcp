@@ -93,6 +93,9 @@ func (p *batchPlan) create(d Draft) (*file, []string, error) {
 	if body != "" && !strings.HasSuffix(body, "\n") {
 		body += "\n"
 	}
+	if err := w.checkTags(vault.NormalizeTags(vault.Field(doc, "tags"))); err != nil {
+		return nil, nil, err
+	}
 	data := []byte("---\n" + encode(doc) + "---\n" + body)
 	if _, err := reread(data); err != nil {
 		return nil, nil, fmt.Errorf("internal error: the new frontmatter did not re-read (%w); nothing was written. "+
@@ -107,7 +110,7 @@ func (p *batchPlan) create(d Draft) (*file, []string, error) {
 		return nil, nil, fmt.Errorf("file exists: %s (use append_section or update_frontmatter)", rel)
 	}
 	f.cur, f.exists = data, true
-	return f, w.tagWarnings(vault.NormalizeTags(vault.Field(doc, "tags"))), nil
+	return f, nil, nil
 }
 
 // newFrontmatter builds a new document's frontmatter: type first, then the
@@ -167,7 +170,10 @@ func (w *Writer) patchDoc(old []byte, patch Patch) ([]byte, []string, error) {
 				strings.Join(parts, "; "))
 		}
 	}
-	return next, append(warnings, w.tagWarnings(newTags(oldTags, tagsOf(next)))...), nil
+	if err := w.checkTags(newTags(oldTags, tagsOf(next))); err != nil {
+		return nil, nil, err
+	}
+	return next, warnings, nil
 }
 
 // replace checks a full rewrite of docPath against the file as the batch sees
@@ -210,7 +216,9 @@ func (p *batchPlan) replace(docPath, content, expectedHash string) (*file, []str
 				typ, strings.Join(missing, ", "))
 		}
 	}
-	warnings = append(warnings, p.w.tagWarnings(newTags(tagsOf(f.cur), tagsOf(data)))...)
+	if err := p.w.checkTags(newTags(tagsOf(f.cur), tagsOf(data))); err != nil {
+		return nil, nil, err
+	}
 
 	f.cur = data
 	return f, warnings, nil
@@ -234,26 +242,34 @@ func (w *Writer) commit(ctx context.Context, paths []string, msg string) (string
 	return hash, []string{warning}
 }
 
-// tagWarnings names the closest known tag for each added tag that is not in
-// the vocabulary. Only added tags: warning about tags a human already had
-// would nag on every write. Without a vocabulary there is nothing to check against.
-func (w *Writer) tagWarnings(added []string) []string {
+// checkTags rejects each added tag that is not in the vocabulary, naming the
+// closest known one. Only added tags: rejecting tags a human already had would
+// block every write to that document. Without a vocabulary there is nothing to
+// check against.
+func (w *Writer) checkTags(added []string) error {
+	if len(added) == 0 {
+		return nil
+	}
 	voc, err := w.v.Vocabulary(w.cfg.TagsFile)
 	if err != nil {
-		return []string{fmt.Sprintf("could not read the tag vocabulary, so tags were not checked: %v", err)}
+		return err
 	}
-	var out []string
+	if len(voc.Tags()) == 0 {
+		return nil
+	}
+	var errs []error
 	for _, t := range added {
 		if voc.Known(t) {
 			continue
 		}
-		if closest := voc.Closest(t); closest != "" {
-			out = append(out, fmt.Sprintf(
-				"unknown tag %q; closest known tag: %q (fix it with update_frontmatter add_tags/remove_tags)",
-				t, closest))
-		}
+		errs = append(errs, fmt.Errorf(
+			"unknown tag %q; closest known tag: %q. Use a known tag (list_tags shows them all), or add it to %s first",
+			t,
+			voc.Closest(t),
+			w.cfg.TagsFile,
+		))
 	}
-	return out
+	return errors.Join(errs...)
 }
 
 // reread parses the frontmatter of a file this package built, which must have one.

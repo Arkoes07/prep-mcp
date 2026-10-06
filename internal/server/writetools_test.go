@@ -80,15 +80,21 @@ func TestEachWriteToolAnswers(t *testing.T) {
 	}
 
 	// create_doc keeps the order of the frontmatter keys as sent.
-	made := callOK("create_doc", map[string]any{"type": "learning", "frontmatter": json.RawMessage(`{"track":"ddia","title":"DDIA ch5","tags":["issue/buries-headlin"]}`), "body": "notes"})
+	made := callOK("create_doc", map[string]any{
+		"type":        "learning",
+		"frontmatter": json.RawMessage(`{"track":"ddia","title":"DDIA ch5","tags":["issue/buries-headline"]}`),
+		"body":        "notes",
+	})
 	if made.Path != "learning/ddia-ch5.md" {
 		t.Errorf("create_doc path = %q", made.Path)
 	}
-	if want := "---\ntype: learning\ntrack: ddia\ntitle: DDIA ch5\ntags: [issue/buries-headlin]\ncreated: 2026-01-14\n---\nnotes\n"; read(made.Path) != want {
+	want := "---\ntype: learning\ntrack: ddia\ntitle: DDIA ch5\ntags: [issue/buries-headline]\n" +
+		"created: 2026-01-14\n---\nnotes\n"
+	if read(made.Path) != want {
 		t.Errorf("created file:\n%q\nwant:\n%q", read(made.Path), want)
 	}
-	if len(made.Warnings) != 1 || !strings.Contains(made.Warnings[0], "issue/buries-headline") {
-		t.Errorf("create_doc warnings = %q, want one naming issue/buries-headline", made.Warnings)
+	if len(made.Warnings) != 0 {
+		t.Errorf("create_doc warnings = %q, want none", made.Warnings)
 	}
 
 	callOK("append_section", map[string]any{"path": "weeks/2026-w03.md", "heading": "Log", "content": "- Tue: x"})
@@ -127,6 +133,12 @@ func TestWriteErrorsAreToolResultsWithHints(t *testing.T) {
 		{"exists", "create_doc", map[string]any{"type": "week", "frontmatter": map[string]any{"week": "2026-W03"}}, []string{"file exists: weeks/2026-w03.md", "append_section"}},
 		{"stale_hash", "replace_doc", map[string]any{"path": "weeks/2026-w03.md", "content": "---\ntype: week\nweek: 2026-W03\n---\n", "expected_hash": "abc"}, []string{"re-read with read_doc, merge, retry"}},
 		{"no_hash", "replace_doc", map[string]any{"path": "weeks/2026-w03.md", "content": "x", "expected_hash": ""}, []string{"expected_hash is required"}},
+		{
+			"unknown_tag",
+			"update_frontmatter",
+			map[string]any{"path": "weeks/2026-w03.md", "add_tags": []string{"issue/buries-headlin"}},
+			[]string{`unknown tag "issue/buries-headlin"`, "list_tags shows them all"},
+		},
 		{"set_not_object", "update_frontmatter", map[string]any{"path": "weeks/2026-w03.md", "add_tags": []string{"a"}, "set": map[string]any{"tags": []string{"b"}}}, []string{"set.tags cannot be combined"}},
 	}
 	for _, tc := range tests {
@@ -159,7 +171,7 @@ func TestBatchTool(t *testing.T) {
 	ops := []any{
 		batchOp("create_doc", map[string]any{
 			"type":        "learning",
-			"frontmatter": json.RawMessage(`{"track":"ddia","title":"DDIA ch5","tags":["issue/buries-headlin"]}`),
+			"frontmatter": json.RawMessage(`{"track":"ddia","title":"DDIA ch5","tags":["issue/buries-headline"]}`),
 			"body":        "notes",
 		}),
 		batchOp("append_section", map[string]any{"path": "weeks/2026-w03.md", "heading": "Log", "content": "- Tue: x"}),
@@ -204,14 +216,14 @@ func TestBatchTool(t *testing.T) {
 	if got.Warnings == nil || strings.Contains(out, `"commit"`) {
 		t.Errorf("want warnings [] and no commit without git:\n%s", out)
 	}
-	if w := got.Results[0].Warnings; len(w) != 1 || !strings.Contains(w[0], "issue/buries-headline") {
-		t.Errorf("create_doc op warnings = %q, want one naming issue/buries-headline", w)
+	if w := got.Results[0].Warnings; len(w) != 0 {
+		t.Errorf("create_doc op warnings = %q, want none", w)
 	}
 	created, err := os.ReadFile(filepath.Join(root, "learning/ddia-ch5.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantCreated := "---\ntype: learning\ntrack: ddia\ntitle: DDIA ch5\ntags: [issue/buries-headlin]\n" +
+	wantCreated := "---\ntype: learning\ntrack: ddia\ntitle: DDIA ch5\ntags: [issue/buries-headline]\n" +
 		"created: 2026-01-14\n---\nnotes\n"
 	if string(created) != wantCreated {
 		t.Errorf("created file:\n%q\nwant (frontmatter keys in the order sent):\n%q", created, wantCreated)

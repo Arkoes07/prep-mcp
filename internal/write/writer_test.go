@@ -16,6 +16,11 @@ import (
 
 var ctx = context.Background()
 
+// unknownTagErr is the error for adding issue/buries-headlin, one edit away
+// from a tag in the example vocabulary.
+const unknownTagErr = `unknown tag "issue/buries-headlin"; closest known tag: "issue/buries-headline". ` +
+	"Use a known tag (list_tags shows them all), or add it to tags.md first"
+
 func hasWarning(res *write.Result, fragment string) bool {
 	for _, w := range res.Warnings {
 		if strings.Contains(w, fragment) {
@@ -38,8 +43,7 @@ func TestWriterCreate(t *testing.T) {
 		name, typ, fm, body, slug string
 		setup                     func(*env)
 		wantPath, wantBytes       string
-		wantWarn                  string // a warning containing this; "" means no warnings at all
-		newFolder                 bool   // the target folder must not exist before the call
+		newFolder                 bool // the target folder must not exist before the call
 	}{
 		{
 			name: "happy", typ: "learning", fm: `{"title":"DDIA ch5","track":"ddia"}`, body: "x",
@@ -73,11 +77,6 @@ func TestWriterCreate(t *testing.T) {
 		{
 			name: "tags_normalised", typ: "learning", fm: `{"title":"T","track":"k","tags":"Q/Failure,  Meta/Plan"}`,
 			wantPath: "learning/t.md", wantBytes: head + "title: T\ntrack: k\ntags: [q/failure, meta/plan]\n" + created,
-		},
-		{
-			name: "unknown_tag", typ: "learning", fm: `{"title":"T","track":"k","tags":["issue/buries-headlin"]}`,
-			wantPath: "learning/t.md", wantBytes: head + "title: T\ntrack: k\ntags: [issue/buries-headlin]\n" + created,
-			wantWarn: "issue/buries-headline",
 		},
 		{
 			name: "known_tag", typ: "learning", fm: `{"title":"T","track":"k","tags":["issue/buries-headline"]}`,
@@ -122,11 +121,8 @@ func TestWriterCreate(t *testing.T) {
 			if want := vault.Hash([]byte(tc.wantBytes)); res.Hash != want {
 				t.Errorf("hash = %s, want %s", res.Hash, want)
 			}
-			switch {
-			case tc.wantWarn == "" && len(res.Warnings) > 0:
+			if len(res.Warnings) > 0 {
 				t.Errorf("warnings = %q, want none", res.Warnings)
-			case tc.wantWarn != "" && !hasWarning(res, tc.wantWarn):
-				t.Errorf("warnings = %q, want one containing %q", res.Warnings, tc.wantWarn)
 			}
 			if left := leftovers(t, e.root); len(left) > 0 {
 				t.Errorf("temp files left behind: %v", left)
@@ -147,6 +143,10 @@ func TestWriterCreate(t *testing.T) {
 		{name: "type_conflict", typ: "learning", fm: `{"type":"week","title":"T","track":"k"}`, wantErr: []string{"type", "week", "learning"}},
 		{name: "exists", typ: "improvement", fm: `{"status":"open","exit_criteria":"x"}`, slug: "buries-headline", wantExists: "improvements/buries-headline.md"},
 		{name: "week_exists", typ: "week", fm: `{"week":"2026-W03"}`, wantExists: "weeks/2026-w03.md"},
+		{
+			name: "unknown_tag", typ: "learning", fm: `{"title":"T","track":"k","tags":["issue/buries-headlin"]}`,
+			wantErr: []string{unknownTagErr},
+		},
 	}
 	for _, tc := range fail {
 		t.Run(tc.name, func(t *testing.T) {
@@ -257,18 +257,12 @@ func TestWriterUpdate(t *testing.T) {
 		sameSnapshot(t, before, snapshot(t, e.root))
 	})
 
-	t.Run("unknown_tag_names_closest", func(t *testing.T) {
+	t.Run("unknown_tag_rejected", func(t *testing.T) {
 		e := newEnv(t)
-		res, err := e.w.Apply(ctx, write.PatchOp(p, write.Patch{AddTags: []string{"issue/buries-headlin"}}))
-		if err != nil {
-			t.Fatalf("UpdateFrontmatter: %v", err)
-		}
-		if !hasWarning(res, "issue/buries-headline") {
-			t.Errorf("warnings = %q, want one naming issue/buries-headline", res.Warnings)
-		}
-		if got := e.read(t, p); !strings.Contains(got, "tags: [issue/buries-headlin]\n") {
-			t.Errorf("tag not added:\n%s", got)
-		}
+		before := snapshot(t, e.root)
+		_, err := e.w.Apply(ctx, write.PatchOp(p, write.Patch{AddTags: []string{"issue/buries-headlin"}}))
+		mustContain(t, err, unknownTagErr)
+		sameSnapshot(t, before, snapshot(t, e.root))
 	})
 
 	t.Run("noop_writes_nothing", func(t *testing.T) {
@@ -376,6 +370,11 @@ func TestWriterReplace(t *testing.T) {
 		{name: "invalid_yaml", path: p, content: "---\ntype: [x\n---\n", wantErr: []string{"frontmatter"}},
 		{name: "drops_required", path: p, content: "---\ntype: week\n---\nbody\n", wantErr: []string{"missing required fields for week: week"}},
 		{name: "templates_path", path: "templates/week.md", content: "---\ntype: week\nweek: 2026-W09\n---\n", wantErr: []string{"templates/ is read-only"}},
+		{
+			name: "unknown_tag", path: p,
+			content: "---\ntype: week\nweek: 2026-W03\ntags: [issue/buries-headlin]\n---\nbody\n",
+			wantErr: []string{unknownTagErr},
+		},
 	}
 	for _, tc := range rejected {
 		t.Run(tc.name, func(t *testing.T) {
@@ -391,7 +390,6 @@ func TestWriterReplace(t *testing.T) {
 	accepted := []struct {
 		name, content, wantWarn string
 	}{
-		{name: "unknown_tag", content: "---\ntype: week\nweek: 2026-W03\ntags: [issue/buries-headlin]\n---\nbody\n", wantWarn: "issue/buries-headline"},
 		{name: "drops_frontmatter", content: "# Just notes\n", wantWarn: "will no longer appear in queries"},
 	}
 	for _, tc := range accepted {
@@ -409,5 +407,22 @@ func TestWriterReplace(t *testing.T) {
 				t.Errorf("file:\n%q\nwant:\n%q", e.read(t, p), tc.content)
 			}
 		})
+	}
+}
+
+// Only tags a write adds are checked: a tag a human already put on the
+// document passes through a replace untouched.
+func TestWriterReplaceKeepsExistingUnknownTag(t *testing.T) {
+	const p = "weeks/2026-w03.md"
+	e := newEnv(t)
+	tagged := "---\ntype: week\nweek: 2026-W03\ntags: [issue/buries-headlin]\n---\nbody\n"
+	testvault.Write(t, e.root, p, tagged)
+
+	next := tagged + "more\n"
+	if _, err := e.w.Apply(ctx, write.ReplaceOp(p, next, vault.Hash([]byte(tagged)))); err != nil {
+		t.Fatalf("Replace: %v", err)
+	}
+	if e.read(t, p) != next {
+		t.Errorf("file:\n%q\nwant:\n%q", e.read(t, p), next)
 	}
 }

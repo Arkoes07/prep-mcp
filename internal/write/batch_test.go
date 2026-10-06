@@ -60,6 +60,21 @@ func TestBatchInvalidOpsWriteNothing(t *testing.T) {
 	sameSnapshot(t, before, snapshot(t, e.root))
 }
 
+// An unknown tag fails its op, so the whole batch writes nothing.
+func TestBatchUnknownTagRejectsAll(t *testing.T) {
+	e := newEnv(t)
+	before := snapshot(t, e.root)
+	ops := []write.Op{
+		statusOp(t, headline, "improving"),
+		noteOp(t, `{"title":"DDIA ch5","track":"ddia","tags":["issue/buries-headlin"]}`),
+	}
+
+	_, err := e.w.Batch(ctx, ops, "")
+
+	mustContain(t, err, "1 of 2 ops failed", "op 2 (create_doc learning): "+unknownTagErr)
+	sameSnapshot(t, before, snapshot(t, e.root))
+}
+
 // An op the caller could not build (for example arguments that did not
 // decode) is reported in the same list as the ops that failed their checks.
 func TestBatchFailedOpReportedWithOthers(t *testing.T) {
@@ -209,8 +224,9 @@ func TestBatchResults(t *testing.T) {
 	e := newEnv(t)
 	ops := []write.Op{
 		statusOp(t, headline, "improving"),
-		noteOp(t, `{"title":"DDIA ch5","track":"ddia","tags":["issue/missing-tradof"]}`),
-		statusOp(t, tradeoff, "improving"), // already improving: nothing to write
+		noteOp(t, `{"title":"DDIA ch5","track":"ddia","tags":["issue/missing-tradeoff"]}`),
+		// Nothing to write, and a warning that the tag was not there.
+		write.PatchOp(tradeoff, write.Patch{RemoveTags: []string{"meta/plan"}}),
 	}
 
 	res, err := e.w.Batch(ctx, ops, "")
@@ -227,11 +243,10 @@ func TestBatchResults(t *testing.T) {
 			t.Errorf("result %d = %s %s, want %s with the hash of the file on disk", i, r.Path, r.Hash, want)
 		}
 	}
-	firstQuiet := len(res.Results[0].Warnings) == 0
-	secondWarns := hasWarning(&res.Results[1], `closest known tag: "issue/missing-tradeoff"`)
-	if !firstQuiet || !secondWarns {
-		t.Errorf("warnings = %q / %q, want only the second op's tag warning",
-			res.Results[0].Warnings, res.Results[1].Warnings)
+	quiet := len(res.Results[0].Warnings) == 0 && len(res.Results[1].Warnings) == 0
+	if !quiet || !hasWarning(&res.Results[2], `tag "meta/plan" is not on this document`) {
+		t.Errorf("warnings = %q / %q / %q, want only the third op's warning",
+			res.Results[0].Warnings, res.Results[1].Warnings, res.Results[2].Warnings)
 	}
 	if res.Commit != "" || len(res.Warnings) != 0 {
 		t.Errorf("commit = %q, warnings = %q; want neither without git", res.Commit, res.Warnings)

@@ -179,6 +179,22 @@ func TestGitDisabled(t *testing.T) {
 	}
 }
 
+func TestGitNoCommitOnUnknownTag(t *testing.T) {
+	e := newGitEnv(t, gitTimeout)
+	initRepo(t, e.root)
+	before := commitCount(t, e.root)
+
+	_, err := e.w.Apply(ctx, write.PatchOp(
+		"improvements/buries-headline.md",
+		write.Patch{AddTags: []string{"issue/buries-headlin"}},
+	))
+
+	mustContain(t, err, unknownTagErr)
+	if got := commitCount(t, e.root); got != before {
+		t.Errorf("commit count = %s, want %s: a rejected write must not commit", got, before)
+	}
+}
+
 func TestGitCommit(t *testing.T) {
 	e := newGitEnv(t, gitTimeout)
 	initRepo(t, e.root)

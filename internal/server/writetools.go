@@ -52,7 +52,8 @@ func registerWriteTools(s *mcp.Server, h *handlers) {
 			"set.tags cannot be combined with add_tags/remove_tags. " +
 			"To clear a field, use unset; set with \"\" keeps the key with an empty value, " +
 			"which where filters treat differently from a missing key. " +
-			"A patch that changes nothing writes nothing. Returns path, new hash and warnings such as unknown tags.",
+			"Adding a tag missing from the vocabulary file fails, naming the closest known tag. " +
+			"A patch that changes nothing writes nothing. Returns path, new hash and warnings.",
 		Annotations: additive,
 	}, writeTool[updateFrontmatterIn](h, write.ToolPatch))
 
@@ -98,7 +99,8 @@ func createDocDescription(cfg *config.Config) string {
 		"Fails if the file already exists (the error names it). Sets created to today if absent. " +
 		"Required fields must be present and not empty. " +
 		"tags may be a list or a comma-separated string; " +
-		"unknown tags produce a warning naming the closest known tag. Returns path, hash, warnings and commit.\n")
+		"a tag missing from the vocabulary file fails the call, naming the closest known tag. " +
+		"Returns path, hash, warnings and commit.\n")
 	names := cfg.TypeNames()
 	if len(names) == 0 {
 		b.WriteString("No types are configured: add a types: section to prep.config.yaml and restart the server.")

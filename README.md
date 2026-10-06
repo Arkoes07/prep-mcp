@@ -158,17 +158,16 @@ The application is dated by its `applied` field and lists its next action, becau
 
 **"Add '- Fri: mock, headline first' to this week's log."** calls `append_section`, which adds the line at the end of the existing `## Log` section.
 
-**"Log a deep-dive session on the checkout rewrite for 2026-01-16, tagged issue/missing-tradof."** calls `create_doc`. The path comes from the type's filename pattern, and the typo in the tag is caught:
-
-```json
-{"path":"sessions/2026-01-16-deep-dive-checkout-rewrite.md","hash":"ce856d0a9930d0356ddcc5b55162e90c4df7bb005331447b583f2e8c116544cf","warnings":["unknown tag \"issue/missing-tradof\"; closest known tag: \"issue/missing-tradeoff\" (fix it with update_frontmatter add_tags/remove_tags)"],"commit":"f55405e"}
-```
-
-Each of those writes is its own commit:
+**"Log a deep-dive session on the checkout rewrite for 2026-01-16, tagged issue/missing-tradof."** calls `create_doc`. The typo in the tag is caught, and nothing is written or committed:
 
 ```text
-$ git -C ~/prep-demo log --format='%h | %an | %s' -3
-f55405e | Claude | create_doc: sessions/2026-01-16-deep-dive-checkout-rewrite.md
+unknown tag "issue/missing-tradof"; closest known tag: "issue/missing-tradeoff". Use a known tag (list_tags shows them all), or add it to tags.md first
+```
+
+Each write that succeeds is its own commit:
+
+```text
+$ git -C ~/prep-demo log --format='%h | %an | %s' -2
 13cbe6e | Claude | append_section: weeks/2026-w03.md
 e4b41e9 | Claude | update_frontmatter: improvements/buries-headline.md
 ```
