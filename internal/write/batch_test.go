@@ -162,6 +162,22 @@ func TestBatchSamePathInOrder(t *testing.T) {
 		}
 	})
 
+	t.Run("append_then_edit", func(t *testing.T) {
+		e := newEnv(t)
+		ops := []write.Op{
+			write.AppendOp(week, "Log", "- Tue: x"),
+			write.EditOp(week, "- Tue: x", "- Tue: mock, headline first"),
+		}
+
+		if _, err := e.w.Batch(ctx, ops, ""); err != nil {
+			t.Fatal(err)
+		}
+
+		if got := e.read(t, week); !strings.HasSuffix(got, "headline late\n- Tue: mock, headline first\n") {
+			t.Errorf("file:\n%s\nwant the appended line, then edited", got)
+		}
+	})
+
 	t.Run("replace_must_come_first", func(t *testing.T) {
 		e := newEnv(t)
 		before := snapshot(t, e.root)

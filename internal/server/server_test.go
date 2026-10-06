@@ -100,6 +100,7 @@ func TestToolSet(t *testing.T) {
 		"append_section",
 		"batch",
 		"create_doc",
+		"edit_text",
 		"get_context",
 		"list_docs",
 		"list_tags",

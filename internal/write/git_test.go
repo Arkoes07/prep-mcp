@@ -227,6 +227,9 @@ func TestGitEachTool(t *testing.T) {
 			patch := write.Patch{Set: node(t, `{"status":"improving"}`)}
 			return e.w.Apply(ctx, write.PatchOp("improvements/buries-headline.md", patch))
 		}},
+		{"edit_text: weeks/2026-w03.md", "weeks/2026-w03.md", func(t *testing.T) (*write.Result, error) {
+			return e.w.Apply(ctx, write.EditOp("weeks/2026-w03.md", "- Tue: x", "- Tue: y"))
+		}},
 		{"replace_doc: learning/ddia-ch5.md", "learning/ddia-ch5.md", func(t *testing.T) (*write.Result, error) {
 			old := e.read(t, "learning/ddia-ch5.md")
 			return e.w.Apply(ctx, write.ReplaceOp("learning/ddia-ch5.md", old+"more\n", vault.Hash([]byte(old))))

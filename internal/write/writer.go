@@ -3,6 +3,7 @@
 package write
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -198,11 +199,63 @@ func (p *batchPlan) replace(docPath, content, expectedHash string) (*file, []str
 	}
 
 	data := []byte(content)
-	var warnings []string
-	fm, err := vault.SplitFrontmatter(data)
+	warnings, err := p.w.checkRewrite(f.cur, data)
 	if err != nil {
 		return nil, nil, err
 	}
+	f.cur = data
+	return f, warnings, nil
+}
+
+// edit replaces the one occurrence of old in docPath with replacement. It
+// needs no hash: if the text changed under the caller, old does not match.
+func (p *batchPlan) edit(docPath, old, replacement string) (*file, []string, error) {
+	if old == "" {
+		return nil, nil, errors.New("old is empty; pass the exact text to replace, copied from read_doc")
+	}
+	f, err := p.existing(docPath)
+	if err != nil {
+		return nil, nil, err
+	}
+	switch n := bytes.Count(f.cur, []byte(old)); n {
+	case 0:
+		return nil, nil, fmt.Errorf("%q not found in %s; read_doc it and copy the text exactly", old, f.rel)
+	case 1:
+	default:
+		return nil, nil, fmt.Errorf(
+			"%q appears %d times in %s; include more surrounding text so it matches once",
+			old,
+			n,
+			f.rel,
+		)
+	}
+	data := bytes.Replace(f.cur, []byte(old), []byte(replacement), 1)
+	// A parse error first: broken frontmatter would otherwise read as a type change.
+	if _, err := vault.SplitFrontmatter(data); err != nil {
+		return nil, nil, err
+	}
+	// Unlike replace_doc, an edit is a small change: one that alters the type is a mistake.
+	if before, after := typeOf(f.cur), typeOf(data); before != after {
+		return nil, nil, fmt.Errorf("this edit changes the type %q to %q; keep the frontmatter's type line as it is",
+			before, after)
+	}
+	warnings, err := p.w.checkRewrite(f.cur, data)
+	if err != nil {
+		return nil, nil, err
+	}
+	f.cur = data
+	return f, warnings, nil
+}
+
+// checkRewrite checks new content for a file that held before: valid
+// frontmatter, the type's required fields, and known tags for added ones.
+// Content without a typed frontmatter passes with a warning.
+func (w *Writer) checkRewrite(before, data []byte) ([]string, error) {
+	fm, err := vault.SplitFrontmatter(data)
+	if err != nil {
+		return nil, err
+	}
+	var warnings []string
 	typ := ""
 	if fm != nil {
 		typ = vault.FieldText(fm.Map, "type")
@@ -210,18 +263,16 @@ func (p *batchPlan) replace(docPath, content, expectedHash string) (*file, []str
 	if typ == "" {
 		warnings = append(warnings, "the new content has no frontmatter with a type, "+
 			"so this document will no longer appear in queries (list_docs, search_text, get_context)")
-	} else if spec, ok := p.w.cfg.Types[typ]; ok {
+	} else if spec, ok := w.cfg.Types[typ]; ok {
 		if missing := missingFields(spec.Required, fm.Map); len(missing) > 0 {
-			return nil, nil, fmt.Errorf("missing required fields for %s: %s; keep them in the frontmatter",
+			return nil, fmt.Errorf("missing required fields for %s: %s; keep them in the frontmatter",
 				typ, strings.Join(missing, ", "))
 		}
 	}
-	if err := p.w.checkTags(newTags(tagsOf(f.cur), tagsOf(data))); err != nil {
-		return nil, nil, err
+	if err := w.checkTags(newTags(tagsOf(before), tagsOf(data))); err != nil {
+		return nil, err
 	}
-
-	f.cur = data
-	return f, warnings, nil
+	return warnings, nil
 }
 
 // commit commits paths with msg when commits are on and anything was written,
@@ -282,6 +333,15 @@ func reread(src []byte) (*vault.Frontmatter, error) {
 		return nil, errors.New("no frontmatter found")
 	}
 	return fm, nil
+}
+
+// typeOf returns the type in src's frontmatter, or "" if it has none.
+func typeOf(src []byte) string {
+	fm, err := vault.SplitFrontmatter(src)
+	if err != nil || fm == nil {
+		return ""
+	}
+	return vault.FieldText(fm.Map, "type")
 }
 
 func tagsOf(src []byte) []string {

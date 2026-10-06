@@ -426,3 +426,75 @@ func TestWriterReplaceKeepsExistingUnknownTag(t *testing.T) {
 		t.Errorf("file:\n%q\nwant:\n%q", e.read(t, p), next)
 	}
 }
+
+func TestWriterEdit(t *testing.T) {
+	const p = "weeks/2026-w03.md"
+
+	t.Run("one_match", func(t *testing.T) {
+		e := newEnv(t)
+		orig := e.read(t, p)
+		res, err := e.w.Apply(ctx, write.EditOp(p, "headline late", "headline first"))
+		if err != nil {
+			t.Fatalf("Edit: %v", err)
+		}
+		want := strings.Replace(orig, "headline late", "headline first", 1)
+		if got := e.read(t, p); got != want {
+			t.Errorf("file:\n%q\nwant:\n%q", got, want)
+		}
+		if res.Hash != vault.Hash([]byte(want)) {
+			t.Errorf("hash = %s, want sha256 of the new content", res.Hash)
+		}
+	})
+
+	t.Run("empty_new_deletes", func(t *testing.T) {
+		e := newEnv(t)
+		orig := e.read(t, p)
+		if _, err := e.w.Apply(ctx, write.EditOp(p, "- Mon: deep dive, headline late\n", "")); err != nil {
+			t.Fatalf("Edit: %v", err)
+		}
+		if got, want := e.read(t, p), strings.TrimSuffix(orig, "- Mon: deep dive, headline late\n"); got != want {
+			t.Errorf("file:\n%q\nwant:\n%q", got, want)
+		}
+	})
+
+	t.Run("frontmatter_text", func(t *testing.T) {
+		e := newEnv(t)
+		op := write.EditOp(p, "focus: [Headline first,", "focus: [Lead with impact,")
+		if _, err := e.w.Apply(ctx, op); err != nil {
+			t.Fatalf("Edit: %v", err)
+		}
+		if got := e.read(t, p); !strings.Contains(got, "focus: [Lead with impact, State the cost]\n") {
+			t.Errorf("file:\n%s", got)
+		}
+	})
+
+	// Every row must leave the vault exactly as it was.
+	rejected := []struct {
+		name, old, replacement string
+		wantErr                []string
+	}{
+		{
+			"not_found", "headline early", "x",
+			[]string{`"headline early" not found in ` + p + `; read_doc it and copy the text exactly`},
+		},
+		{
+			"several", "Mon", "x",
+			[]string{`"Mon" appears 2 times in ` + p + `; include more surrounding text so it matches once`},
+		},
+		{"empty_old", "", "x", []string{"old is empty"}},
+		{"breaks_frontmatter", "focus: [Headline first, State the cost]", "focus: [x", []string{"invalid frontmatter"}},
+		{"removes_required", "week: 2026-W03\n", "", []string{"missing required fields for week: week"}},
+		{"changes_type", "type: week", "type: learning", []string{`type "week" to "learning"`}},
+		{"removes_frontmatter", "---\ntype: week", "type: week", []string{`type "week" to ""`}},
+		{"unknown_tag", "tags: [meta/plan]", "tags: [meta/plan, issue/buries-headlin]", []string{unknownTagErr}},
+	}
+	for _, tc := range rejected {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv(t)
+			before := snapshot(t, e.root)
+			_, err := e.w.Apply(ctx, write.EditOp(p, tc.old, tc.replacement))
+			mustContain(t, err, tc.wantErr...)
+			sameSnapshot(t, before, snapshot(t, e.root))
+		})
+	}
+}

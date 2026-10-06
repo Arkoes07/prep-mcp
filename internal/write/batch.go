@@ -31,11 +31,12 @@ const (
 	ToolAppend  = "append_section"
 	ToolPatch   = "update_frontmatter"
 	ToolReplace = "replace_doc"
+	ToolEdit    = "edit_text"
 )
 
 // Op is one write: the tool it stands for, what it targets (a path, or the
 // type for create_doc) and how it changes a plan. Build it with CreateOp,
-// AppendOp, PatchOp, ReplaceOp or FailedOp, and run it with Apply or Batch.
+// AppendOp, PatchOp, ReplaceOp, EditOp or FailedOp, and run it with Apply or Batch.
 type Op struct {
 	tool, target string
 	apply        func(p *batchPlan) (*file, []string, error)
@@ -74,6 +75,14 @@ func PatchOp(path string, patch Patch) Op {
 func ReplaceOp(path, content, expectedHash string) Op {
 	return Op{tool: ToolReplace, target: path, apply: func(p *batchPlan) (*file, []string, error) {
 		return p.replace(path, content, expectedHash)
+	}}
+}
+
+// EditOp replaces the one occurrence of old in a file with replacement. An
+// empty replacement deletes it.
+func EditOp(path, old, replacement string) Op {
+	return Op{tool: ToolEdit, target: path, apply: func(p *batchPlan) (*file, []string, error) {
+		return p.edit(path, old, replacement)
 	}}
 }
 

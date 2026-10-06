@@ -107,6 +107,11 @@ func TestEachWriteToolAnswers(t *testing.T) {
 		t.Errorf("update_frontmatter result:\n%s", got)
 	}
 
+	callOK("edit_text", map[string]any{"path": "weeks/2026-w03.md", "old": "- Tue: x", "new": "- Tue: mock"})
+	if got := read("weeks/2026-w03.md"); !strings.HasSuffix(got, "- Tue: mock\n") {
+		t.Errorf("edit_text result:\n%s", got)
+	}
+
 	out, _ := call(t, cs, "read_doc", map[string]any{"path": "weeks/2026-w03.md"})
 	hash := regexp.MustCompile(`hash: ([0-9a-f]{64})`).FindStringSubmatch(out)[1]
 	content := read("weeks/2026-w03.md") + "- Wed: y\n"
@@ -132,6 +137,12 @@ func TestWriteErrorsAreToolResultsWithHints(t *testing.T) {
 		{"unknown_type", "create_doc", map[string]any{"type": "nope", "frontmatter": map[string]any{}}, []string{"configured types:", "improvement"}},
 		{"exists", "create_doc", map[string]any{"type": "week", "frontmatter": map[string]any{"week": "2026-W03"}}, []string{"file exists: weeks/2026-w03.md", "append_section"}},
 		{"stale_hash", "replace_doc", map[string]any{"path": "weeks/2026-w03.md", "content": "---\ntype: week\nweek: 2026-W03\n---\n", "expected_hash": "abc"}, []string{"re-read with read_doc, merge, retry"}},
+		{
+			"edit_not_found",
+			"edit_text",
+			map[string]any{"path": "weeks/2026-w03.md", "old": "nope", "new": "x"},
+			[]string{"read_doc it and copy the text exactly"},
+		},
 		{"no_hash", "replace_doc", map[string]any{"path": "weeks/2026-w03.md", "content": "x", "expected_hash": ""}, []string{"expected_hash is required"}},
 		{
 			"unknown_tag",
@@ -262,7 +273,7 @@ func TestBatchToolErrors(t *testing.T) {
 			want: []string{
 				"1 of 2 ops failed",
 				`op 2 (delete_doc): unknown tool "delete_doc"`,
-				"create_doc, append_section, update_frontmatter or replace_doc",
+				"create_doc, append_section, update_frontmatter, replace_doc or edit_text",
 			},
 		},
 		{

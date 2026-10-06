@@ -201,8 +201,9 @@ ae0dfba | Claude | batch: 2 append_section, 1 update_frontmatter
 | `create_doc` | New file at the path its type defines |
 | `append_section` | Append under a heading |
 | `update_frontmatter` | Change fields or tags, body untouched |
+| `edit_text` | Replace one exact piece of text, for small fixes |
 | `replace_doc` | Full rewrite, rejected if the file changed since you read it |
-| `batch` | Up to 200 of the four writes above in one call: all or nothing, one commit |
+| `batch` | Up to 200 of the five writes above in one call: all or nothing, one commit |
 
 See [docs/adr](docs/adr/) for why each of these exists and what it costs.
 

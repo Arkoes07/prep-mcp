@@ -14,7 +14,7 @@ import (
 	"github.com/Arkoes07/prep-mcp/internal/write"
 )
 
-// registerWriteTools adds the four write tools and batch. Each write tool is a
+// registerWriteTools adds the five write tools and batch. Each write tool is a
 // batch of one: buildOp turns its arguments into the op. Their descriptions
 // are what the model sees, so create_doc's is generated from the config: the
 // model never has to read the config file.
@@ -64,11 +64,26 @@ func registerWriteTools(s *mcp.Server, h *handlers) {
 			"If the file changed since (someone edited it), " +
 			"nothing is written and the error carries the current hash: " +
 			"re-read with read_doc, merge the changes, and retry. " +
-			"Prefer append_section or update_frontmatter for small changes. " +
+			"Prefer append_section or update_frontmatter for small changes, and edit_text to change a few words. " +
 			"The new content must keep valid frontmatter and the type's required fields. " +
 			"Returns path, new hash and warnings.",
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes, OpenWorldHint: &no},
 	}, writeTool[replaceDocIn](h, write.ToolReplace))
+
+	mcp.AddTool(s, &mcp.Tool{
+		Name:  write.ToolEdit,
+		Title: "Edit text in a document",
+		Description: "Replace one exact piece of text in a file with new text: " +
+			"for small fixes in the body or in the frontmatter's text, instead of a whole replace_doc. " +
+			"append_section and update_frontmatter remain the default ways to add text and change fields. " +
+			"old must appear exactly once in the file, byte for byte as read_doc showed it; " +
+			"if it is missing or appears several times, nothing is written and the error says which. " +
+			"An empty new deletes old. No hash is needed: if the file changed, old simply does not match. " +
+			"The result must keep valid frontmatter, the type and its required fields; " +
+			"an added tag missing from the vocabulary file fails. " +
+			"Returns path, new hash, warnings and commit.",
+		Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes, OpenWorldHint: &no},
+	}, writeTool[editTextIn](h, write.ToolEdit))
 
 	mcp.AddTool(s, &mcp.Tool{
 		Name:  "batch",
@@ -239,7 +254,22 @@ func decodeReplace(args json.RawMessage) (write.Op, error) {
 	return write.ReplaceOp(in.Path, in.Content, in.ExpectedHash), nil
 }
 
-const batchTools = write.ToolCreate + ", " + write.ToolAppend + ", " + write.ToolPatch + " or " + write.ToolReplace
+type editTextIn struct {
+	Path string `json:"path" jsonschema:"Vault-relative path of an existing .md file."`
+	Old  string `json:"old" jsonschema:"The exact text to replace, copied from read_doc. Must appear once."`
+	New  string `json:"new" jsonschema:"The text to put in its place. Empty deletes old."`
+}
+
+func decodeEdit(args json.RawMessage) (write.Op, error) {
+	var in editTextIn
+	if err := decodeArgs(write.ToolEdit, args, &in); err != nil {
+		return write.Op{}, err
+	}
+	return write.EditOp(in.Path, in.Old, in.New), nil
+}
+
+const batchTools = write.ToolCreate + ", " + write.ToolAppend + ", " + write.ToolPatch + ", " +
+	write.ToolReplace + " or " + write.ToolEdit
 
 // The jsonschema tags are argument descriptions and cannot be split; see listDocsIn.
 type batchIn struct {
@@ -248,7 +278,7 @@ type batchIn struct {
 }
 
 type batchOpIn struct {
-	Tool string         `json:"tool" jsonschema:"create_doc, append_section, update_frontmatter or replace_doc."`
+	Tool string         `json:"tool" jsonschema:"create_doc, append_section, update_frontmatter, replace_doc or edit_text."`
 	Args map[string]any `json:"args" jsonschema:"That tool's arguments, exactly as the tool itself takes them."`
 }
 
@@ -295,6 +325,8 @@ func buildOp(tool string, args json.RawMessage) write.Op {
 		op, err = decodePatch(args)
 	case write.ToolReplace:
 		op, err = decodeReplace(args)
+	case write.ToolEdit:
+		op, err = decodeEdit(args)
 	default:
 		err = fmt.Errorf("unknown tool %q; use %s", tool, batchTools)
 	}
