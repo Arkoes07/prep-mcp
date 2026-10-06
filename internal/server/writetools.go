@@ -50,6 +50,7 @@ func registerWriteTools(s *mcp.Server, h *handlers) {
 			"add_tags / remove_tags: change the tag list. " +
 			"updated is set to today. Required fields cannot be removed or emptied and type cannot be unset. " +
 			"set.tags cannot be combined with add_tags/remove_tags. " +
+			"To clear a field, use unset; set with \"\" keeps the key with an empty value, which where filters treat differently from a missing key. " +
 			"A patch that changes nothing writes nothing. Returns path, new hash and warnings such as unknown tags.",
 		Annotations: additive,
 	}, writeTool[updateFrontmatterIn](h, write.ToolPatch))
@@ -81,7 +82,7 @@ func registerWriteTools(s *mcp.Server, h *handlers) {
 			"and every failure is listed by op number. " +
 			fmt.Sprintf("At most %d ops per call. ", write.MaxBatchOps) +
 			"message: the commit message (default: the number of ops per tool). " +
-			"Returns per op the path, new hash and warnings, then the commit and its warnings.",
+			"Returns per op the path and the file's hash after the whole batch, its warnings, then the commit and its warnings.",
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes, OpenWorldHint: &no},
 	}, guard("batch", h.batch))
 }
