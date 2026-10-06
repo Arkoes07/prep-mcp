@@ -188,6 +188,10 @@ func TestTextSteersWritesToTheVault(t *testing.T) {
 	if d := toolDescription(t, cs, "batch"); !strings.Contains(d, "not shell commands or file edits") {
 		t.Errorf("batch description should say to use it instead of editing the files directly:\n%s", d)
 	}
+	// A model that turns [[x]] into x.md gets a root path, not the file the link names.
+	if d := toolDescription(t, cs, "read_doc"); !strings.Contains(d, "Do not build a path by adding .md to a name") {
+		t.Errorf("read_doc description should say a name plus .md is read as a root path:\n%s", d)
+	}
 	for _, tool := range []string{"create_doc", "append_section"} {
 		res, err := cs.ListTools(context.Background(), nil)
 		if err != nil {
