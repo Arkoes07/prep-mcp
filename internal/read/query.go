@@ -6,8 +6,6 @@ import (
 	"slices"
 	"strings"
 	"time"
-
-	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -90,7 +88,7 @@ func matches(d *Doc, f Filter) bool {
 		return false
 	}
 	for key, want := range f.Where {
-		if !fieldMatches(d.Fields[key], want) {
+		if !slices.ContainsFunc(d.Texts(key), func(t string) bool { return slices.Contains(want, t) }) {
 			return false
 		}
 	}
@@ -102,25 +100,6 @@ func matches(d *Doc, f Filter) bool {
 		return false
 	}
 	return true
-}
-
-// fieldMatches compares a frontmatter value with the wanted texts exactly. A
-// list field matches if any element does.
-func fieldMatches(n *yaml.Node, want []string) bool {
-	if n == nil {
-		return false
-	}
-	switch n.Kind {
-	case yaml.ScalarNode:
-		return slices.Contains(want, n.Value)
-	case yaml.SequenceNode:
-		for _, c := range n.Content {
-			if c.Kind == yaml.ScalarNode && slices.Contains(want, c.Value) {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 // MatchTag reports whether tag matches pattern. A trailing "/" makes the

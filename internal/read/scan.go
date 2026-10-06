@@ -194,3 +194,21 @@ func (d *Doc) DateSource() string {
 func (d *Doc) Text(key string) string {
 	return strings.TrimSpace(vault.Scalar(d.Fields[key]))
 }
+
+// Texts returns the trimmed texts of a frontmatter field: one for a scalar,
+// one per scalar item for a list. A null counts as ""; a missing or nested
+// field has none.
+func (d *Doc) Texts(key string) []string {
+	n := d.Fields[key]
+	items := []*yaml.Node{n}
+	if n != nil && n.Kind == yaml.SequenceNode {
+		items = n.Content
+	}
+	var out []string
+	for _, c := range items {
+		if c != nil && c.Kind == yaml.ScalarNode {
+			out = append(out, strings.TrimSpace(vault.Scalar(c)))
+		}
+	}
+	return out
+}

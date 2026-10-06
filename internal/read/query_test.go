@@ -12,6 +12,7 @@ import (
 
 	"github.com/Arkoes07/prep-mcp/internal/config"
 	"github.com/Arkoes07/prep-mcp/internal/read"
+	"github.com/Arkoes07/prep-mcp/internal/testvault"
 )
 
 type listCase struct {
@@ -134,6 +135,40 @@ func TestApplyLimitCap(t *testing.T) {
 	got, err := read.Filter{Limit: 1}.Apply(docs)
 	if err != nil || len(got) != 1 || got[0].Path != "n/0599.md" {
 		t.Errorf("Apply(limit 1) = %v, %v; want n/0599.md", paths(got), err)
+	}
+}
+
+// where reads a field as group_by does: trimmed, null as "", each list item on
+// its own. A missing or nested field matches nothing, not even "".
+func TestWhereReadsValuesLikeGroupBy(t *testing.T) {
+	root, r := copyOpen(t)
+	for name, field := range map[string]string{
+		"padded": `status: " open "`,
+		"list":   `status: [" open", done]`,
+		"null":   "status: null",
+		"blank":  "status:",
+		"empty":  `status: ""`,
+		"nested": "status: {a: b}",
+		"none":   "other: x",
+	} {
+		testvault.Write(t, root, "probe/"+name+".md", "---\ntype: probe\n"+field+"\n---\n")
+	}
+
+	tests := []struct {
+		where string
+		want  []string
+	}{
+		{"open", []string{"probe/list.md", "probe/padded.md"}},
+		{"", []string{"probe/blank.md", "probe/empty.md", "probe/null.md"}},
+	}
+	for _, tc := range tests {
+		docs, _, err := r.List(read.Filter{Type: "probe", Where: map[string][]string{"status": {tc.where}}})
+		if err != nil {
+			t.Fatalf("List: %v", err)
+		}
+		if got := slices.Sorted(slices.Values(paths(docs))); !slices.Equal(got, tc.want) {
+			t.Errorf("where status: %q matched %v, want %v", tc.where, got, tc.want)
+		}
 	}
 }
 

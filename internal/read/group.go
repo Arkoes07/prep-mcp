@@ -4,14 +4,10 @@ import (
 	"cmp"
 	"slices"
 	"strings"
-
-	"gopkg.in/yaml.v3"
-
-	"github.com/Arkoes07/prep-mcp/internal/vault"
 )
 
-// NoValue stands for a missing or empty field in a Group.
-const NoValue = "(none)"
+// noValue stands for a missing or empty field in a Group.
+const noValue = "(none)"
 
 // Group is one distinct combination of field values and how many documents
 // have it.
@@ -70,26 +66,18 @@ func combinations(d *Doc, fields []string) [][]string {
 	return combos
 }
 
-// fieldValues returns the distinct texts of d's field, or NoValue alone if it
+// fieldValues returns the distinct texts of d's field, or noValue alone if it
 // has none. tags are the normalised tags; null and nested values count as none.
 func fieldValues(d *Doc, field string) []string {
 	if field == "tags" {
 		if len(d.Tags) == 0 {
-			return []string{NoValue}
+			return []string{noValue}
 		}
 		return d.Tags
 	}
-	var vals []string
-	if n := d.Fields[field]; n != nil && n.Kind == yaml.SequenceNode {
-		for _, c := range n.Content {
-			vals = append(vals, strings.TrimSpace(vault.Scalar(c)))
-		}
-	} else {
-		vals = append(vals, strings.TrimSpace(vault.Scalar(n)))
-	}
-	vals = slices.DeleteFunc(vals, func(v string) bool { return v == "" })
+	vals := slices.DeleteFunc(d.Texts(field), func(v string) bool { return v == "" })
 	if len(vals) == 0 {
-		return []string{NoValue}
+		return []string{noValue}
 	}
 	slices.Sort(vals)
 	return slices.Compact(vals)

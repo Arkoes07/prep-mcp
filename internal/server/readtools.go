@@ -84,7 +84,9 @@ func listDocsDescription(cfg *config.Config) string {
 		"never bodies. fields: field names to show instead, for this call; [] shows none. " +
 		"All filters combine with AND. tags: every tag must match; any_tags: at least one; " +
 		"a trailing / matches a prefix (issue/ matches every issue tag). " +
-		"where: frontmatter equality such as {\"status\": [\"open\", \"improving\"]}; a list means any of. " +
+		"where: frontmatter equality such as {\"status\": [\"open\", \"improving\"]}; a list means any of, " +
+		"and a list field matches if any item does. Values compare trimmed; " +
+		"\"\" matches an empty or null value but not a missing key. " +
 		"date and since/until use each type's date field (date unless the config names another), " +
 		"else the file modification time, which date_source then says. " +
 		"since/until: inclusive YYYY-MM-DD. " +
