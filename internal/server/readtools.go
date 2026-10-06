@@ -57,7 +57,8 @@ func registerReadTools(s *mcp.Server, h *handlers) {
 	mcp.AddTool(s, &mcp.Tool{
 		Name:  "list_tags",
 		Title: "List tags",
-		Description: "Every tag in use with its document count and most recent date, most used first. " +
+		Description: "Every tag in use with its document count and most recent date, most used first, " +
+			"then the vocabulary file's unused tags with count 0 and no date, so you can see which tags are valid. " +
 			"Optionally only tags under a prefix such as issue/. " +
 			"Tags missing from the vocabulary file are marked unknown.",
 		Annotations: readOnly,
@@ -309,7 +310,7 @@ func (h *handlers) listTags(
 	type tagOut struct {
 		Tag     string `json:"tag"`
 		Count   int    `json:"count"`
-		Last    string `json:"last"`
+		Last    string `json:"last,omitempty"`
 		Unknown bool   `json:"unknown,omitempty"`
 	}
 	out := struct {
@@ -317,12 +318,11 @@ func (h *handlers) listTags(
 		Count int      `json:"count"`
 	}{Tags: make([]tagOut, 0, len(stats)), Count: len(stats)}
 	for _, s := range stats {
-		out.Tags = append(out.Tags, tagOut{
-			Tag:     s.Tag,
-			Count:   s.Count,
-			Last:    s.Last.Format(time.DateOnly),
-			Unknown: s.Unknown,
-		})
+		t := tagOut{Tag: s.Tag, Count: s.Count, Unknown: s.Unknown}
+		if !s.Last.IsZero() {
+			t.Last = s.Last.Format(time.DateOnly)
+		}
+		out.Tags = append(out.Tags, t)
 	}
 	return jsonResult(out)
 }

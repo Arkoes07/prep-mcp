@@ -12,13 +12,13 @@ import (
 type TagCount struct {
 	Tag     string
 	Count   int       // documents carrying the tag
-	Last    time.Time // newest document date
+	Last    time.Time // newest document date; zero when Count is 0
 	Unknown bool      // not in the tags file (never set without one)
 }
 
-// TagStats counts tags over typed documents, most used first, then by name.
-// prefix limits it to tags starting with it; since drops documents dated
-// before that day.
+// TagStats counts tags over typed documents, most used first, then by name,
+// followed by the vocabulary's unused tags with count 0. prefix limits both to
+// tags starting with it; since drops documents dated before that day.
 func (r *Reader) TagStats(prefix string, since *time.Time) ([]TagCount, error) {
 	docs, _, err := r.Scan() // problems are reported by List and Context
 	if err != nil {
@@ -28,7 +28,18 @@ func (r *Reader) TagStats(prefix string, since *time.Time) ([]TagCount, error) {
 	if err != nil {
 		return nil, err
 	}
-	return tagStats(docs, voc, prefix, since), nil
+	stats := tagStats(docs, voc, prefix, since)
+	used := make(map[string]bool, len(stats))
+	for _, s := range stats {
+		used[s.Tag] = true
+	}
+	prefix = strings.ToLower(strings.TrimSpace(prefix))
+	for _, tag := range voc.Tags() {
+		if strings.HasPrefix(tag, prefix) && !used[tag] {
+			stats = append(stats, TagCount{Tag: tag})
+		}
+	}
+	return stats, nil
 }
 
 func tagStats(docs []*Doc, voc *vault.Vocabulary, prefix string, since *time.Time) []TagCount {

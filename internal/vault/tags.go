@@ -107,6 +107,14 @@ func (voc *Vocabulary) Known(tag string) bool {
 	return voc.set[strings.ToLower(strings.TrimSpace(tag))]
 }
 
+// Tags returns the vocabulary's tags, sorted. It is nil for a nil vocabulary.
+func (voc *Vocabulary) Tags() []string {
+	if voc == nil {
+		return nil
+	}
+	return voc.list
+}
+
 // Closest returns the vocabulary tag with the smallest edit distance to tag,
 // the alphabetically first on a tie, or "" for an empty vocabulary.
 func (voc *Vocabulary) Closest(tag string) string {

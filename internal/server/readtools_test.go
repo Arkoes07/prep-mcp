@@ -28,6 +28,7 @@ func TestEachReadToolAnswers(t *testing.T) {
 		{"read_doc", map[string]any{"path": "weeks/2026-w03.md"}, []string{"path: weeks/2026-w03.md", "hash: ", "## Log"}},
 		{"search_text", map[string]any{"query": "trade-off"}, []string{`"count":5`}},
 		{"list_tags", map[string]any{"prefix": "issue/"}, []string{`"count":2`, `issue/missing-tradeoff`}},
+		{"list_tags", map[string]any{"prefix": "q/"}, []string{`{"tag":"q/failure","count":0}`}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.tool, func(t *testing.T) {

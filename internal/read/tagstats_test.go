@@ -28,6 +28,8 @@ var exampleTagRows = []tagRow{
 	{"meta/plan", 1, "2026-01-10"},
 	{"skill/scale", 1, "2026-01-10"},
 	{"skill/trade-off", 1, "2026-01-10"},
+	{"q/changed-mind", 0, ""},
+	{"q/failure", 0, ""},
 }
 
 func checkRows(t *testing.T, got []read.TagCount, want []tagRow) {
@@ -37,8 +39,12 @@ func checkRows(t *testing.T, got []read.TagCount, want []tagRow) {
 	}
 	for i, w := range want {
 		g := got[i]
-		if g.Tag != w.tag || g.Count != w.count || g.Last.Format(time.DateOnly) != w.last {
-			t.Errorf("row %d = {%s %d %s}, want {%s %d %s}", i, g.Tag, g.Count, g.Last.Format(time.DateOnly), w.tag, w.count, w.last)
+		last := ""
+		if !g.Last.IsZero() {
+			last = g.Last.Format(time.DateOnly)
+		}
+		if g.Tag != w.tag || g.Count != w.count || last != w.last {
+			t.Errorf("row %d = {%s %d %s}, want {%s %d %s}", i, g.Tag, g.Count, last, w.tag, w.count, w.last)
 		}
 	}
 }
@@ -70,6 +76,19 @@ func TestTagStats(t *testing.T) {
 		})
 	})
 
+	t.Run("prefix_covers_unused_vocabulary", func(t *testing.T) {
+		_, r := copyOpen(t)
+		got, err := r.TagStats("q/", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		checkRows(t, got, []tagRow{
+			{"q/hardest-project", 3, "2026-01-14"},
+			{"q/changed-mind", 0, ""},
+			{"q/failure", 0, ""},
+		})
+	})
+
 	t.Run("since_window", func(t *testing.T) {
 		_, r := copyOpen(t)
 		since := time.Date(2026, 1, 12, 0, 0, 0, 0, time.Local)
@@ -82,6 +101,13 @@ func TestTagStats(t *testing.T) {
 			{"issue/missing-tradeoff", 2, "2026-01-14"},
 			{"q/hardest-project", 2, "2026-01-14"},
 			{"issue/buries-headline", 1, "2026-01-12"},
+			{"company/acme", 0, ""},
+			{"domain/payments", 0, ""},
+			{"meta/plan", 0, ""},
+			{"q/changed-mind", 0, ""},
+			{"q/failure", 0, ""},
+			{"skill/scale", 0, ""},
+			{"skill/trade-off", 0, ""},
 		})
 	})
 
@@ -92,8 +118,10 @@ func TestTagStats(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(got) != 0 {
-			t.Errorf("got %v, want none", got)
+		for _, g := range got {
+			if g.Count != 0 {
+				t.Errorf("%s has count %d, want only unused vocabulary tags", g.Tag, g.Count)
+			}
 		}
 	})
 
@@ -133,6 +161,9 @@ func TestTagStats(t *testing.T) {
 		for _, g := range got {
 			if g.Unknown {
 				t.Errorf("%s is marked unknown, but there is no tags.md", g.Tag)
+			}
+			if g.Count == 0 {
+				t.Errorf("%s has count 0, but without tags.md only tags in use are listed", g.Tag)
 			}
 		}
 	})
