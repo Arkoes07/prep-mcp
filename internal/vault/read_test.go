@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Arkoes07/prep-mcp/internal/vault"
+	"github.com/arkoes07/prep-mcp/internal/vault"
 )
 
 func TestReadFile(t *testing.T) {

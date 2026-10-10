@@ -11,7 +11,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/Arkoes07/prep-mcp/internal/testvault"
+	"github.com/arkoes07/prep-mcp/internal/testvault"
 )
 
 func TestEachReadToolAnswers(t *testing.T) {

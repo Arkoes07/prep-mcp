@@ -19,11 +19,11 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/Arkoes07/prep-mcp/internal/config"
-	"github.com/Arkoes07/prep-mcp/internal/read"
-	"github.com/Arkoes07/prep-mcp/internal/server"
-	"github.com/Arkoes07/prep-mcp/internal/vault"
-	"github.com/Arkoes07/prep-mcp/internal/write"
+	"github.com/arkoes07/prep-mcp/internal/config"
+	"github.com/arkoes07/prep-mcp/internal/read"
+	"github.com/arkoes07/prep-mcp/internal/server"
+	"github.com/arkoes07/prep-mcp/internal/vault"
+	"github.com/arkoes07/prep-mcp/internal/write"
 )
 
 // version is set at build time with -ldflags "-X main.version=...".

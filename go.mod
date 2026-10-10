@@ -1,4 +1,4 @@
-module github.com/Arkoes07/prep-mcp
+module github.com/arkoes07/prep-mcp
 
 go 1.25.0
 

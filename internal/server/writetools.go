@@ -10,8 +10,8 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/Arkoes07/prep-mcp/internal/config"
-	"github.com/Arkoes07/prep-mcp/internal/write"
+	"github.com/arkoes07/prep-mcp/internal/config"
+	"github.com/arkoes07/prep-mcp/internal/write"
 )
 
 // documentRules ends the description of each tool that changes an existing

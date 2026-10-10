@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Arkoes07/prep-mcp/internal/config"
-	"github.com/Arkoes07/prep-mcp/internal/vault"
+	"github.com/arkoes07/prep-mcp/internal/config"
+	"github.com/arkoes07/prep-mcp/internal/vault"
 )
 
 // Day is the fixed "today" for tests: a Wednesday in ISO week 2026-W03.

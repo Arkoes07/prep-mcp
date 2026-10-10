@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/Arkoes07/prep-mcp/internal/vault"
+	"github.com/arkoes07/prep-mcp/internal/vault"
 )
 
 var (

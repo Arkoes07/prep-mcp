@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Arkoes07/prep-mcp/internal/config"
+	"github.com/arkoes07/prep-mcp/internal/config"
 )
 
 // Git commits written files. It shells out to the git binary and never pushes.

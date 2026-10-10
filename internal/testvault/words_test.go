@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/Arkoes07/prep-mcp/internal/testvault"
+	"github.com/arkoes07/prep-mcp/internal/testvault"
 )
 
 // TestNoDomainWords walks every .go file in the repository, tests included,

@@ -10,9 +10,9 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/Arkoes07/prep-mcp/internal/read"
-	"github.com/Arkoes07/prep-mcp/internal/testvault"
-	"github.com/Arkoes07/prep-mcp/internal/vault"
+	"github.com/arkoes07/prep-mcp/internal/read"
+	"github.com/arkoes07/prep-mcp/internal/testvault"
+	"github.com/arkoes07/prep-mcp/internal/vault"
 )
 
 type scanDoc struct {

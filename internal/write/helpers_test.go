@@ -10,10 +10,10 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/Arkoes07/prep-mcp/internal/config"
-	"github.com/Arkoes07/prep-mcp/internal/testvault"
-	"github.com/Arkoes07/prep-mcp/internal/vault"
-	"github.com/Arkoes07/prep-mcp/internal/write"
+	"github.com/arkoes07/prep-mcp/internal/config"
+	"github.com/arkoes07/prep-mcp/internal/testvault"
+	"github.com/arkoes07/prep-mcp/internal/vault"
+	"github.com/arkoes07/prep-mcp/internal/write"
 )
 
 // today is testvault.Day as the writer stamps it into created/updated.

@@ -7,8 +7,8 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/Arkoes07/prep-mcp/internal/vault"
-	"github.com/Arkoes07/prep-mcp/internal/write"
+	"github.com/arkoes07/prep-mcp/internal/vault"
+	"github.com/arkoes07/prep-mcp/internal/write"
 )
 
 func TestJSONToNode(t *testing.T) {

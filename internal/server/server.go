@@ -12,9 +12,9 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/Arkoes07/prep-mcp/internal/config"
-	"github.com/Arkoes07/prep-mcp/internal/read"
-	"github.com/Arkoes07/prep-mcp/internal/write"
+	"github.com/arkoes07/prep-mcp/internal/config"
+	"github.com/arkoes07/prep-mcp/internal/read"
+	"github.com/arkoes07/prep-mcp/internal/write"
 )
 
 const instructions = "Call get_context first: it returns the vault's working rules, the current week, " +

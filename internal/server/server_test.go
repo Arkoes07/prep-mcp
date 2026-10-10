@@ -10,9 +10,9 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/Arkoes07/prep-mcp/internal/read"
-	"github.com/Arkoes07/prep-mcp/internal/testvault"
-	"github.com/Arkoes07/prep-mcp/internal/write"
+	"github.com/arkoes07/prep-mcp/internal/read"
+	"github.com/arkoes07/prep-mcp/internal/testvault"
+	"github.com/arkoes07/prep-mcp/internal/write"
 )
 
 // connect serves a temp copy of the example vault to an in-memory client.

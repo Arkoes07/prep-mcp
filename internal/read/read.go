@@ -6,8 +6,8 @@ package read
 import (
 	"time"
 
-	"github.com/Arkoes07/prep-mcp/internal/config"
-	"github.com/Arkoes07/prep-mcp/internal/vault"
+	"github.com/arkoes07/prep-mcp/internal/config"
+	"github.com/arkoes07/prep-mcp/internal/vault"
 )
 
 type Reader struct {

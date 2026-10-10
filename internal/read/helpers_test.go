@@ -3,8 +3,8 @@ package read_test
 import (
 	"testing"
 
-	"github.com/Arkoes07/prep-mcp/internal/read"
-	"github.com/Arkoes07/prep-mcp/internal/testvault"
+	"github.com/arkoes07/prep-mcp/internal/read"
+	"github.com/arkoes07/prep-mcp/internal/testvault"
 )
 
 // openAt opens the vault at dir with the config found in it and returns a

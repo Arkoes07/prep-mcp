@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Arkoes07/prep-mcp/internal/read"
+	"github.com/arkoes07/prep-mcp/internal/read"
 )
 
 func TestISOWeek(t *testing.T) {

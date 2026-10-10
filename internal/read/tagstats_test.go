@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Arkoes07/prep-mcp/internal/read"
-	"github.com/Arkoes07/prep-mcp/internal/testvault"
+	"github.com/arkoes07/prep-mcp/internal/read"
+	"github.com/arkoes07/prep-mcp/internal/testvault"
 )
 
 type tagRow struct {

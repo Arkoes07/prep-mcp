@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Arkoes07/prep-mcp/internal/testvault"
+	"github.com/arkoes07/prep-mcp/internal/testvault"
 )
 
 var update = flag.Bool("update", false, "rewrite the golden files from the current output")

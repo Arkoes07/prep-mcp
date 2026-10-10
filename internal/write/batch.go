@@ -11,7 +11,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/Arkoes07/prep-mcp/internal/vault"
+	"github.com/arkoes07/prep-mcp/internal/vault"
 )
 
 // Every write, single or batched, goes through one engine. All ops are

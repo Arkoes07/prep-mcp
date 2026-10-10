@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Arkoes07/prep-mcp/internal/config"
-	"github.com/Arkoes07/prep-mcp/internal/testvault"
+	"github.com/arkoes07/prep-mcp/internal/config"
+	"github.com/arkoes07/prep-mcp/internal/testvault"
 )
 
 // These tests assume the default author equals the example config's.

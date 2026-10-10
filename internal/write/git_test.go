@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Arkoes07/prep-mcp/internal/testvault"
-	"github.com/Arkoes07/prep-mcp/internal/vault"
-	"github.com/Arkoes07/prep-mcp/internal/write"
+	"github.com/arkoes07/prep-mcp/internal/testvault"
+	"github.com/arkoes07/prep-mcp/internal/vault"
+	"github.com/arkoes07/prep-mcp/internal/write"
 )
 
 // These tests shell out to git. Each one isolates itself from the developer's

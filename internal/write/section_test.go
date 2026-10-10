@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Arkoes07/prep-mcp/internal/write"
+	"github.com/arkoes07/prep-mcp/internal/write"
 )
 
 func TestInsertSection(t *testing.T) {

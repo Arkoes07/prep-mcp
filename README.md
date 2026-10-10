@@ -17,11 +17,11 @@ Not in scope: a UI (Obsidian is the reading and editing surface), a database or 
 You need Go 1.25 or newer, and git if you want a commit per write.
 
 ```bash
-git clone https://github.com/Arkoes07/prep-mcp.git && cd prep-mcp
+git clone https://github.com/arkoes07/prep-mcp.git && cd prep-mcp
 go install ./cmd/prep-mcp        # installs $(go env GOPATH)/bin/prep-mcp
 ```
 
-Without a checkout, `go install github.com/Arkoes07/prep-mcp/cmd/prep-mcp@latest` installs the same binary, but you won't have the example vault.
+Without a checkout, `go install github.com/arkoes07/prep-mcp/cmd/prep-mcp@latest` installs the same binary, but you won't have the example vault.
 
 ### Try it on the example vault
 

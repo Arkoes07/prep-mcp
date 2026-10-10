@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/Arkoes07/prep-mcp/internal/write"
+	"github.com/arkoes07/prep-mcp/internal/write"
 )
 
 // The atomic write is internal, so these tests reach it through the Writer.

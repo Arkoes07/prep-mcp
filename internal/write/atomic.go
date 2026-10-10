@@ -9,7 +9,7 @@ import (
 	"os"
 	"path"
 
-	"github.com/Arkoes07/prep-mcp/internal/vault"
+	"github.com/arkoes07/prep-mcp/internal/vault"
 )
 
 // Atomic file writes: every change is staged in a temp file next to its

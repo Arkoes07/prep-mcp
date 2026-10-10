@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Arkoes07/prep-mcp/internal/testvault"
-	"github.com/Arkoes07/prep-mcp/internal/vault"
+	"github.com/arkoes07/prep-mcp/internal/testvault"
+	"github.com/arkoes07/prep-mcp/internal/vault"
 )
 
 // outcome is what Resolve should return for one access mode.

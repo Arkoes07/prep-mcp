@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Arkoes07/prep-mcp/internal/testvault"
+	"github.com/arkoes07/prep-mcp/internal/testvault"
 )
 
 // BenchmarkScan measures one full scan of a generated vault. It is the number
