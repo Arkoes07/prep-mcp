@@ -11,7 +11,7 @@
 
 ### Issue tracker
 
-Issues live as local markdown under `.scratch/<feature>/`. See `docs/agents/issue-tracker.md`.
+Issues live in GitHub Issues, managed with `gh`. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
