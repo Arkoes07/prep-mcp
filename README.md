@@ -74,32 +74,39 @@ Any folder of markdown files works. A file shows up in queries when its frontmat
 tags_file: tags.md              # optional: allowed tags, written as `prefix/value` in backticks
 commit_on_write: true           # commit each write when the vault is its git repo's root
 author: "Claude <claude@local>" # author of those commits
-summary_fields: [status]        # fields shown next to each document in lists
+summary_fields: [kind, stage, status] # fields shown next to each document in lists
 
 types:
-  note:
-    folder: notes
-    filename: "{date}-{slug}.md"  # {slug}: slug argument or title, {date}: the type's date field or today
-    required: [title]
-  task:
-    folder: tasks
+  session:
+    folder: sessions
+    filename: "{date}-{kind}-{slug}.md" # {slug}: slug argument or title, {date}: the type's date field or today,
+    required: [kind, date]              # any other {name} is that frontmatter field; it must be required
+  improvement:
+    folder: improvements
     filename: "{slug}.md"
-    required: [title, status]
-    date_field: due               # optional: dates, since/until and sorting use due (default: date)
-    show: [status, owner, due]    # optional: shown for this type instead of summary_fields
+    required: [status, exit_criteria]
   week:
     folder: weeks
-    filename: "{week}.md"         # any other {name} is that frontmatter field; it must be required
+    filename: "{week}.md"
     required: [week]
+  application:
+    folder: applications
+    filename: "{slug}.md"
+    required: [company, role, stage, status]
+    date_field: applied           # optional: dates, since/until and sorting use applied (default: date)
+    show: [stage, status, next_action, next_action_date] # optional: shown instead of summary_fields
 
 context:                          # what get_context returns
   current_week_type: week
   current_week_field: week        # compared with the ISO week, for example 2026-W03
   open_items:
-    - {type: note, where: {status: [open]}}
+    - {type: improvement, where: {status: [open, improving]}}
+    - {type: application, where: {status: [active]}}
   recent:
-    - {type: note, limit: 5}
+    - {type: session, limit: 5}
 ```
+
+This is part of `examples/vault/prep.config.yaml`, the config behind the examples below.
 
 - A `CLAUDE.md` at the vault root is returned first by `get_context`, as the assistant's working rules.
 - `templates/` can be read but never written. Folders starting with a dot, such as `.git` and `.obsidian`, are never read or written.
