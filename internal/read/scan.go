@@ -105,10 +105,11 @@ func (r *Reader) walkMarkdown(visit func(p string, d fs.DirEntry)) ([]Problem, e
 }
 
 // skipDir reports whether the scan leaves out the folder at p: dot-folders
-// anywhere, and templates/ at the root.
+// anywhere, and templates/ at the root. A template's frontmatter is real
+// enough to match queries: an open status would make it an open item, and an
+// empty date dates it by its modification time, so it would list as recent.
 func skipDir(p, name string) bool {
-	isRootTemplates := path.Dir(p) == "." && strings.EqualFold(name, "templates")
-	return strings.HasPrefix(name, ".") || isRootTemplates
+	return strings.HasPrefix(name, ".") || vault.InTemplates(p)
 }
 
 // isMarkdownFile reports whether d is a regular, visible .md file. Symlinks are

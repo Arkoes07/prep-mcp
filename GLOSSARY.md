@@ -5,8 +5,12 @@ An MCP server that lets an AI assistant read and safely write a vault of markdow
 ## Language
 
 **Document**:
-A markdown file in the vault whose frontmatter has a `type`. Files without one, such as the vault's working rules or the tags file, are plain files.
+A markdown file in the vault, outside the templates folder, whose frontmatter has a `type`. Files without one, such as the vault's working rules or the tags file, are plain files.
 _Avoid_: note, record
+
+**Template**:
+A markdown file in the root `templates/` folder, which the assistant reads to follow a type's structure. It can be written, but it is not a document: queries skip it, and of the document rules only "its frontmatter parses" applies.
+_Avoid_: stub, skeleton
 
 **Type**:
 The kind of a document, named by its `type` field and defined in the config with its folder, file name pattern, required fields and date field.

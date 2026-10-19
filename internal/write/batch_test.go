@@ -36,7 +36,7 @@ func TestBatchInvalidOpsWriteNothing(t *testing.T) {
 		statusOp(t, headline, "improving"),
 		write.AppendOp("../x.md", "Log", "- x"),
 		write.AppendOp(week, "Log", "- Tue: x"),
-		write.AppendOp("templates/week.md", "Log", "- x"),
+		write.AppendOp("weeks/none.md", "Log", "- x"),
 		noteOp(t, `{"title":"DDIA ch5","track":"ddia"}`),
 		noteOp(t, `{"title":"No track"}`),
 	}
@@ -49,7 +49,7 @@ func TestBatchInvalidOpsWriteNothing(t *testing.T) {
 		"nothing was written",
 		"3 of 6 ops failed",
 		`op 2 (append_section ../x.md): "../x.md" is outside the vault`,
-		"op 4 (append_section templates/week.md): templates/ is read-only",
+		"op 4 (append_section weeks/none.md): not found",
 		"op 6 (create_doc learning): missing required fields for learning: track",
 	)
 	for _, good := range []string{"op 1 ", "op 3 ", "op 5 "} {

@@ -23,10 +23,12 @@ import (
 // broken rule indefinitely, warned about on every write. Rejected: checking
 // each file once at the end of a batch, which would blame a file, not an op.
 
-// opRules is how one tool is held to the document rules: whether it may
-// change the type, and what to do next when it breaks a rule.
+// opRules is how one op is held to the document rules: whether it may change
+// the type, what to do next when it breaks a rule, and whether only "the
+// frontmatter parses" applies.
 type opRules struct {
 	keepType   bool   // the op is a small change, so changing the type is a mistake
+	parseOnly  bool   // the op changes a template
 	fixParse   string // after an op leaves the frontmatter unparseable
 	fixMissing string // after an op leaves required fields without a value
 }
@@ -102,6 +104,9 @@ func (w *Writer) check(r opRules, before, after []byte) ([]string, error) {
 		// so all along, so what the rules find is a warning and a write can
 		// repair it.
 		was = now
+	}
+	if r.parseOnly {
+		return nil, nil
 	}
 	var v verdict
 	w.checkType(&v, r, was, now)

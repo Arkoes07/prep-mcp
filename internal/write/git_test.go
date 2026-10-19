@@ -234,6 +234,9 @@ func TestGitEachTool(t *testing.T) {
 			old := e.read(t, "learning/ddia-ch5.md")
 			return e.w.Apply(ctx, write.ReplaceOp("learning/ddia-ch5.md", old+"more\n", vault.Hash([]byte(old))))
 		}},
+		{"edit_text: templates/week.md", "templates/week.md", func(t *testing.T) (*write.Result, error) {
+			return e.w.Apply(ctx, write.EditOp("templates/week.md", "Weekly review", "Retro"))
+		}},
 	}
 	for _, s := range steps {
 		t.Run(strings.SplitN(s.msg, ":", 2)[0], func(t *testing.T) {

@@ -72,7 +72,7 @@ func AppendOp(path, heading, content string) Op {
 func PatchOp(path string, patch Patch) Op {
 	return Op{tool: ToolPatch, target: path, apply: func(p *batchPlan) (*file, []byte, []string, error) {
 		return p.modify(path, patchRules, func(f *file) ([]byte, []string, error) {
-			return p.w.patchDoc(f.cur, patch)
+			return p.w.patchDoc(f, patch)
 		})
 	}}
 }
@@ -211,6 +211,7 @@ type file struct {
 	rel             string
 	orig, cur       []byte
 	existed, exists bool
+	template        bool // vault.InTemplates
 }
 
 // changed reports whether the batch has something to write to f.
@@ -237,7 +238,7 @@ func (p *batchPlan) file(rel string) (*file, error) {
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return nil, fmt.Errorf("read %s: %w", rel, err)
 	}
-	f := &file{rel: rel, orig: b, cur: b, existed: err == nil, exists: err == nil}
+	f := &file{rel: rel, orig: b, cur: b, existed: err == nil, exists: err == nil, template: vault.InTemplates(rel)}
 	p.byPath[rel] = f
 	p.files = append(p.files, f)
 	return f, nil
@@ -253,6 +254,10 @@ func (p *batchPlan) existing(path string) (*file, error) {
 	f, err := p.file(rel)
 	if err != nil {
 		return nil, err
+	}
+	if !f.exists && f.template {
+		return nil, fmt.Errorf("not found: %s; the write tools cannot create a template, "+
+			"so edit an existing one or ask the human to add it", rel)
 	}
 	if !f.exists {
 		return nil, fmt.Errorf("not found: %s (use create_doc to make a new document)", rel)
@@ -321,6 +326,12 @@ func (p *batchPlan) modify(
 	next, warnings, err := transform(f)
 	if err != nil {
 		return nil, nil, nil, err
+	}
+	if f.template {
+		// A template's fields are empty on purpose, and the other rules'
+		// warnings would tell the model to fill them in. Broken frontmatter
+		// would carry into every file Obsidian makes from it.
+		r.parseOnly = true
 	}
 	found, err := p.w.check(r, f.cur, next)
 	if err != nil {

@@ -83,7 +83,7 @@ func TestApplyPatch(t *testing.T) {
 			if tc.set != "" {
 				p.Set = node(t, tc.set)
 			}
-			out, fm, err := write.ApplyPatch([]byte(tc.src), p, today)
+			out, fm, err := write.ApplyPatch([]byte(tc.src), p, today, true)
 			if tc.wantErr != "" {
 				mustContain(t, err, tc.wantErr)
 				if tc.name == "no_frontmatter" {

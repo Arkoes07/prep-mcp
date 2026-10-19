@@ -169,7 +169,7 @@ types:
 types:
   note: {folder: templates, filename: "{slug}.md"}
 `,
-			wantErr: []string{"type note", "folder"},
+			wantErr: []string{"type note", "folder", "templates/ holds templates, not documents"},
 		},
 		{
 			name: "folder_templates_any_case",

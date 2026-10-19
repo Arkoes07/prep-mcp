@@ -114,6 +114,11 @@ func TestEachWriteToolAnswers(t *testing.T) {
 		t.Errorf("edit_text result:\n%s", got)
 	}
 
+	tmpl := callOK("edit_text", map[string]any{"path": "templates/week.md", "old": "Weekly review", "new": "Retro"})
+	if got := read("templates/week.md"); !strings.Contains(got, "| Retro |") || len(tmpl.Warnings) != 0 {
+		t.Errorf("edit_text on a template: warnings %q, file:\n%s", tmpl.Warnings, got)
+	}
+
 	out, _ := call(t, cs, "read_doc", map[string]any{"path": "weeks/2026-w03.md"})
 	hash := regexp.MustCompile(`hash: ([0-9a-f]{64})`).FindStringSubmatch(out)[1]
 	content := read("weeks/2026-w03.md") + "- Wed: y\n"
@@ -135,7 +140,6 @@ func TestWriteErrorsAreToolResultsWithHints(t *testing.T) {
 		want       []string
 	}{
 		{"path_outside", "append_section", map[string]any{"path": "../x.md", "heading": "Log", "content": "x"}, []string{"outside the vault; use a path relative"}},
-		{"templates_read_only", "update_frontmatter", map[string]any{"path": "templates/week.md", "set": map[string]any{"a": 1}}, []string{"templates/ is read-only"}},
 		{"exists", "create_doc", map[string]any{"type": "week", "frontmatter": map[string]any{"week": "2026-W03"}}, []string{"file exists: weeks/2026-w03.md", "append_section"}},
 		{"stale_hash", "replace_doc", map[string]any{"path": "weeks/2026-w03.md", "content": "---\ntype: week\nweek: 2026-W03\n---\n", "expected_hash": "abc"}, []string{"re-read with read_doc, merge, retry"}},
 		{
@@ -183,6 +187,7 @@ func TestBatchTool(t *testing.T) {
 			"path": "improvements/buries-headline.md",
 			"set":  map[string]any{"status": "improving"},
 		}),
+		batchOp("edit_text", map[string]any{"path": "templates/week.md", "old": "Weekly review", "new": "Retro"}),
 	}
 
 	out, isErr := call(t, cs, "batch", map[string]any{"ops": ops})
@@ -201,7 +206,7 @@ func TestBatchTool(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &got); err != nil {
 		t.Fatalf("result is not JSON: %v\n%s", err, out)
 	}
-	wantPaths := []string{"learning/ddia-ch5.md", "weeks/2026-w03.md", "improvements/buries-headline.md"}
+	wantPaths := []string{"learning/ddia-ch5.md", "weeks/2026-w03.md", "improvements/buries-headline.md", "templates/week.md"}
 	if len(got.Results) != len(wantPaths) {
 		t.Fatalf("results = %d, want %d:\n%s", len(got.Results), len(wantPaths), out)
 	}
@@ -222,6 +227,9 @@ func TestBatchTool(t *testing.T) {
 	}
 	if w := got.Results[0].Warnings; len(w) != 0 {
 		t.Errorf("create_doc op warnings = %q, want none", w)
+	}
+	if w := got.Results[3].Warnings; len(w) != 0 {
+		t.Errorf("template op warnings = %q, want none", w)
 	}
 	created, err := os.ReadFile(filepath.Join(root, "learning/ddia-ch5.md"))
 	if err != nil {
@@ -292,17 +300,6 @@ func TestBatchToolErrors(t *testing.T) {
 				"op 1 (update_frontmatter): args.set has the wrong type (a string)",
 				"op 2 (append_section nope.md): not found",
 			},
-		},
-		{
-			name: "templates_read_only",
-			args: map[string]any{"ops": []any{
-				batchOp("append_section", map[string]any{
-					"path":    "templates/week.md",
-					"heading": "Log",
-					"content": "x",
-				}),
-			}},
-			want: []string{"op 1 (append_section templates/week.md): templates/ is read-only"},
 		},
 		{
 			name: "empty",

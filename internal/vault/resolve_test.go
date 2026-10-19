@@ -55,9 +55,9 @@ func TestResolve(t *testing.T) {
 		{"weeks/.hidden.md", bad(""), bad("")},
 		{".GIT/x.md", bad(""), bad("")},
 
-		{"templates/week.md", good("templates/week.md"), bad("templates/ is read-only")},
-		// Templates/x.md does not exist, so a read reports "not found".
-		{"Templates/x.md", bad("not found"), bad("templates/ is read-only")},
+		{"templates/week.md", good("templates/week.md"), good("templates/week.md")},
+		// Templates/x.md does not exist, and no tool lists templates.
+		{"Templates/x.md", bad("not found: Templates/x.md (no tool lists templates; ask the human for its name)"), good("Templates/x.md")},
 
 		{"weeks/2026-w03.txt", bad(".md only"), bad(".md only")},
 		{"prep.config.yaml", bad(".md only"), bad(".md only")},
@@ -88,6 +88,22 @@ func TestResolve(t *testing.T) {
 					t.Errorf("Resolve(%q) = %q, want %q", tc.in, got, mode.want.path)
 				}
 			})
+		}
+	}
+}
+
+func TestInTemplates(t *testing.T) {
+	for p, want := range map[string]bool{
+		"templates/week.md":    true,
+		"Templates/x.md":       true,
+		"templates/sub/x.md":   true,
+		"templates":            true,
+		"templates.md":         false,
+		"weeks/templates/x.md": false,
+		"weeks/2026-w03.md":    false,
+	} {
+		if got := vault.InTemplates(p); got != want {
+			t.Errorf("InTemplates(%q) = %v, want %v", p, got, want)
 		}
 	}
 }

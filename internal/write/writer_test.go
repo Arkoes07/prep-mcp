@@ -272,14 +272,6 @@ func TestWriterAppend(t *testing.T) {
 		mustContain(t, err, "not found", "create_doc")
 		sameSnapshot(t, before, snapshot(t, e.root))
 	})
-
-	t.Run("templates_refused", func(t *testing.T) {
-		e := newEnv(t)
-		before := snapshot(t, e.root)
-		_, err := e.w.Apply(ctx, write.AppendOp("templates/week.md", "Log", "x"))
-		mustContain(t, err, "templates/ is read-only")
-		sameSnapshot(t, before, snapshot(t, e.root))
-	})
 }
 
 func TestWriterUpdate(t *testing.T) {
@@ -406,7 +398,6 @@ func TestWriterReplace(t *testing.T) {
 		wantErr             []string
 	}{
 		{name: "missing_file", path: "weeks/none.md", content: "---\ntype: week\nweek: 2026-W09\n---\n", wantErr: []string{"not found", "create_doc"}},
-		{name: "templates_path", path: "templates/week.md", content: "---\ntype: week\nweek: 2026-W09\n---\n", wantErr: []string{"templates/ is read-only"}},
 	}
 	for _, tc := range rejected {
 		t.Run(tc.name, func(t *testing.T) {
@@ -418,6 +409,64 @@ func TestWriterReplace(t *testing.T) {
 			sameSnapshot(t, before, snapshot(t, e.root))
 		})
 	}
+}
+
+// A template is not a document: every write tool can change one, its empty
+// fields draw no warnings, and update_frontmatter stamps no updated date for
+// new documents to copy. Its frontmatter must still parse.
+func TestWriterTemplate(t *testing.T) {
+	const p = "templates/week.md"
+	tests := []struct {
+		name string
+		op   func(t *testing.T, e *env) write.Op
+		want string // in the file after the write
+	}{
+		{"append_section", func(*testing.T, *env) write.Op {
+			return write.AppendOp(p, "Log", "- Mon:")
+		}, "## Log\n\n- Mon:\n"},
+		{"update_frontmatter", func(t *testing.T, _ *env) write.Op {
+			return write.PatchOp(p, write.Patch{Set: node(t, `{"energy":"low"}`)})
+		}, "energy: low\n"},
+		{"edit_text", func(*testing.T, *env) write.Op {
+			return write.EditOp(p, "Weekly review", "Retro")
+		}, "| Retro |"},
+		{"replace_doc", func(t *testing.T, e *env) write.Op {
+			return write.ReplaceOp(p, "---\ntype: week\nweek:\n---\n", vault.Hash([]byte(e.read(t, p))))
+		}, "week:\n"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv(t)
+			res, err := e.w.Apply(ctx, tc.op(t, e))
+			if err != nil {
+				t.Fatal(err)
+			}
+			wantNoWarnings(t, res)
+			got := e.read(t, p)
+			if !strings.Contains(got, tc.want) {
+				t.Errorf("file lacks %q:\n%s", tc.want, got)
+			}
+			if strings.Contains(got, "updated:") {
+				t.Errorf("template got an updated date:\n%s", got)
+			}
+		})
+	}
+
+	t.Run("breaks_frontmatter", func(t *testing.T) {
+		e := newEnv(t)
+		before := snapshot(t, e.root)
+		_, err := e.w.Apply(ctx, write.EditOp(p, "focus: []", "focus: ["))
+		mustContain(t, err, "this write breaks the frontmatter", "change new so the frontmatter stays valid")
+		sameSnapshot(t, before, snapshot(t, e.root))
+	})
+
+	t.Run("missing", func(t *testing.T) {
+		e := newEnv(t)
+		before := snapshot(t, e.root)
+		_, err := e.w.Apply(ctx, write.EditOp("templates/new.md", "x", "y"))
+		mustContain(t, err, "not found: templates/new.md", "cannot create a template", "ask the human to add it")
+		sameSnapshot(t, before, snapshot(t, e.root))
+	})
 }
 
 func TestWriterEdit(t *testing.T) {

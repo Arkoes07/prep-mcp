@@ -33,9 +33,11 @@ Cost: five write tools instead of one, a re-read and retry after a conflict, and
 
 ### No delete, paths confined
 
-A server that writes files is a prompt-injection target: a document can tell the model to delete or overwrite things. So there is no delete tool, and no path leaves the vault or is written in `.git` or `templates/`.
+A server that writes files is a prompt-injection target: a document can tell the model to delete or overwrite things. So there is no delete tool, and no path leaves the vault or is written in `.git`.
 
-Cost: deleting and moving files is manual.
+Templates and `CLAUDE.md` can be written, though both steer what the model writes next. Keeping them current is worth more than the guard, and each write is a commit to review or revert.
+
+Cost: deleting and moving files is manual, and an injected change to a template or `CLAUDE.md` shapes later writes until a human reverts it.
 
 ### Few tools that combine
 

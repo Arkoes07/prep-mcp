@@ -284,8 +284,8 @@ func checkFolder(p string) error {
 			return errors.New("hidden folders (starting with a dot) are not allowed")
 		}
 	}
-	if strings.EqualFold(parts[0], "templates") {
-		return errors.New("templates/ is read-only; choose another folder")
+	if vault.InTemplates(clean) {
+		return errors.New("templates/ holds templates, not documents; choose another folder")
 	}
 	return nil
 }

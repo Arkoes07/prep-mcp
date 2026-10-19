@@ -24,12 +24,15 @@ func fail(format string, args ...any) (string, error) {
 }
 
 func notFound(clean string) error {
+	if InTemplates(clean) {
+		return fmt.Errorf("not found: %s (no tool lists templates; ask the human for its name)", clean)
+	}
 	return fmt.Errorf("not found: %s (use list_docs or search_text)", clean)
 }
 
 // Resolve checks a vault-relative path and returns it cleaned, with "/"
 // separators. Reads follow symlinks that stay inside the vault. Writes refuse
-// any symlink, refuse templates/, and allow files that do not exist yet.
+// any symlink and allow files that do not exist yet.
 func (v *Vault) Resolve(p string, a Access) (string, error) {
 	clean, err := checkPathText(p, a)
 	if err != nil {
@@ -103,8 +106,13 @@ func checkPathText(p string, a Access) (string, error) {
 	if !strings.EqualFold(path.Ext(clean), ".md") {
 		return fail("%q is not a markdown file (.md only); use list_docs to find documents", p)
 	}
-	if a == AccessWrite && strings.EqualFold(parts[0], "templates") {
-		return fail("templates/ is read-only; read %q with read_doc and create the new file with create_doc", p)
-	}
 	return clean, nil
+}
+
+// InTemplates reports whether the vault-relative path p is in the root
+// templates/ folder, in any case, as APFS matches names. A file there is a
+// template, not a document (GLOSSARY.md).
+func InTemplates(p string) bool {
+	first, _, _ := strings.Cut(p, "/")
+	return strings.EqualFold(first, "templates")
 }

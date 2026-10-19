@@ -20,13 +20,13 @@ type Patch struct {
 // ApplyPatch changes only the affected top-level keys of src's frontmatter and
 // returns the new file with its frontmatter, re-read. Untouched lines and the
 // whole body keep their exact bytes. newFM is nil, and out is src, when the
-// patch changes nothing. Any real change also sets updated to today, unless
-// the patch sets or unsets it.
+// patch changes nothing. With stamp, any real change also sets updated to
+// today, unless the patch sets or unsets it.
 //
 // It splices lines instead of re-encoding the frontmatter through yaml.Node,
 // which collapses the aligned "# a | b" comments templates produce and would
 // make every edit a noisy diff. The cost is more code, checked by verifyPatch.
-func ApplyPatch(src []byte, p Patch, today string) (out []byte, newFM *vault.Frontmatter, err error) {
+func ApplyPatch(src []byte, p Patch, today string, stamp bool) (out []byte, newFM *vault.Frontmatter, err error) {
 	fm, err := vault.SplitFrontmatter(src)
 	if err != nil {
 		return nil, nil, err
@@ -53,7 +53,9 @@ func ApplyPatch(src []byte, p Patch, today string) (out []byte, newFM *vault.Fro
 	if len(pl.touched) == 0 {
 		return src, nil, nil
 	}
-	pl.stampUpdated(today)
+	if stamp {
+		pl.stampUpdated(today)
+	}
 
 	eol := "\n"
 	if fm.CRLF {

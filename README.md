@@ -72,7 +72,7 @@ The config is read once at startup, so restart the client after you change it. A
 Any folder of markdown files works. A file shows up in queries when its frontmatter has a `type` that `prep.config.yaml` at the vault root defines. Start from [`examples/vault/prep.config.yaml`](examples/vault/prep.config.yaml), which explains every key.
 
 - A `CLAUDE.md` at the vault root is returned first by `get_context`, as the assistant's working rules.
-- `templates/` can be read but never written. Folders starting with a dot, such as `.git` and `.obsidian`, are never read or written.
+- `templates/` can be read and written, but queries leave it out. Folders starting with a dot, such as `.git` and `.obsidian`, are never read or written.
 - With Obsidian, open the vault with "Open folder as vault". "Create new vault" makes a new, empty folder inside the one you pick.
 
 `examples/vault` is a complete vault with seven types, a tag vocabulary and templates.

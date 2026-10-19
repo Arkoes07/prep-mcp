@@ -136,18 +136,19 @@ func newFrontmatter(typ string, fm *yaml.Node, today string) (*yaml.Node, error)
 	return doc, nil
 }
 
-// patchDoc applies patch to a document's bytes. A patch that changes nothing
-// returns old.
-func (w *Writer) patchDoc(old []byte, patch Patch) ([]byte, []string, error) {
+// patchDoc applies patch to f's bytes. A patch that changes nothing returns
+// them unchanged.
+func (w *Writer) patchDoc(f *file, patch Patch) ([]byte, []string, error) {
 	var warnings []string
-	oldTags := stateOf(old).tags
+	oldTags := stateOf(f.cur).tags
 	for _, t := range vault.NormalizeTagList(patch.RemoveTags) {
 		if !slices.Contains(oldTags, t) {
 			warnings = append(warnings,
 				fmt.Sprintf("tag %q is not on this document, so there was nothing to remove", t))
 		}
 	}
-	next, _, err := ApplyPatch(old, patch, w.now().Format(time.DateOnly))
+	// No updated date on a template: every document made from it would copy it.
+	next, _, err := ApplyPatch(f.cur, patch, w.now().Format(time.DateOnly), !f.template)
 	if err != nil {
 		return nil, nil, err
 	}
