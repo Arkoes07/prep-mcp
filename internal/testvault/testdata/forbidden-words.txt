@@ -1,4 +1,4 @@
-# Words that must not appear in any .go file or tool description (CLAUDE.md, PLAN.md open question 21).
+# Words that must not appear in any .go file or tool description (see CLAUDE.md).
 # One word per line. Matching is whole-word and case-insensitive.
 # Lines starting with # are comments.
 interview
