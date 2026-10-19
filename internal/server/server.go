@@ -41,7 +41,7 @@ func New(r *read.Reader, w *write.Writer, cfg *config.Config, version string) *m
 }
 
 // guard turns a panic in a handler into an error result, so one bad call
-// cannot take the server down. The stack goes to slog.Default(), never to the client.
+// cannot take the server down: the SDK does not recover handler panics. The stack goes to slog.Default(), never to the client.
 func guard[In any](name string, h mcp.ToolHandlerFor[In, any]) mcp.ToolHandlerFor[In, any] {
 	return func(ctx context.Context, req *mcp.CallToolRequest, in In) (res *mcp.CallToolResult, out any, err error) {
 		defer func() {

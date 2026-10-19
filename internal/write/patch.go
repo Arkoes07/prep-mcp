@@ -22,6 +22,10 @@ type Patch struct {
 // whole body keep their exact bytes. newFM is nil, and out is src, when the
 // patch changes nothing. Any real change also sets updated to today, unless
 // the patch sets or unsets it.
+//
+// It splices lines instead of re-encoding the frontmatter through yaml.Node,
+// which collapses the aligned "# a | b" comments templates produce and would
+// make every edit a noisy diff. The cost is more code, checked by verifyPatch.
 func ApplyPatch(src []byte, p Patch, today string) (out []byte, newFM *vault.Frontmatter, err error) {
 	fm, err := vault.SplitFrontmatter(src)
 	if err != nil {

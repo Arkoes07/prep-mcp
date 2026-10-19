@@ -15,7 +15,7 @@ import (
 )
 
 // documentRules ends the description of each tool that changes an existing
-// file: what fails and what warns (ADR-0015).
+// file: what fails and what warns (see internal/write/rules.go).
 const documentRules = "Document rules: the frontmatter parses, type is a configured type, " +
 	"the type's required fields have values, the type's date field (date unless the config names another) " +
 	"holds a date, YYYY-MM-DD, when set, and tags are in the vocabulary file. " +

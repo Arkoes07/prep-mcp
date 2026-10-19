@@ -37,6 +37,11 @@ type Problem struct {
 // dot-folders and dot-files, the root templates/ folder, symlinks, and files
 // without frontmatter or without a type. A file with broken frontmatter is
 // skipped and reported as a Problem, so a typo neither hides it nor fails every query.
+//
+// Every call scans; there is no index. The server writes, so an index built at
+// startup is stale after the first write, and one stored on disk is a second
+// copy of the frontmatter that can drift. Add an mtime-keyed cache (#2) only
+// if BenchmarkScan or a real vault measures slow.
 func (r *Reader) Scan() ([]*Doc, []Problem, error) {
 	var docs []*Doc
 	var problems []Problem

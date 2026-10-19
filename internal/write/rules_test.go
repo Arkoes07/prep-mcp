@@ -49,8 +49,8 @@ func appendOf(path string) opFor {
 	return func(*testing.T, *env) write.Op { return write.AppendOp(path, "Log", "- Tue") }
 }
 
-// TestDocumentRules holds every write tool to the document rules (ADR-0015),
-// alone and in a batch: an op fails on a rule it breaks, and a rule the file
+// TestDocumentRules holds every write tool to the document rules, alone and
+// in a batch: an op fails on a rule it breaks, and a rule the file
 // already broke is a warning.
 func TestDocumentRules(t *testing.T) {
 	// brokenWeek's frontmatter does not parse, and it has a tag the vocabulary lacks.

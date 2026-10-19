@@ -69,36 +69,7 @@ The config is read once at startup, so restart the client after you change it. A
 
 ## Your own vault
 
-Any folder of markdown files works. A file shows up in queries when its frontmatter has a `type` that `prep.config.yaml` at the vault root defines:
-
-```yaml
-tags_file: tags.md              # optional: allowed tags, written as `prefix/value` in backticks
-commit_on_write: true           # commit each write when the vault is its git repo's root
-author: "Claude <claude@local>" # author of those commits
-summary_fields: [kind, stage, status] # fields shown next to each document in lists
-
-types:
-  session:
-    folder: sessions
-    filename: "{date}-{kind}-{slug}.md" # {slug}: slug argument or title, {date}: the type's date field or today,
-    required: [kind, date]              # any other {name} is that frontmatter field; it must be required
-  application:
-    folder: applications
-    filename: "{slug}.md"
-    required: [company, role, stage, status]
-    date_field: applied           # optional: dates, since/until and sorting use applied (default: date)
-    show: [stage, status, next_action, next_action_date] # optional: shown instead of summary_fields
-
-context:                          # what get_context returns
-  current_week_type: week
-  current_week_field: week        # compared with the ISO week, for example 2026-W03
-  open_items:
-    - {type: improvement, where: {status: [open, improving]}}
-  recent:
-    - {type: session, limit: 5}
-```
-
-This is part of `examples/vault/prep.config.yaml`, the config behind the session below.
+Any folder of markdown files works. A file shows up in queries when its frontmatter has a `type` that `prep.config.yaml` at the vault root defines. Start from [`examples/vault/prep.config.yaml`](examples/vault/prep.config.yaml), which explains every key.
 
 - A `CLAUDE.md` at the vault root is returned first by `get_context`, as the assistant's working rules.
 - `templates/` can be read but never written. Folders starting with a dot, such as `.git` and `.obsidian`, are never read or written.
@@ -157,9 +128,11 @@ op 1 (create_doc session): unknown tag "issue/missing-tradof"; closest known tag
 | `replace_doc` | Full rewrite, rejected if the file changed since you read it |
 | `batch` | Up to 200 of the five writes above in one call: all or nothing, one commit |
 
-See [DESIGN.md](DESIGN.md) for why each of these exists, what it costs, how writes are checked, and what real use changed.
+Why the tools are shaped this way is in [DESIGN.md](DESIGN.md).
 
 ## Develop
+
+Start with [DESIGN.md](DESIGN.md) for how the packages fit together.
 
 ```bash
 go test ./...                                       # all tests; the ones that touch files use a temp copy of examples/vault

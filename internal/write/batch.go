@@ -21,6 +21,11 @@ import (
 // changes under the engine between its check and its rename makes it put
 // back what it wrote and start over once, so a human's save in Obsidian at that
 // moment is kept.
+//
+// So a batch is atomic per file, not as a whole: a crash mid-write leaves part
+// of it written, which git status shows. Rejected: a write-ahead journal that
+// could finish or undo a batch after a crash, at the price of a recovery step
+// at every start.
 
 const MaxBatchOps = 200
 

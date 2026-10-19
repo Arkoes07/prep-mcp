@@ -12,6 +12,7 @@ import (
 // ForbiddenWords returns a whole-word, case-insensitive matcher for the words
 // in testdata/forbidden-words.txt, which must not appear in Go code or in what
 // the server shows the model. The words live in data so no .go file names them.
+// Types come from the config, never the code, so the server works for any vault.
 func ForbiddenWords(t testing.TB) *regexp.Regexp {
 	t.Helper()
 	_, file, _, _ := runtime.Caller(0)

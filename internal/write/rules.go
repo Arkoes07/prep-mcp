@@ -11,12 +11,17 @@ import (
 	"github.com/arkoes07/prep-mcp/internal/vault"
 )
 
-// The document rules (CONTEXT.md): the frontmatter parses, the type is
+// The document rules (GLOSSARY.md): the frontmatter parses, the type is
 // configured, the type's required fields have values, the type's date field
 // holds a date and the tags are in the vocabulary. The plan holds every op to
 // them once, against the file as the earlier ops leave it: an op fails only
-// on a rule it breaks, and a rule the file already broke is a warning
-// (ADR-0015).
+// on a rule it breaks, and a rule the file already broke is a warning.
+//
+// Holding every result to every rule would block all writes, appends
+// included, to a file a human left without a required field or with an old
+// tag; this way a write can also repair one. The cost: a file can keep a
+// broken rule indefinitely, warned about on every write. Rejected: checking
+// each file once at the end of a batch, which would blame a file, not an op.
 
 // opRules is how one tool is held to the document rules: whether it may
 // change the type, and what to do next when it breaks a rule.

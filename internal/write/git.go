@@ -16,7 +16,9 @@ import (
 	"github.com/arkoes07/prep-mcp/internal/config"
 )
 
-// Git commits written files. It shells out to the git binary and never pushes.
+// Git commits written files, so every AI change can be reviewed
+// (git log --author) and reverted. It shells out to the git binary and never
+// pushes.
 type Git struct {
 	Bin, Author string
 	Timeout     time.Duration // for the whole commit, not per git command; zero means 10 s
@@ -39,6 +41,10 @@ const (
 // only commits when dir is the root of its git repository, and only those
 // paths, so staged work by a human is left alone. It never fails a write:
 // every problem comes back as warning, and then hash is empty.
+//
+// Root only, because a vault inside a bigger repository, like examples/vault
+// in this one, must never receive AI commits. A commit covers whole files, so
+// a human's uncommitted edit to a written file goes into the AI's commit.
 func (g *Git) Commit(ctx context.Context, dir string, paths []string, msg string) (hash, warning string) {
 	timeout := g.Timeout
 	if timeout <= 0 {
@@ -74,6 +80,9 @@ func (g *Git) Commit(ctx context.Context, dir string, paths []string, msg string
 		}
 		if m := lockRE.FindStringSubmatch(out); m != nil {
 			// A lock stops git add (index.lock) or only the commit (HEAD.lock, a branch's lock).
+			// Never delete it: a live lock cannot be told from a stale one, and
+			// deleting the lock of a running git (a GUI, the Obsidian Git plugin, an
+			// open commit editor) can corrupt the index.
 			staged := "nothing was staged"
 			if what == "git commit" {
 				staged = "the change is staged"

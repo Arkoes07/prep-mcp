@@ -11,7 +11,7 @@ import (
 )
 
 // BenchmarkScan measures one full scan of a generated vault. It is the number
-// behind ADR-0001: add a cache only if this is measured slow.
+// behind Scan having no index: add a cache only if this is measured slow.
 func BenchmarkScan(b *testing.B) {
 	const docs = 2000
 	dir := b.TempDir()
@@ -52,8 +52,7 @@ func BenchmarkScan(b *testing.B) {
 	b.ReportMetric(docs, "docs")
 }
 
-// BenchmarkScanExample measures one full scan of examples/vault, the number
-// ADR-0001 gives for a small vault.
+// BenchmarkScanExample measures one full scan of examples/vault, a small vault.
 func BenchmarkScanExample(b *testing.B) {
 	_, r := copyOpen(b)
 	b.ReportAllocs()

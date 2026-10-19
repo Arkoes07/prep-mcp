@@ -26,6 +26,10 @@ const (
 // queries as metadata lines, and the most used recent tags. Sections are
 // introduced by "==== name ====" lines. It is deterministic for a given day
 // and vault content.
+//
+// Plain text, not JSON: it costs fewer tokens and reads well in a chat, and a
+// "====" line cannot be confused with the week document's "##" headings.
+// testdata/context.golden is the specification of the format.
 func (r *Reader) Context(day time.Time) (string, error) {
 	docs, problems, err := r.Scan()
 	if err != nil {
