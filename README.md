@@ -6,7 +6,7 @@ Most markdown MCP servers are read-only. This one is built for the harder case: 
 
 - Query by type, tags (AND / OR / prefix), frontmatter fields and date. Full-text search.
 - `get_context` returns everything a new session needs in one call.
-- Writes are append, frontmatter patch, or full rewrite guarded by a content hash.
+- Writes are create, append, frontmatter patch, one exact text replacement, or full rewrite guarded by a content hash.
 - Every AI write is a git commit, and `batch` makes many writes one: checked first, all or nothing. No delete tool. Paths confined to the vault.
 - Document types live in a config file, so it works for any vault.
 
@@ -236,7 +236,7 @@ To try a change in a client, run `go install ./cmd/prep-mcp` and restart the cli
     '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"sh","version":"0"}}}' \
     '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
     '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"get_context","arguments":{"date":"2026-01-14"}}}'
-  sleep 1; } | prep-mcp --root examples/vault
+  sleep 1; } | "$(go env GOPATH)/bin/prep-mcp" --root examples/vault
 ```
 
 The `sleep` keeps input open long enough for the answer: the server stops at the end of its input. Logs go to stderr, and stdout carries only the protocol.
