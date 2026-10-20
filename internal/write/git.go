@@ -52,100 +52,175 @@ func (g *Git) Commit(ctx context.Context, paths []string, msg string) (hash, war
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	fail := func(format string, args ...any) (string, string) {
-		return "", "not committed: " + fmt.Sprintf(format, args...)
+	hash, err := g.commit(ctx, paths, msg, timeout)
+	if err != nil {
+		return "", "not committed: " + err.Error()
 	}
+	return hash, ""
+}
+
+// commit runs Commit's steps in order and stops at the first that fails.
+func (g *Git) commit(ctx context.Context, paths []string, msg string, timeout time.Duration) (string, error) {
 	bin := cmp.Or(g.Bin, "git")
 	if _, err := exec.LookPath(bin); err != nil {
-		return fail("cannot run git (%s). Install git, fix the path %q, or set commit_on_write: false in the config", err, bin)
+		return "", fmt.Errorf(
+			"cannot run git (%w). Install git, fix the path %q, or set commit_on_write: false in the config",
+			err,
+			bin,
+		)
 	}
-	author := g.Name + " <" + g.Email + ">"
-	// fix is the command that makes this commit by hand, author and message included.
-	fix := fmt.Sprintf(
-		"run `git add -- %[1]s && git commit --only -m %[2]s --author=%[3]s -- %[1]s` in %[4]s",
-		pathList(paths),
-		shellQuote(msg),
-		shellQuote(author),
-		g.Dir,
-	)
-	// problem turns a failed git run into a warning, telling a timeout and a
-	// lock left by another git process from other failures.
-	problem := func(what, out string, err error) (string, string) {
-		switch {
-		case errors.Is(ctx.Err(), context.DeadlineExceeded):
-			return fail("git timed out after %s during %s (a hook or a prompt may be hanging). The file is saved; "+
-				"to commit it, %s", timeout, what, fix)
-		case ctx.Err() != nil:
-			return fail("cancelled during %s. The file is saved; to commit it, %s", what, fix)
-		}
-		if m := lockRE.FindStringSubmatch(out); m != nil {
-			// A lock stops git add (index.lock) or only the commit (HEAD.lock, a branch's lock).
-			// Never delete it: a live lock cannot be told from a stale one, and
-			// deleting the lock of a running git (a GUI, the Obsidian Git plugin, an
-			// open commit editor) can corrupt the index.
-			staged := "nothing was staged"
-			if what == "git commit" {
-				staged = "the change is staged"
-			}
-			return fail(
-				"git's lock file %s exists. Another git process may be running, or one crashed and left it behind. "+
-					"The file is saved; %s. Once no git process is running in %s, delete %s, then %s. "+
-					"prep-mcp never deletes it",
-				m[1],
-				staged,
-				g.Dir,
-				m[1],
-				fix,
+	c := &commitRun{
+		git: runner{bin: bin, dir: g.Dir, env: append(
+			os.Environ(),
+			"GIT_TERMINAL_PROMPT=0",
+			"LC_ALL=C", // stable messages, so "not a git repository" can be recognised
+			"GIT_COMMITTER_NAME="+g.Name,
+			"GIT_COMMITTER_EMAIL="+g.Email,
+		)},
+		paths:   paths,
+		msg:     msg,
+		author:  g.Name + " <" + g.Email + ">",
+		timeout: timeout,
+	}
+
+	if err := c.checkRoot(ctx); err != nil {
+		return "", err
+	}
+	if err := c.stage(ctx); err != nil {
+		return "", err
+	}
+	// A write that left the files as they already were in HEAD has nothing to commit.
+	if changed, err := c.diffStaged(ctx); err != nil || !changed {
+		return "", err
+	}
+	if err := c.commitStaged(ctx); err != nil {
+		return "", err
+	}
+	return c.readHead(ctx)
+}
+
+// commitRun is one Commit: git set up to run in the vault, and what to commit.
+type commitRun struct {
+	git         runner
+	paths       []string
+	msg, author string
+	timeout     time.Duration
+}
+
+// checkRoot fails unless the vault is the root of its git repository.
+func (c *commitRun) checkRoot(ctx context.Context) error {
+	dir := c.git.dir
+	top, err := c.git.run(ctx, "rev-parse", "--show-toplevel")
+	if err != nil {
+		if strings.Contains(top, "not a git repository") {
+			return fmt.Errorf(
+				"%s is not a git repository. Run `git init` in %s to get a commit per write, "+
+					"or set commit_on_write: false",
+				dir,
+				dir,
 			)
 		}
-		return fail(
-			"%s failed: %s. The file is saved; fix the cause, then %s",
+		return c.explainFailure(ctx, "git rev-parse", top, err)
+	}
+	if top = strings.TrimSpace(top); !samePath(dir, top) {
+		return fmt.Errorf(
+			"%s is inside the git repository at %s but is not its root, so nothing is committed there. "+
+				"Run `git init` in %s to make the vault its own repository, or set commit_on_write: false",
+			dir,
+			top,
+			dir,
+		)
+	}
+	return nil
+}
+
+// stage adds the paths to the index.
+func (c *commitRun) stage(ctx context.Context) error {
+	if out, err := c.git.run(ctx, append([]string{"add", "--"}, c.paths...)...); err != nil {
+		return c.explainFailure(ctx, "git add", out, err)
+	}
+	return nil
+}
+
+// diffStaged reports whether the staged paths differ from HEAD.
+func (c *commitRun) diffStaged(ctx context.Context) (bool, error) {
+	_, err := c.git.run(ctx, append([]string{"diff", "--cached", "--quiet", "--"}, c.paths...)...)
+	switch {
+	case err == nil:
+		return false, nil
+	case ctx.Err() != nil:
+		return false, c.explainFailure(ctx, "git diff", "", err)
+	}
+	return true, nil
+}
+
+// commitStaged commits the paths and nothing else, as the configured author.
+// A failed commit leaves them staged. No git reset: it is one more call that
+// can fail in a repo already in an odd state, and they belong in the next commit.
+func (c *commitRun) commitStaged(ctx context.Context) error {
+	args := append([]string{"commit", "--only", "-m", c.msg, "--author=" + c.author, "--"}, c.paths...)
+	if out, err := c.git.run(ctx, args...); err != nil {
+		return c.explainFailure(ctx, "git commit", out, err)
+	}
+	return nil
+}
+
+// readHead returns the short hash of HEAD, the commit just made.
+func (c *commitRun) readHead(ctx context.Context) (string, error) {
+	out, err := c.git.run(ctx, "rev-parse", "--short", "HEAD")
+	if err != nil {
+		return "", c.explainFailure(ctx, "git rev-parse", out, err)
+	}
+	return strings.TrimSpace(out), nil
+}
+
+// explainFailure turns a failed git run into the error a warning shows,
+// telling a timeout and a lock left by another git process from other failures.
+func (c *commitRun) explainFailure(ctx context.Context, what, out string, err error) error {
+	fix := c.renderFix()
+	switch {
+	case errors.Is(ctx.Err(), context.DeadlineExceeded):
+		return fmt.Errorf(
+			"git timed out after %s during %s (a hook or a prompt may be hanging). The file is saved; to commit it, %s",
+			c.timeout,
 			what,
-			describe(out, err),
+			fix,
+		)
+	case ctx.Err() != nil:
+		return fmt.Errorf("cancelled during %s. The file is saved; to commit it, %s", what, fix)
+	}
+	if m := lockRE.FindStringSubmatch(out); m != nil {
+		// A lock stops git add (index.lock) or only the commit (HEAD.lock, a branch's lock).
+		// Never delete it: a live lock cannot be told from a stale one, and
+		// deleting the lock of a running git (a GUI, the Obsidian Git plugin, an
+		// open commit editor) can corrupt the index.
+		staged := "nothing was staged"
+		if what == "git commit" {
+			staged = "the change is staged"
+		}
+		return fmt.Errorf(
+			"git's lock file %s exists. Another git process may be running, or one crashed and left it behind. "+
+				"The file is saved; %s. Once no git process is running in %s, delete %s, then %s. "+
+				"prep-mcp never deletes it",
+			m[1],
+			staged,
+			c.git.dir,
+			m[1],
 			fix,
 		)
 	}
+	return fmt.Errorf("%s failed: %s. The file is saved; fix the cause, then %s", what, describe(out, err), fix)
+}
 
-	r := runner{bin: bin, dir: g.Dir, env: append(os.Environ(),
-		"GIT_TERMINAL_PROMPT=0",
-		"LC_ALL=C", // stable messages, so "not a git repository" can be recognised
-		"GIT_COMMITTER_NAME="+g.Name, "GIT_COMMITTER_EMAIL="+g.Email,
-	)}
-
-	top, err := r.run(ctx, "rev-parse", "--show-toplevel")
-	if err != nil {
-		if strings.Contains(top, "not a git repository") {
-			return fail("%s is not a git repository. "+
-				"Run `git init` in %s to get a commit per write, or set commit_on_write: false", g.Dir, g.Dir)
-		}
-		return problem("git rev-parse", top, err)
-	}
-	if top = strings.TrimSpace(top); !samePath(g.Dir, top) {
-		return fail("%s is inside the git repository at %s but is not its root, so nothing is committed there. "+
-			"Run `git init` in %s to make the vault its own repository, or set commit_on_write: false",
-			g.Dir, top, g.Dir)
-	}
-
-	if out, err := r.run(ctx, append([]string{"add", "--"}, paths...)...); err != nil {
-		return problem("git add", out, err)
-	}
-	// A write that left the files as they already were in HEAD has nothing to commit.
-	if _, err := r.run(ctx, append([]string{"diff", "--cached", "--quiet", "--"}, paths...)...); err == nil {
-		return "", ""
-	} else if ctx.Err() != nil {
-		return problem("git diff", "", err)
-	}
-	// A failed commit leaves the paths staged. No git reset: it is one more call
-	// that can fail in a repo already in an odd state, and they belong in the next commit.
-	commit := []string{"commit", "--only", "-m", msg, "--author=" + author, "--"}
-	if out, err := r.run(ctx, append(commit, paths...)...); err != nil {
-		return problem("git commit", out, err)
-	}
-	out, err := r.run(ctx, "rev-parse", "--short", "HEAD")
-	if err != nil {
-		return problem("git rev-parse", out, err)
-	}
-	return strings.TrimSpace(out), ""
+// renderFix renders the command that makes this commit by hand, author and message included.
+func (c *commitRun) renderFix() string {
+	return fmt.Sprintf(
+		"run `git add -- %[1]s && git commit --only -m %[2]s --author=%[3]s -- %[1]s` in %[4]s",
+		pathList(c.paths),
+		shellQuote(c.msg),
+		shellQuote(c.author),
+		c.git.dir,
+	)
 }
 
 type runner struct {
