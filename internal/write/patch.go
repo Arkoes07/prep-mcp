@@ -1,11 +1,9 @@
 package write
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"slices"
-	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -21,62 +19,58 @@ type Patch struct {
 // PatchOp changes frontmatter keys and tags, leaving the body's bytes alone.
 func PatchOp(path string, patch Patch) Op {
 	return Op{tool: ToolPatch, target: path, apply: func(p *batchPlan) (*file, []byte, []string, error) {
-		return p.modify(path, patchRules, func(f *file) ([]byte, []string, error) {
+		return p.modify(path, patchRules, func(f *file, before parsed) ([]byte, *vault.Frontmatter, []string, error) {
 			// No updated date on a template: every document made from it would copy it.
-			return applyPatch(f.cur, patch, p.w.now().Format(time.DateOnly), !f.template)
+			return applyPatch(before, patch, p.w.now().Format(time.DateOnly), !f.template)
 		})
 	}}
 }
 
-// applyPatch changes only the affected top-level keys of src's frontmatter
-// and returns the new file and its warnings. Untouched lines and the whole
-// body keep their exact bytes. A patch that changes nothing returns src. With
-// stamp, any real change also sets updated to today, unless the patch sets or
-// unsets it.
-//
-// It splices lines instead of re-encoding the frontmatter through yaml.Node,
-// which collapses the aligned "# a | b" comments templates produce and would
-// make every edit a noisy diff. The cost is more code, checked by verifyPatch.
-func applyPatch(src []byte, p Patch, today string, stamp bool) ([]byte, []string, error) {
-	fm, err := vault.SplitFrontmatter(src)
+// applyPatch changes the keys p names in the frontmatter before and returns
+// the new file, its frontmatter and the patch's warnings. A patch that changes
+// nothing returns the file as it was. With stamp, any change also sets updated
+// to today, unless the patch sets or unsets it.
+func applyPatch(before parsed, p Patch, today string, stamp bool) ([]byte, *vault.Frontmatter, []string, error) {
+	fm, err := before.fm, before.err
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	if fm == nil {
-		return nil, nil, errors.New("no frontmatter to patch; use replace_doc to give this file frontmatter")
+		return nil, nil, nil, errors.New("no frontmatter to patch; use replace_doc to give this file frontmatter")
 	}
 	setKeys, err := checkPatch(p)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
-	lines := slices.Collect(strings.Lines(string(src[fm.Start:fm.End])))
-	pl := &patchPlan{
-		patch:   p,
-		setKeys: setKeys,
-		spans:   keySpans(fm.Map, lines),
-		edits:   map[string]lineEdit{},
-		touched: map[string]bool{},
+	ed := fm.Edit()
+	for _, k := range p.Unset {
+		ed.Unset(k)
 	}
-	pl.unsetKeys()
-	pl.setValues()
-	pl.changeTags(fm.Map)
-	if len(pl.touched) == 0 {
-		return src, pl.warnings, nil
+	for key, val := range vault.Pairs(p.Set) {
+		if key.Value != vault.FieldTags {
+			ed.Set(key.Value, val)
+		}
 	}
-	if stamp {
-		pl.stampUpdated(today)
+	var warnings []string
+	if slices.Contains(setKeys, vault.FieldTags) {
+		ed.SetTags(vault.Values(p.Set, vault.FieldTags))
+	} else if p.hasTagOps() {
+		var tags []string
+		tags, warnings = changedTags(vault.Values(fm.Map, vault.FieldTags), p)
+		ed.SetTags(tags)
 	}
-
-	eol := "\n"
-	if fm.CRLF {
-		eol = "\r\n"
+	// setKeys, not what changed: a set to the value updated already has keeps it.
+	ownUpdated := slices.Contains(setKeys, vault.FieldUpdated) || slices.Contains(p.Unset, vault.FieldUpdated)
+	if stamp && ed.Changed() && !ownUpdated {
+		ed.Set(vault.FieldUpdated, vault.StrNode(today))
 	}
-	out := slices.Concat(src[:fm.Start], []byte(pl.rebuild(lines, eol)), src[fm.End:])
-	if err := verifyPatch(src, out, fm, pl); err != nil {
-		return nil, nil, err
+	out, after, err := ed.Apply()
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("internal error: %w; nothing was written. "+
+			"Report this as a bug and use replace_doc instead", err)
 	}
-	return out, pl.warnings, nil
+	return out, after, warnings, nil
 }
 
 // checkPatch rejects a patch that contradicts itself and returns the keys of
@@ -102,146 +96,23 @@ func checkPatch(p Patch) ([]string, error) {
 
 func (p Patch) hasTagOps() bool { return len(p.AddTags) > 0 || len(p.RemoveTags) > 0 }
 
-// lineEdit is what happens to the lines of one key already in the block.
-type lineEdit struct {
-	replace   []string // rendered lines, without line endings
-	isDropped bool     // the key is removed; replace is empty
-}
-
-type patchPlan struct {
-	patch        Patch
-	setKeys      []string
-	spans        map[string]span
-	edits        map[string]lineEdit // keys already in the block
-	appended     []string            // rendered lines of new keys, in order
-	touched      map[string]bool     // keys set, changed or removed
-	hasTagChange bool                // the patch sets or changes tags
-	wantTags     []string            // the normalised tags asked for, when hasTagChange
-	warnings     []string
-}
-
-// commentOf returns the line comment of an existing key, so a rewrite keeps it.
-func (pl *patchPlan) commentOf(k string) string {
-	s, ok := pl.spans[k]
-	if !ok {
-		return ""
-	}
-	if c := s.val.LineComment; c != "" {
-		return c
-	}
-	return s.key.LineComment
-}
-
-// put writes k as the rendered lines: in place if the key exists, else appended.
-func (pl *patchPlan) put(k string, lines []string) {
-	pl.touched[k] = true
-	if _, ok := pl.spans[k]; ok {
-		pl.edits[k] = lineEdit{replace: lines}
-		return
-	}
-	pl.appended = append(pl.appended, lines...)
-}
-
-func (pl *patchPlan) unsetKeys() {
-	for _, k := range pl.patch.Unset {
-		if _, ok := pl.spans[k]; ok {
-			pl.edits[k] = lineEdit{isDropped: true}
-			pl.touched[k] = true
+// changedTags is the tag list add_tags and remove_tags make of cur, with a
+// warning for each tag to remove that is not there.
+func changedTags(cur []string, p Patch) ([]string, []string) {
+	want := slices.Clone(cur)
+	for _, t := range vault.NormalizeTagList(p.AddTags) {
+		if !slices.Contains(want, t) {
+			want = append(want, t)
 		}
 	}
-}
-
-// setValues writes every set key whose value differs, except tags, which
-// changeTags handles.
-func (pl *patchPlan) setValues() {
-	for key, val := range vault.Pairs(pl.patch.Set) {
-		k := key.Value
-		if k == vault.FieldTags {
-			continue
-		}
-		if s, ok := pl.spans[k]; ok && nodeEqual(s.val, val) {
-			continue
-		}
-		pl.put(k, renderKey(k, val, pl.commentOf(k)))
-	}
-}
-
-// changeTags works out the tag list the patch asks for and rewrites the tags
-// key if that differs from the current list, warning about each tag to remove
-// that is not there. m is the current frontmatter.
-func (pl *patchPlan) changeTags(m *yaml.Node) {
-	p := pl.patch
-	setTags := slices.Contains(pl.setKeys, vault.FieldTags)
-	if !setTags && !p.hasTagOps() {
-		return
-	}
-	pl.hasTagChange = true
-	cur := vault.Values(m, vault.FieldTags)
-	if setTags {
-		pl.wantTags = vault.Values(p.Set, vault.FieldTags)
-	} else {
-		want := slices.Clone(cur)
-		for _, t := range vault.NormalizeTagList(p.AddTags) {
-			if !slices.Contains(want, t) {
-				want = append(want, t)
-			}
-		}
-		drop := vault.NormalizeTagList(p.RemoveTags)
-		for _, t := range drop {
-			if !slices.Contains(cur, t) {
-				pl.warnings = append(pl.warnings,
-					fmt.Sprintf("tag %q is not on this document, so there was nothing to remove", t))
-			}
-		}
-		pl.wantTags = slices.DeleteFunc(want, func(t string) bool { return slices.Contains(drop, t) })
-	}
-	if !slices.Equal(cur, pl.wantTags) {
-		pl.put(vault.FieldTags, renderTags(vault.Field(m, vault.FieldTags), pl.wantTags, pl.commentOf(vault.FieldTags)))
-	}
-}
-
-// stampUpdated sets updated to today, unless the patch sets or unsets it itself.
-func (pl *patchPlan) stampUpdated(today string) {
-	// setKeys, not touched: a set to the value updated already has touches nothing.
-	if slices.Contains(pl.setKeys, vault.FieldUpdated) || slices.Contains(pl.patch.Unset, vault.FieldUpdated) {
-		return
-	}
-	day := vault.StrNode(today)
-	if s, ok := pl.spans[vault.FieldUpdated]; !ok || !nodeEqual(s.val, day) {
-		pl.put(vault.FieldUpdated, renderKey(vault.FieldUpdated, day, pl.commentOf(vault.FieldUpdated)))
-	}
-}
-
-// rebuild writes the frontmatter block with the planned edits: changed keys in
-// place, dropped keys gone, new keys before the closing fence, and every other
-// line byte for byte.
-func (pl *patchPlan) rebuild(lines []string, eol string) string {
-	var block strings.Builder
-	emit := func(rendered []string) {
-		for _, l := range rendered {
-			block.WriteString(l)
-			block.WriteString(eol)
+	var warnings []string
+	drop := vault.NormalizeTagList(p.RemoveTags)
+	for _, t := range drop {
+		if !slices.Contains(cur, t) {
+			warnings = append(warnings, fmt.Sprintf("tag %q is not on this document, so there was nothing to remove", t))
 		}
 	}
-	byStart := make(map[int]string, len(pl.edits))
-	for k, s := range pl.spans {
-		if _, ok := pl.edits[k]; ok {
-			byStart[s.from] = k
-		}
-	}
-	for i := 0; i < len(lines); i++ {
-		k, ok := byStart[i]
-		if !ok {
-			block.WriteString(lines[i])
-			continue
-		}
-		if e := pl.edits[k]; !e.isDropped {
-			emit(e.replace)
-		}
-		i = pl.spans[k].to - 1
-	}
-	emit(pl.appended)
-	return block.String()
+	return slices.DeleteFunc(want, func(t string) bool { return slices.Contains(drop, t) }), warnings
 }
 
 func setKeyList(set *yaml.Node) ([]string, error) {
@@ -256,165 +127,4 @@ func setKeyList(set *yaml.Node) ([]string, error) {
 		keys = append(keys, k.Value)
 	}
 	return keys, nil
-}
-
-// span is where one top-level key lives in the frontmatter block, in line
-// indexes: lines[from:to]. Blank and comment-only lines after the value belong
-// to no key.
-type span struct {
-	key, val *yaml.Node
-	from, to int
-}
-
-func keySpans(m *yaml.Node, lines []string) map[string]span {
-	spans := make(map[string]span, len(m.Content)/2)
-	for i := 0; i+1 < len(m.Content); i += 2 {
-		key, val := m.Content[i], m.Content[i+1]
-		from, to := key.Line-1, len(lines)
-		if i+2 < len(m.Content) {
-			to = m.Content[i+2].Line - 1
-		}
-		block := val.Kind == yaml.ScalarNode && val.Style&(yaml.LiteralStyle|yaml.FoldedStyle) != 0
-		for to-1 > from {
-			t := strings.TrimSpace(lines[to-1])
-			if t == "" || (!block && strings.HasPrefix(t, "#")) {
-				to--
-				continue
-			}
-			break
-		}
-		spans[key.Value] = span{key: key, val: val, from: from, to: to}
-	}
-	return spans
-}
-
-// renderKey encodes one "key: value" pair as YAML lines, keeping the old line comment.
-func renderKey(k string, v *yaml.Node, comment string) []string {
-	pair := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map", Content: []*yaml.Node{vault.KeyNode(k), v}}
-	lines := strings.Split(strings.TrimSuffix(vault.Encode(pair), "\n"), "\n")
-	if comment != "" {
-		lines[0] += " " + comment
-	}
-	return lines
-}
-
-// renderTags writes a normalised tag list in the style of the existing node:
-// block if it was a block list, flow otherwise (also for a comma string).
-func renderTags(existing *yaml.Node, tags []string, comment string) []string {
-	isBlockList := existing != nil && existing.Kind == yaml.SequenceNode && existing.Style&yaml.FlowStyle == 0
-	if isBlockList && len(existing.Content) > 0 && len(tags) > 0 {
-		indent := strings.Repeat(" ", max(existing.Column-1, 0))
-		head := "tags:"
-		if comment != "" {
-			head += " " + comment
-		}
-		out := []string{head}
-		for _, t := range tags {
-			out = append(out, indent+"- "+strings.TrimSuffix(vault.Encode(vault.StrNode(t)), "\n"))
-		}
-		return out
-	}
-	return renderKey(vault.FieldTags, vault.TagsNode(tags), comment)
-}
-
-// nodeEqual compares what two nodes say, not how they are written.
-func nodeEqual(a, b *yaml.Node) bool {
-	if a != nil && a.Kind == yaml.AliasNode {
-		a = a.Alias
-	}
-	if b != nil && b.Kind == yaml.AliasNode {
-		b = b.Alias
-	}
-	if a == nil || b == nil {
-		return a == b
-	}
-	if isNull(a) || isNull(b) {
-		return isNull(a) && isNull(b)
-	}
-	if a.Kind != b.Kind {
-		return false
-	}
-	switch a.Kind {
-	case yaml.ScalarNode:
-		return a.Value == b.Value
-	case yaml.SequenceNode, yaml.MappingNode:
-		if len(a.Content) != len(b.Content) {
-			return false
-		}
-		for i := range a.Content {
-			if !nodeEqual(a.Content[i], b.Content[i]) {
-				return false
-			}
-		}
-		return true
-	}
-	return false
-}
-
-func isNull(n *yaml.Node) bool { return n.Kind == yaml.ScalarNode && n.Tag == "!!null" }
-
-// verifyPatch is the safety net: the result must re-read as the patch intended,
-// with every untouched key and the body unchanged.
-func verifyPatch(src, out []byte, old *vault.Frontmatter, pl *patchPlan) error {
-	const failed = "internal error: the patched frontmatter did not re-read as intended (%w); " +
-		"nothing was written. Report this as a bug and use replace_doc instead"
-	bug := func(format string, args ...any) error {
-		return fmt.Errorf(failed, fmt.Errorf(format, args...))
-	}
-	re, err := reread(out)
-	if err != nil {
-		return fmt.Errorf(failed, err)
-	}
-	p, touched := pl.patch, pl.touched
-	if !bytes.Equal(out[re.BodyOffset:], src[old.BodyOffset:]) {
-		return bug("the body changed")
-	}
-	var oldOrder, newOrder []string
-	for key, val := range vault.Pairs(old.Map) {
-		k := key.Value
-		if touched[k] {
-			continue
-		}
-		oldOrder = append(oldOrder, k)
-		if !nodeEqual(val, vault.Field(re.Map, k)) {
-			return bug("%s changed", k)
-		}
-	}
-	for key := range vault.Pairs(re.Map) {
-		if k := key.Value; !touched[k] && slices.Contains(oldOrder, k) {
-			newOrder = append(newOrder, k)
-		}
-	}
-	if !slices.Equal(oldOrder, newOrder) {
-		return bug("key order changed")
-	}
-	for _, k := range pl.setKeys {
-		if k == vault.FieldTags {
-			continue
-		}
-		if !nodeEqual(vault.Field(p.Set, k), vault.Field(re.Map, k)) {
-			return bug("%s was not written as given", k)
-		}
-	}
-	for _, k := range p.Unset {
-		if vault.Field(re.Map, k) != nil {
-			return bug("%s is still present", k)
-		}
-	}
-	if pl.hasTagChange && !slices.Equal(vault.Values(re.Map, vault.FieldTags), pl.wantTags) {
-		return bug("tags differ")
-	}
-	return nil
-}
-
-// reread parses the frontmatter of a file this package built, which must have one.
-func reread(src []byte) (*vault.Frontmatter, error) {
-	fm, err := vault.SplitFrontmatter(src)
-	if err != nil {
-		return nil, err
-	}
-	if fm == nil {
-		return nil, errors.New("no frontmatter found")
-	}
-	return fm, nil
 }

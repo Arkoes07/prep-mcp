@@ -11,15 +11,37 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Frontmatter is the parsed leading YAML block of a file.
-//
-// All offsets are byte offsets into the original source (a BOM counts).
+// Frontmatter is the parsed leading YAML block of a file. Read its values
+// with Values and Text; Map is not to be changed. Change it with Edit.
 type Frontmatter struct {
-	Map        *yaml.Node // the mapping node; empty (not nil) for an empty block
-	Start, End int        // the YAML text is src[Start:End]: after the opening fence, up to the closing fence line
-	BodyOffset int        // first byte after the closing fence line
-	BodyLine   int        // 1-based file line where the body starts
-	CRLF       bool       // the file uses CRLF line endings
+	Map *yaml.Node // the mapping node; empty (not nil) for an empty block
+
+	// Byte offsets into src (a BOM counts).
+	src        []byte
+	start, end int  // the YAML text is src[start:end]: after the opening fence, up to the closing fence line
+	bodyOffset int  // first byte after the closing fence line
+	bodyLine   int  // 1-based file line where the body starts
+	crlf       bool // the file uses CRLF line endings
+}
+
+// lineShift turns a line yaml.v3 gives a node, counted from 1 in the block,
+// into a file line: line 1 is the opening fence.
+const lineShift = 1
+
+// Body is the file after the closing fence line.
+func (fm *Frontmatter) Body() []byte { return fm.src[fm.bodyOffset:] }
+
+// BodyLine is the 1-based file line where the body starts.
+func (fm *Frontmatter) BodyLine() int { return fm.bodyLine }
+
+// Line is the 1-based file line of the top-level key, or 0 when it is missing.
+func (fm *Frontmatter) Line(key string) int {
+	for k := range Pairs(fm.Map) {
+		if k.Value == key {
+			return k.Line + lineShift
+		}
+	}
+	return 0
 }
 
 var bom = []byte{0xEF, 0xBB, 0xBF}
@@ -45,14 +67,14 @@ func SplitFrontmatter(src []byte) (*Frontmatter, error) {
 	if !isFence(first) {
 		return nil, nil
 	}
-	fm := &Frontmatter{Start: next, CRLF: bytes.HasSuffix(src[pos:next], []byte("\r\n"))}
+	fm := &Frontmatter{src: src, start: next, crlf: bytes.HasSuffix(src[pos:next], []byte("\r\n"))}
 
 	line := 2
 	for pos = next; pos < len(src); {
 		l, n := nextLine(src, pos)
 		if isFence(l) {
-			fm.End, fm.BodyOffset, fm.BodyLine = pos, n, line+1
-			return parseBlock(src, fm)
+			fm.end, fm.bodyOffset, fm.bodyLine = pos, n, line+1
+			return parseBlock(fm)
 		}
 		pos = n
 		line++
@@ -82,10 +104,8 @@ func isFence(line []byte) bool {
 // line of the block, sometimes counted from 0, so it is reported as "near".
 var yamlLine = regexp.MustCompile(`^line (\d+): `)
 
-func parseBlock(src []byte, fm *Frontmatter) (*Frontmatter, error) {
-	// Block line 1 is file line 2 (line 1 is the opening fence).
-	const lineShift = 1
-	block := src[fm.Start:fm.End]
+func parseBlock(fm *Frontmatter) (*Frontmatter, error) {
+	block := fm.src[fm.start:fm.end]
 	var doc yaml.Node
 	if err := yaml.Unmarshal(block, &doc); err != nil {
 		reason, where := strings.TrimPrefix(err.Error(), "yaml: "), ""

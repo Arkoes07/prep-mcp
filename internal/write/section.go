@@ -18,9 +18,9 @@ var (
 // section at the end of the file.
 func AppendOp(path, heading, content string) Op {
 	return Op{tool: ToolAppend, target: path, apply: func(p *batchPlan) (*file, []byte, []string, error) {
-		return p.modify(path, contentRules, func(f *file) ([]byte, []string, error) {
+		return p.modify(path, contentRules, func(f *file, _ parsed) ([]byte, *vault.Frontmatter, []string, error) {
 			next, err := insertSection(f.cur, heading, content)
-			return next, nil, err
+			return next, nil, nil, err
 		})
 	}}
 }
@@ -101,7 +101,7 @@ func bodyLines(src []byte) []line {
 	text := string(src)
 	start := 0
 	if fm, err := vault.SplitFrontmatter(src); err == nil && fm != nil {
-		start = fm.BodyOffset
+		start = len(src) - len(fm.Body())
 	}
 	var lines []line
 	end := start

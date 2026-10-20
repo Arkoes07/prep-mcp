@@ -263,19 +263,26 @@ func (w *Writer) plan(ops []Op) *batchPlan {
 }
 
 // modify runs transform on the existing file at path as the batch sees it,
-// and holds the result to the document rules as r says.
+// and holds the result to the document rules as r says. It parses the file
+// once, for transform and for the check as before. A transform that re-read
+// its result returns it as after; otherwise the check parses next.
 func (p *batchPlan) modify(
 	path string,
 	r opRules,
-	transform func(f *file) (next []byte, warnings []string, err error),
+	transform func(f *file, before parsed) (next []byte, after *vault.Frontmatter, warnings []string, err error),
 ) (*file, []byte, []string, error) {
 	f, err := p.existing(path)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	next, warnings, err := transform(f)
+	before := parse(f.cur)
+	next, re, warnings, err := transform(f, before)
 	if err != nil {
 		return nil, nil, nil, err
+	}
+	after := parsed{fm: re}
+	if re == nil {
+		after = parse(next)
 	}
 	if f.template {
 		// A template's fields are empty on purpose, and the other rules'
@@ -283,7 +290,7 @@ func (p *batchPlan) modify(
 		// would carry into every file Obsidian makes from it.
 		r.parseOnly = true
 	}
-	_, found, err := p.check(r, f.cur, next)
+	_, found, err := p.check(r, before, after)
 	if err != nil {
 		return nil, nil, nil, err
 	}

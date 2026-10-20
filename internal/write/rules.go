@@ -56,14 +56,14 @@ var (
 )
 
 // check holds after, an op's result, to the document rules against before,
-// the file as the earlier ops leave it (nil for a new file). A finding the
+// the file as the earlier ops leave it (zero for a new file). A finding the
 // result shares with before is a warning; any other is the op's doing, and
 // an error. It returns the result as a document, empty for a file without
 // frontmatter.
-func (p *batchPlan) check(r opRules, before, after []byte) (*document.Doc, []string, error) {
+func (p *batchPlan) check(r opRules, before, after parsed) (*document.Doc, []string, error) {
 	voc, vocErr := p.vocabulary()
-	was, wasErr := p.parse(before, voc)
-	now, nowErr := p.parse(after, voc)
+	was, wasErr := p.doc(before, voc)
+	now, nowErr := p.doc(after, voc)
 	switch {
 	case nowErr != nil && wasErr != nil:
 		return nil, []string{reason(nowErr) + "; fix the frontmatter with edit_text"}, nil
@@ -118,13 +118,27 @@ func (p *batchPlan) check(r opRules, before, after []byte) (*document.Doc, []str
 	return now, warnings, nil
 }
 
-// parse reads src as a document, an empty one for a file without frontmatter.
-func (p *batchPlan) parse(src []byte, voc *vault.Vocabulary) (*document.Doc, error) {
-	d, err := document.Parse(src, p.w.cfg, voc)
-	if d == nil && err == nil {
+// parsed is a file's frontmatter as vault.SplitFrontmatter read it.
+type parsed struct {
+	fm  *vault.Frontmatter // nil for a file without frontmatter
+	err error              // the frontmatter does not parse
+}
+
+func parse(src []byte) parsed {
+	fm, err := vault.SplitFrontmatter(src)
+	return parsed{fm: fm, err: err}
+}
+
+// doc reads s as a document, an empty one for a file without frontmatter.
+// Findings are worked out every time: the vocabulary can change within a batch.
+func (p *batchPlan) doc(s parsed, voc *vault.Vocabulary) (*document.Doc, error) {
+	switch {
+	case s.err != nil:
+		return nil, s.err
+	case s.fm == nil:
 		return &document.Doc{}, nil
 	}
-	return d, err
+	return document.Of(s.fm, p.w.cfg, voc), nil
 }
 
 // reason is why frontmatter does not parse, alone: the parser's advice to fix

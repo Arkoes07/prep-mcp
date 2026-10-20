@@ -35,11 +35,11 @@ func parse(t *testing.T, src string, voc *vault.Vocabulary) *document.Doc {
 	if err != nil {
 		t.Fatal(err)
 	}
-	d, err := document.Parse([]byte(src), cfg, voc)
-	if err != nil {
-		t.Fatalf("Parse(%q): %v", src, err)
+	fm, err := vault.SplitFrontmatter([]byte(src))
+	if err != nil || fm == nil {
+		t.Fatalf("SplitFrontmatter(%q): %v", src, err)
 	}
-	return d
+	return document.Of(fm, cfg, voc)
 }
 
 func TestParse(t *testing.T) {

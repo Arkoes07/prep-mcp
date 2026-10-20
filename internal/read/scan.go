@@ -148,9 +148,9 @@ func (r *Reader) parseDoc(p string, d fs.DirEntry, src []byte) (*Doc, []Problem)
 		Type:          doc.Type,
 		Title:         cmp.Or(doc.Title, strings.TrimSuffix(name, path.Ext(name))),
 		Frontmatter:   fm.Map,
-		Body:          src[fm.BodyOffset:],
+		Body:          fm.Body(),
 		src:           src,
-		BodyLine:      fm.BodyLine,
+		BodyLine:      fm.BodyLine(),
 		Tags:          doc.Tags,
 		Date:          doc.Date,
 		DateFromMtime: doc.Date.IsZero(),
@@ -159,7 +159,7 @@ func (r *Reader) parseDoc(p string, d fs.DirEntry, src []byte) (*Doc, []Problem)
 		out.Date = info.ModTime()
 	}
 	if doc.Title != "" {
-		out.titleLine = vault.Field(fm.Map, vault.FieldTitle).Line + 1
+		out.titleLine = fm.Line(vault.FieldTitle)
 	}
 	var problems []Problem
 	for _, f := range doc.Findings {
@@ -168,7 +168,7 @@ func (r *Reader) parseDoc(p string, d fs.DirEntry, src []byte) (*Doc, []Problem)
 				Path: p,
 				Msg: fmt.Sprintf(
 					"line %d: %s; set it with update_frontmatter (using the file's modification time meanwhile)",
-					vault.Field(fm.Map, doc.DateField).Line+1,
+					fm.Line(doc.DateField),
 					f.Reason,
 				),
 			})

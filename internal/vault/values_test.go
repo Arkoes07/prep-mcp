@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/arkoes07/prep-mcp/internal/vault"
 )
 
@@ -155,4 +157,52 @@ func TestDay(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestEqual: two nodes are equal when they hold the same values the way
+// Values reads them, whatever their quoting, aliases or tags.
+func TestEqual(t *testing.T) {
+	tests := []struct {
+		name, a, b string // each the YAML of field x
+		want       bool
+	}{
+		{name: "same", a: "x: a", b: "x: a", want: true},
+		{name: "trimmed", a: `x: " a"`, b: "x: a", want: true},
+		{name: "quoted", a: `x: "1"`, b: "x: 1", want: true},
+		{name: "null_is_blank", a: "x: null", b: `x: ""`, want: true},
+		{name: "blank_is_null", a: "x:", b: "x: ~", want: true},
+		{name: "different", a: "x: a", b: "x: b"},
+		{name: "scalar_vs_list", a: "x: a", b: "x: [a]"},
+		{name: "null_vs_empty_list", a: "x:", b: "x: []"},
+		{name: "list_styles", a: "x: [a, b]", b: "x:\n  - a\n  - b", want: true},
+		{name: "list_order", a: "x: [a, b]", b: "x: [b, a]"},
+		{name: "list_length", a: "x: [a]", b: "x: [a, b]"},
+		{name: "mapping", a: "x: {b: 1}", b: "x:\n  b: 1", want: true},
+		{name: "mapping_value", a: "x: {b: 1}", b: "x: {b: 2}"},
+		{name: "mapping_key", a: "x: {b: 1}", b: "x: {c: 1}"},
+		{name: "alias", a: "y: &v [a]\nx: *v", b: "x: [a]", want: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			a, b := field(t, tc.a, "x"), field(t, tc.b, "x")
+			if got := vault.Equal(a, b); got != tc.want {
+				t.Errorf("Equal(%q, %q) = %v, want %v", tc.a, tc.b, got, tc.want)
+			}
+			if got := vault.Equal(b, a); got != tc.want {
+				t.Errorf("Equal(%q, %q) = %v, want %v", tc.b, tc.a, got, tc.want)
+			}
+		})
+	}
+	if !vault.Equal(nil, nil) || vault.Equal(nil, field(t, "x:", "x")) {
+		t.Error("a missing field equals only a missing field")
+	}
+}
+
+func field(t *testing.T, fm, key string) *yaml.Node {
+	t.Helper()
+	parsed, err := vault.SplitFrontmatter([]byte("---\n" + fm + "\n---\n"))
+	if err != nil {
+		t.Fatalf("SplitFrontmatter(%q): %v", fm, err)
+	}
+	return vault.Field(parsed.Map, key)
 }

@@ -12,9 +12,9 @@ import (
 // hash the caller read.
 func ReplaceOp(path, content, expectedHash string) Op {
 	return Op{tool: ToolReplace, target: path, apply: func(p *batchPlan) (*file, []byte, []string, error) {
-		return p.modify(path, contentRules, func(f *file) ([]byte, []string, error) {
+		return p.modify(path, contentRules, func(f *file, _ parsed) ([]byte, *vault.Frontmatter, []string, error) {
 			next, err := replaceContent(f, content, expectedHash)
-			return next, nil, err
+			return next, nil, nil, err
 		})
 	}}
 }

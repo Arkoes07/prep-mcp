@@ -61,6 +61,12 @@ func Parse(src []byte, cfg *config.Config, voc *vault.Vocabulary) (*Doc, error) 
 	if fm == nil || err != nil {
 		return nil, err
 	}
+	return Of(fm, cfg, voc), nil
+}
+
+// Of reads parsed frontmatter as a document. A nil vocabulary skips the tag
+// rule.
+func Of(fm *vault.Frontmatter, cfg *config.Config, voc *vault.Vocabulary) *Doc {
 	m := fm.Map
 	d := &Doc{
 		Frontmatter: fm,
@@ -72,7 +78,7 @@ func Parse(src []byte, cfg *config.Config, voc *vault.Vocabulary) (*Doc, error) 
 	day, dateErr := vault.Day(m, d.DateField)
 	d.Date = day
 	if d.Type == "" {
-		return d, nil
+		return d
 	}
 
 	spec, known := cfg.Types[d.Type]
@@ -105,5 +111,5 @@ func Parse(src []byte, cfg *config.Config, voc *vault.Vocabulary) (*Doc, error) 
 			}
 		}
 	}
-	return d, nil
+	return d
 }

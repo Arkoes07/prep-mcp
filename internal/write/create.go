@@ -47,7 +47,7 @@ func (p *batchPlan) create(d Draft) (*file, []byte, []string, error) {
 	data := []byte("---\n" + vault.Encode(fm) + "---\n" + body)
 	// Before the file name, which may need a field the rules find missing: one
 	// error then names every missing field.
-	doc, warnings, err := p.check(createRules, nil, data)
+	doc, warnings, err := p.check(createRules, parsed{}, parse(data))
 	if err != nil {
 		return nil, nil, nil, err
 	}

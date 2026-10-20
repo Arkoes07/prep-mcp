@@ -1,6 +1,6 @@
 // Package vault is the core shared by reads and writes: confined access to a
-// folder of markdown files; parsing and building their YAML frontmatter, and
-// where conditions on it; and tags.
+// folder of markdown files; parsing, building and editing their YAML
+// frontmatter, and where conditions on it; and tags.
 //
 // Every file access goes through an *os.Root, so the kernel confines it to
 // the vault even if a path check is wrong. Resolve adds the readable errors.

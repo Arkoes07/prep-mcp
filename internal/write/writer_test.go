@@ -250,8 +250,8 @@ func TestWriterAppend(t *testing.T) {
 			t.Errorf("%d '## Log' headings, want exactly one", n)
 		}
 		fmBefore, _ := vault.SplitFrontmatter([]byte(orig))
-		if got[:fmBefore.BodyOffset] != orig[:fmBefore.BodyOffset] {
-			t.Errorf("frontmatter changed:\n%q\nwant:\n%q", got[:fmBefore.BodyOffset], orig[:fmBefore.BodyOffset])
+		if n := len(orig) - len(fmBefore.Body()); got[:n] != orig[:n] {
+			t.Errorf("frontmatter changed:\n%q\nwant:\n%q", got[:n], orig[:n])
 		}
 		if res.Path != week || res.Hash != vault.Hash([]byte(got)) {
 			t.Errorf("result = %+v, want path %s and the hash of the new file", res, week)

@@ -21,14 +21,13 @@ func TestSplitFrontmatter(t *testing.T) {
 		wantErr string
 
 		wantType  string // value of the type key; "" means the key must be absent
-		wantBody  string // src[BodyOffset:]
-		wantLine  int    // BodyLine; 0 means not checked
-		wantCRLF  bool
-		checkBody bool // wantBody is checked even when empty
+		wantBody  string // Body()
+		wantLine  int    // BodyLine(); 0 means not checked
+		checkBody bool   // wantBody is checked even when empty
 	}{
 		{name: "standard", src: "---\ntype: x\n---\nbody\n", wantType: "x", wantBody: "body\n", wantLine: 4, checkBody: true},
 		{name: "none", src: "# hi\n", none: true},
-		{name: "crlf", src: "---\r\ntype: x\r\n---\r\nb", wantType: "x", wantBody: "b", wantCRLF: true, checkBody: true},
+		{name: "crlf", src: "---\r\ntype: x\r\n---\r\nb", wantType: "x", wantBody: "b", checkBody: true},
 		{name: "bom", src: "\xef\xbb\xbf---\ntype: x\n---\nb\n", wantType: "x", wantBody: "b\n", checkBody: true},
 		{name: "unterminated", src: "---\ntype: x\nbody", wantErr: "frontmatter not closed"},
 		{name: "empty", src: "---\n---\nb", wantBody: "b", checkBody: true},
@@ -78,21 +77,35 @@ func TestSplitFrontmatter(t *testing.T) {
 			if tc.wantType != "" && got != tc.wantType {
 				t.Errorf("type = %q, want %q", got, tc.wantType)
 			}
-			if fm.BodyOffset < 0 || fm.BodyOffset > len(tc.src) {
-				t.Fatalf("BodyOffset = %d is outside the %d-byte input", fm.BodyOffset, len(tc.src))
+			if body := string(fm.Body()); !strings.HasSuffix(tc.src, body) {
+				t.Fatalf("Body() = %q is not the end of the input", body)
 			}
 			if tc.checkBody {
-				if body := tc.src[fm.BodyOffset:]; body != tc.wantBody {
+				if body := string(fm.Body()); body != tc.wantBody {
 					t.Errorf("body = %q, want %q", body, tc.wantBody)
 				}
 			}
-			if tc.wantLine != 0 && fm.BodyLine != tc.wantLine {
-				t.Errorf("BodyLine = %d, want %d", fm.BodyLine, tc.wantLine)
-			}
-			if fm.CRLF != tc.wantCRLF {
-				t.Errorf("CRLF = %v, want %v", fm.CRLF, tc.wantCRLF)
+			if tc.wantLine != 0 && fm.BodyLine() != tc.wantLine {
+				t.Errorf("BodyLine() = %d, want %d", fm.BodyLine(), tc.wantLine)
 			}
 		})
+	}
+}
+
+// Line is a key's line in the FILE, so read can point a person at it.
+func TestFrontmatterLine(t *testing.T) {
+	src := "\xef\xbb\xbf---\n# note\na: 1\nlist:\n  - x\n\nb: |\n  text\n---\nbody\n"
+	fm, err := vault.SplitFrontmatter([]byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for key, want := range map[string]int{"a": 3, "list": 4, "b": 7, "missing": 0, "x": 0} {
+		if got := fm.Line(key); got != want {
+			t.Errorf("Line(%q) = %d, want %d", key, got, want)
+		}
+	}
+	if got := fm.BodyLine(); got != 10 {
+		t.Errorf("BodyLine() = %d, want 10", got)
 	}
 }
 

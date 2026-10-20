@@ -110,6 +110,24 @@ func ParseDate(s string) (time.Time, error) {
 	return t, nil
 }
 
+// Equal reports whether a and b hold the same value: the same kind, scalars
+// with the same text (trimmed, null as ""), and lists and mappings with equal
+// items in the same order. Aliases read as what they point to; nil, a missing
+// field, equals only nil.
+func Equal(a, b *yaml.Node) bool {
+	a, b = deref(a), deref(b)
+	if a == nil || b == nil {
+		return a == b
+	}
+	if a.Kind != b.Kind {
+		return false
+	}
+	if a.Kind == yaml.ScalarNode {
+		return scalarText(a) == scalarText(b)
+	}
+	return slices.EqualFunc(a.Content, b.Content, Equal)
+}
+
 // scalarTexts returns the text of each scalar among nodes, skipping the rest.
 func scalarTexts(nodes []*yaml.Node) []string {
 	out := make([]string, 0, len(nodes))
