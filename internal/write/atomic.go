@@ -60,7 +60,7 @@ func (w *Writer) createFile(rel string, data []byte) error {
 		case errors.Is(err, fs.ErrNotExist):
 			return nil
 		}
-		return fmt.Errorf("cannot check %s: %w", rel, err)
+		return fmt.Errorf("cannot check whether %s exists: %w; check the folder's permissions", rel, err)
 	}
 	if err := absent(); err != nil {
 		return err
@@ -84,7 +84,7 @@ func (w *Writer) stage(rel string, data []byte, mode fs.FileMode) (string, error
 	}
 	var suffix [6]byte
 	if _, err := rand.Read(suffix[:]); err != nil {
-		return "", fmt.Errorf("cannot write %s: %w", rel, err)
+		return "", fmt.Errorf("cannot write %s: no random name for its temp file (%w); report this as a bug", rel, err)
 	}
 	tmp := path.Join(dir, ".prep-tmp-"+hex.EncodeToString(suffix[:]))
 	f, err := root.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
@@ -102,7 +102,8 @@ func (w *Writer) stage(rel string, data []byte, mode fs.FileMode) (string, error
 		werr = root.Chmod(tmp, mode)
 	}
 	if werr != nil {
-		return "", w.discard(tmp, fmt.Errorf("cannot write %s: %w", rel, werr))
+		return "", w.discard(tmp, fmt.Errorf(
+			"cannot write %s: %w; check the free disk space and the folder's permissions", rel, werr))
 	}
 	return tmp, nil
 }
@@ -113,14 +114,14 @@ func (w *Writer) stage(rel string, data []byte, mode fs.FileMode) (string, error
 func (w *Writer) finish(rel, tmp string, check func() error) error {
 	if beforeRename != nil {
 		if err := beforeRename(tmp); err != nil {
-			return w.discard(tmp, fmt.Errorf("cannot write %s: %w", rel, err))
+			return w.discard(tmp, fmt.Errorf("cannot write %s: %w; report this as a bug", rel, err))
 		}
 	}
 	if err := check(); err != nil {
 		return w.discard(tmp, err)
 	}
 	if err := w.v.Root().Rename(tmp, rel); err != nil {
-		return w.discard(tmp, fmt.Errorf("cannot write %s: %w", rel, err))
+		return w.discard(tmp, fmt.Errorf("cannot write %s: %w; check the folder's permissions", rel, err))
 	}
 	return nil
 }

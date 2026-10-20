@@ -21,7 +21,7 @@ func (v *Vault) ReadFile(p string) (rel string, content []byte, err error) {
 		if errors.Is(err, fs.ErrNotExist) {
 			return "", nil, notFound(rel)
 		}
-		return "", nil, fmt.Errorf("read %s: %w", rel, err)
+		return "", nil, fmt.Errorf("read %s: %w; check the file's permissions", rel, err)
 	}
 	return rel, content, nil
 }

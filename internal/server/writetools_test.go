@@ -331,3 +331,17 @@ func TestBatchToolErrors(t *testing.T) {
 		}
 	}
 }
+
+// The descriptions say what the write tools return and when updated is set,
+// as the code does it.
+func TestWriteDescriptionsMatchTheCode(t *testing.T) {
+	cs := connect(t)
+	for _, tool := range []string{"create_doc", "append_section", "update_frontmatter", "replace_doc", "edit_text"} {
+		if d := toolDescription(t, cs, tool); !strings.Contains(d, "warnings and commit") {
+			t.Errorf("%s description should say it returns the commit:\n%s", tool, d)
+		}
+	}
+	if d := toolDescription(t, cs, "update_frontmatter"); !strings.Contains(d, "except on a template") {
+		t.Errorf("update_frontmatter description should say a template gets no updated date:\n%s", d)
+	}
+}

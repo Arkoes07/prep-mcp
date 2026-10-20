@@ -338,7 +338,7 @@ func (h *handlers) listTags(
 	_ *mcp.CallToolRequest,
 	in listTagsIn,
 ) (*mcp.CallToolResult, any, error) {
-	stats, err := h.r.TagStats(in.Prefix, nil)
+	stats, err := h.r.TagStats(in.Prefix)
 	if err != nil {
 		return nil, nil, err
 	}

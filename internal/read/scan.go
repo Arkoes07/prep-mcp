@@ -166,7 +166,7 @@ func (r *Reader) parseDoc(p string, d fs.DirEntry, src []byte) (*Doc, []Problem)
 		return doc, []Problem{{
 			Path: p,
 			Msg: fmt.Sprintf(
-				"line %d: %v (using the file's modification time meanwhile)",
+				"line %d: %v; set it with update_frontmatter (using the file's modification time meanwhile)",
 				vault.Field(fm.Map, field).Line+1,
 				err,
 			),

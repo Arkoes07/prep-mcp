@@ -346,7 +346,7 @@ func TestScan(t *testing.T) {
 				wantMtime(t, find(t, docs, "notes/f.md"))
 				want := []read.Problem{{
 					Path: "notes/f.md",
-					Msg: `line 5: finished "soon" is not a date; use YYYY-MM-DD ` +
+					Msg: `line 5: finished "soon" is not a date; use YYYY-MM-DD; set it with update_frontmatter ` +
 						"(using the file's modification time meanwhile)",
 				}}
 				if !slices.Equal(problems, want) {

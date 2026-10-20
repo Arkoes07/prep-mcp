@@ -36,13 +36,17 @@ func JSONToNode(raw json.RawMessage) (*yaml.Node, error) {
 	return n, nil
 }
 
+func invalidJSON(err error) error {
+	return fmt.Errorf("invalid JSON: %w; check its quotes, commas and brackets", err)
+}
+
 func decodeObject(dec *json.Decoder) (*yaml.Node, error) {
 	m := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
 	seen := map[string]bool{}
 	for dec.More() {
 		kt, err := dec.Token()
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON: %w", err)
+			return nil, invalidJSON(err)
 		}
 		key, _ := kt.(string) // inside an object the decoder only yields string keys
 		if seen[key] {
@@ -56,7 +60,7 @@ func decodeObject(dec *json.Decoder) (*yaml.Node, error) {
 		m.Content = append(m.Content, keyNode(key), v)
 	}
 	if _, err := dec.Token(); err != nil { // the closing brace
-		return nil, fmt.Errorf("invalid JSON: %w", err)
+		return nil, invalidJSON(err)
 	}
 	if len(m.Content) == 0 {
 		m.Style = yaml.FlowStyle
@@ -67,7 +71,7 @@ func decodeObject(dec *json.Decoder) (*yaml.Node, error) {
 func decodeValue(dec *json.Decoder) (*yaml.Node, error) {
 	tok, err := dec.Token()
 	if err != nil {
-		return nil, fmt.Errorf("invalid JSON: %w", err)
+		return nil, invalidJSON(err)
 	}
 	switch t := tok.(type) {
 	case json.Delim:
@@ -103,7 +107,7 @@ func decodeArray(dec *json.Decoder) (*yaml.Node, error) {
 		seq.Content = append(seq.Content, v)
 	}
 	if _, err := dec.Token(); err != nil { // the closing bracket
-		return nil, fmt.Errorf("invalid JSON: %w", err)
+		return nil, invalidJSON(err)
 	}
 	return seq, nil
 }

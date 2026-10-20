@@ -57,12 +57,10 @@ func (r *Reader) Context(day time.Time) (string, error) {
 	}
 	sections = append(sections, queries...)
 
-	voc, err := r.v.Vocabulary(r.cfg.TagsFile)
-	if err != nil {
-		return "", err
-	}
+	// No vocabulary: it only marks unknown tags, which tagLine does not show,
+	// and a tags file that cannot be read would fail the whole bundle.
 	since := day.AddDate(0, 0, -ContextTagDays)
-	sections = append(sections, "==== Tags ====\n"+tagLine(tagStats(docs, voc, "", &since), since)+"\n")
+	sections = append(sections, "==== Tags ====\n"+tagLine(tagStats(docs, nil, "", &since), since)+"\n")
 
 	problems = append(problems, r.gitLockProblems()...)
 	if len(problems) > 0 {
@@ -97,7 +95,7 @@ func (r *Reader) rulesSection() (string, error) {
 	case errors.Is(err, fs.ErrNotExist):
 		return "", nil
 	case err != nil:
-		return "", fmt.Errorf("read %s: %w", rulesFile, err)
+		return "", fmt.Errorf("read %s: %w; check that it is a file you can read", rulesFile, err)
 	}
 	return section(rulesFile, string(rules)), nil
 }
@@ -231,11 +229,14 @@ func (r *Reader) queryBlock(docs []*Doc, q config.Query, isRecent bool) (string,
 
 // metaLine is "- path | title | attributes | tags". The attributes are the
 // date, followed by date_source=mtime when it is the file's modification time,
-// then each of fields that the document sets.
+// updated when the document sets it, then each of fields that the document sets.
 func metaLine(d *Doc, fields []string) string {
 	attrs := []string{"date=" + d.Date.Format(time.DateOnly)}
 	if d.DateFromMtime {
 		attrs = append(attrs, "date_source="+d.DateSource())
+	}
+	if updated := vault.Text(d.Frontmatter, "updated"); updated != "" {
+		attrs = append(attrs, "updated="+oneLine(updated))
 	}
 	for _, k := range fields {
 		if val := d.Shown(k); val != "" {

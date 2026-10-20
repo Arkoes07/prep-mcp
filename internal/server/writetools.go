@@ -56,12 +56,15 @@ func registerWriteTools(s *mcp.Server, h *handlers) {
 		Description: "Change frontmatter only; the body stays byte for byte and so do untouched keys. " +
 			"set: object of top-level keys to set (new keys are added at the end); unset: keys to remove; " +
 			"add_tags / remove_tags: change the tag list. " +
-			"updated is set to today. set.tags cannot be combined with add_tags/remove_tags. " +
+			"A change also sets updated to today, unless the patch sets or unsets it, " +
+			"and except on a template, so documents made from it do not copy the date. " +
+			"set.tags cannot be combined with add_tags/remove_tags. " +
 			"To clear a field, use unset; set with \"\" keeps the key with an empty value, " +
 			"which where filters treat differently from a missing key. " +
 			"Setting type to another configured type needs all of that type's required fields in the same call. " +
 			"Frontmatter that does not parse cannot be patched; fix it with edit_text. " +
-			"A patch that changes nothing writes nothing. Returns path, new hash and warnings. " + documentRules,
+			"A patch that changes nothing writes nothing. Returns path, new hash, warnings and commit. " +
+			documentRules,
 		Annotations: additive,
 	}, writeTool[updateFrontmatterIn](h, write.ToolPatch))
 
@@ -73,7 +76,7 @@ func registerWriteTools(s *mcp.Server, h *handlers) {
 			"nothing is written and the error carries the current hash: " +
 			"re-read with read_doc, merge the changes, and retry. " +
 			"Prefer append_section or update_frontmatter for small changes, and edit_text to change a few words. " +
-			"Returns path, new hash and warnings. " + documentRules,
+			"Returns path, new hash, warnings and commit. " + documentRules,
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes, OpenWorldHint: &no},
 	}, writeTool[replaceDocIn](h, write.ToolReplace))
 
@@ -172,7 +175,8 @@ func rawArg(args json.RawMessage, key string) (json.RawMessage, error) {
 	var all map[string]json.RawMessage
 	if len(args) > 0 {
 		if err := json.Unmarshal(args, &all); err != nil {
-			return nil, fmt.Errorf("arguments are not a JSON object: %w", err)
+			return nil, fmt.Errorf("arguments are not a JSON object: %w; pass the tool's arguments as one object, "+
+				"as its schema describes", err)
 		}
 	}
 	if v := all[key]; string(v) != "null" {
@@ -305,7 +309,8 @@ func (h *handlers) batch(
 		} `json:"ops"`
 	}
 	if err := json.Unmarshal(req.Params.Arguments, &raw); err != nil {
-		return nil, nil, fmt.Errorf("arguments are not a JSON object: %w", err)
+		return nil, nil, fmt.Errorf("arguments are not a JSON object: %w; "+
+			`pass {"ops": [{"tool": ..., "args": {...}}]}`, err)
 	}
 	ops := make([]write.Op, len(raw.Ops))
 	for i, op := range raw.Ops {

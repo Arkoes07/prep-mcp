@@ -72,7 +72,7 @@ func text(s string) *mcp.CallToolResult {
 func jsonResult(v any) (*mcp.CallToolResult, any, error) {
 	b, err := json.Marshal(v)
 	if err != nil {
-		return nil, nil, fmt.Errorf("encode result: %w", err)
+		return nil, nil, fmt.Errorf("encode result: %w; report this as a bug", err)
 	}
 	return text(string(b)), nil, nil
 }

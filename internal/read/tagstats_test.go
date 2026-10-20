@@ -52,7 +52,7 @@ func checkRows(t *testing.T, got []read.TagCount, want []tagRow) {
 func TestTagStats(t *testing.T) {
 	t.Run("no_prefix_sorted_by_count_then_name", func(t *testing.T) {
 		_, r := copyOpen(t)
-		got, err := r.TagStats("", nil)
+		got, err := r.TagStats("")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -66,7 +66,7 @@ func TestTagStats(t *testing.T) {
 
 	t.Run("prefix", func(t *testing.T) {
 		_, r := copyOpen(t)
-		got, err := r.TagStats("issue/", nil)
+		got, err := r.TagStats("issue/")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -78,7 +78,7 @@ func TestTagStats(t *testing.T) {
 
 	t.Run("prefix_covers_unused_vocabulary", func(t *testing.T) {
 		_, r := copyOpen(t)
-		got, err := r.TagStats("q/", nil)
+		got, err := r.TagStats("q/")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -89,49 +89,13 @@ func TestTagStats(t *testing.T) {
 		})
 	})
 
-	t.Run("since_window", func(t *testing.T) {
-		_, r := copyOpen(t)
-		since := time.Date(2026, 1, 12, 0, 0, 0, 0, time.Local)
-		got, err := r.TagStats("", &since)
-		if err != nil {
-			t.Fatal(err)
-		}
-		// Only the two dated documents are in the window; the rest are dated 01-10.
-		checkRows(t, got, []tagRow{
-			{"issue/missing-tradeoff", 2, "2026-01-14"},
-			{"q/hardest-project", 2, "2026-01-14"},
-			{"issue/buries-headline", 1, "2026-01-12"},
-			{"company/acme", 0, ""},
-			{"domain/payments", 0, ""},
-			{"meta/plan", 0, ""},
-			{"q/changed-mind", 0, ""},
-			{"q/failure", 0, ""},
-			{"skill/scale", 0, ""},
-			{"skill/trade-off", 0, ""},
-		})
-	})
-
-	t.Run("since_after_everything", func(t *testing.T) {
-		_, r := copyOpen(t)
-		since := time.Date(2026, 3, 1, 0, 0, 0, 0, time.Local).AddDate(0, 0, -30)
-		got, err := r.TagStats("", &since)
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, g := range got {
-			if g.Count != 0 {
-				t.Errorf("%s has count %d, want only unused vocabulary tags", g.Tag, g.Count)
-			}
-		}
-	})
-
 	const typo = "---\ntype: learning\ntitle: T\ntrack: t\ntags: [issue/typo]\n---\nb\n"
 
 	t.Run("unknown_tag_marked", func(t *testing.T) {
 		root := testvault.Copy(t)
 		testvault.Write(t, root, "notes/typo.md", typo)
 		r := openAt(t, root)
-		got, err := r.TagStats("issue/", nil)
+		got, err := r.TagStats("issue/")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -151,7 +115,7 @@ func TestTagStats(t *testing.T) {
 			t.Fatal(err)
 		}
 		r := openAt(t, root)
-		got, err := r.TagStats("", nil)
+		got, err := r.TagStats("")
 		if err != nil {
 			t.Fatal(err)
 		}

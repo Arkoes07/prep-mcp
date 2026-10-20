@@ -51,7 +51,7 @@ func (v *Vault) Resolve(p string, a Access) (string, error) {
 			return "", notFound(clean)
 		}
 		if err != nil {
-			return fail("cannot access %q: %w", p, err)
+			return fail("cannot access %q: %w; check the permissions of the folders on its path", p, err)
 		}
 		if fi.Mode()&fs.ModeSymlink != 0 {
 			target, err := filepath.EvalSymlinks(filepath.Join(v.dir, filepath.FromSlash(prefix)))

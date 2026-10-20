@@ -236,7 +236,7 @@ func (p *batchPlan) file(rel string) (*file, error) {
 	}
 	b, err := p.w.v.Root().ReadFile(rel)
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return nil, fmt.Errorf("read %s: %w", rel, err)
+		return nil, fmt.Errorf("read %s: %w; check the file's permissions", rel, err)
 	}
 	f := &file{rel: rel, orig: b, cur: b, existed: err == nil, exists: err == nil, template: vault.InTemplates(rel)}
 	p.byPath[rel] = f

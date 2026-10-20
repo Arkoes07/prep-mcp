@@ -82,7 +82,8 @@ func (c *Conditions) UnmarshalYAML(n *yaml.Node) error {
 	*c = make(Conditions, len(raw))
 	for k, v := range raw {
 		if !vault.IsScalarOrList(&v) {
-			return fmt.Errorf("line %d: a where value must be a scalar or a list of scalars", v.Line)
+			return fmt.Errorf("line %d: the where value of %s must be one scalar or a list of scalars; "+
+				"write it as %s: open or %s: [open, closed]", v.Line, k, k, k)
 		}
 		(*c)[k] = vault.Values(n, k)
 	}

@@ -44,7 +44,7 @@ func (v *Vault) Root() *os.Root { return v.root }
 
 func (v *Vault) Close() error {
 	if err := v.root.Close(); err != nil {
-		return fmt.Errorf("close vault %s: %w", v.dir, err)
+		return fmt.Errorf("close vault %s: %w; every write was already saved; report this as a bug", v.dir, err)
 	}
 	return nil
 }

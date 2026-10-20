@@ -102,6 +102,91 @@ func TestContextGolden(t *testing.T) {
 	})
 }
 
+// get_context does not need the tags file, so one that cannot be read leaves
+// it unchanged. list_tags needs it and still reports the error.
+func TestContextUnreadableTagsFile(t *testing.T) {
+	const tagsLine = "Top tags, last 30 days (since 2025-12-15): q/hardest-project (3), " +
+		"issue/missing-tradeoff (2), company/acme (1), domain/payments (1), issue/buries-headline (1), " +
+		"meta/plan (1), skill/scale (1), skill/trade-off (1)\n"
+	tests := []struct {
+		name  string
+		setup func(t *testing.T, p string)
+	}{
+		{
+			name: "folder",
+			setup: func(t *testing.T, p string) {
+				if err := os.Remove(p); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Mkdir(p, 0o755); err != nil {
+					t.Fatal(err)
+				}
+			},
+		},
+		{
+			name: "no_permission",
+			setup: func(t *testing.T, p string) {
+				if err := os.Chmod(p, 0); err != nil {
+					t.Fatal(err)
+				}
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			root, r := copyOpen(t)
+			tc.setup(t, filepath.Join(root, "tags.md"))
+
+			got, err := r.Context(day)
+			if err != nil {
+				t.Fatalf("Context: %v", err)
+			}
+			if !strings.Contains(got, "==== Tags ====\n"+tagsLine) {
+				t.Errorf("output lacks the Tags section\n%s\n--- got ---\n%s", tagsLine, got)
+			}
+
+			_, err = r.TagStats("")
+			if err == nil || !strings.Contains(err.Error(), "read tags file tags.md") {
+				t.Errorf("TagStats error = %v, want one saying the tags file could not be read", err)
+			}
+		})
+	}
+}
+
+// The Tags section counts only documents dated in the last 30 days. Documents
+// without their type's date field are dated by mtime (2026-01-10).
+func TestContextTagWindow(t *testing.T) {
+	tests := []struct {
+		name string
+		day  time.Time
+		want string
+	}{
+		{
+			name: "dated_documents_only",
+			day:  time.Date(2026, 2, 11, 9, 0, 0, 0, time.Local),
+			want: "Top tags, last 30 days (since 2026-01-12): issue/missing-tradeoff (2), q/hardest-project (2), " +
+				"issue/buries-headline (1)",
+		},
+		{
+			name: "after_everything",
+			day:  time.Date(2026, 3, 1, 9, 0, 0, 0, time.Local),
+			want: "Top tags, last 30 days (since 2026-01-30): none",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, r := copyOpen(t)
+			got, err := r.Context(tc.day)
+			if err != nil {
+				t.Fatalf("Context: %v", err)
+			}
+			if !strings.Contains(got, "==== Tags ====\n"+tc.want+"\n") {
+				t.Errorf("output lacks the line\n%s\n--- got ---\n%s", tc.want, got)
+			}
+		})
+	}
+}
+
 // The attributes after the title are the date, marked when it is the file's
 // modification time, then the configured summary fields in config order.
 func TestContextSummaryFields(t *testing.T) {
@@ -126,6 +211,50 @@ func TestContextSummaryFields(t *testing.T) {
 			root, _ := copyOpen(t)
 			replaceInFile(t, root, "prep.config.yaml", "summary_fields: [kind, stage, status]", tc.fields)
 			got, err := openAt(t, root).Context(day)
+			if err != nil {
+				t.Fatalf("Context: %v", err)
+			}
+			if !strings.Contains(got, tc.want+"\n") {
+				t.Errorf("output lacks the line\n%s\n--- got ---\n%s", tc.want, got)
+			}
+		})
+	}
+}
+
+// A document that sets updated shows it right after the date attributes, on
+// one line; one that does not shows nothing in its place.
+func TestContextUpdated(t *testing.T) {
+	const (
+		improvement = "- improvements/missing-tradeoff.md | Trade-off not stated | "
+		fm          = "---\ntype: improvement\ntitle: Trade-off not stated\nstatus: improving\nexit_criteria: x\n"
+	)
+	tests := []struct {
+		name, doc, want string // doc replaces improvements/missing-tradeoff.md when set
+	}{
+		{name: "not_set", want: improvement + "date=2026-01-10 date_source=mtime status=improving | -"},
+		{
+			name: "after_date",
+			doc:  fm + "date: 2026-01-11\nupdated: 2026-01-12\n---\n",
+			want: improvement + "date=2026-01-11 updated=2026-01-12 status=improving | -",
+		},
+		{
+			name: "after_date_source",
+			doc:  fm + "updated: 2026-01-12\n---\n",
+			want: improvement + "date=2026-01-10 date_source=mtime updated=2026-01-12 status=improving | -",
+		},
+		{
+			name: "one_line",
+			doc:  fm + "updated: |\n  2026-01-12\n  by hand\n---\n",
+			want: improvement + "date=2026-01-10 date_source=mtime updated=2026-01-12 by hand status=improving | -",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			root, r := copyOpen(t)
+			if tc.doc != "" {
+				testvault.Write(t, root, "improvements/missing-tradeoff.md", tc.doc)
+			}
+			got, err := r.Context(day)
 			if err != nil {
 				t.Fatalf("Context: %v", err)
 			}

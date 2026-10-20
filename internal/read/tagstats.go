@@ -18,8 +18,8 @@ type TagCount struct {
 
 // TagStats counts tags over typed documents, most used first, then by name,
 // followed by the vocabulary's unused tags with count 0. prefix limits both to
-// tags starting with it; since drops documents dated before that day.
-func (r *Reader) TagStats(prefix string, since *time.Time) ([]TagCount, error) {
+// tags starting with it.
+func (r *Reader) TagStats(prefix string) ([]TagCount, error) {
 	docs, _, err := r.Scan() // problems are reported by List and Context
 	if err != nil {
 		return nil, err
@@ -28,7 +28,7 @@ func (r *Reader) TagStats(prefix string, since *time.Time) ([]TagCount, error) {
 	if err != nil {
 		return nil, err
 	}
-	stats := tagStats(docs, voc, prefix, since)
+	stats := tagStats(docs, voc, prefix, nil)
 	used := make(map[string]bool, len(stats))
 	for _, s := range stats {
 		used[s.Tag] = true

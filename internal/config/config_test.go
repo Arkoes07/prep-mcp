@@ -445,7 +445,8 @@ context:
   open_items:
     - {type: note, where: {status: {a: b}}}
 `,
-			wantErr: []string{"a where value must be a scalar or a list of scalars"},
+			wantErr: []string{"line 6: the where value of status must be one scalar or a list of scalars; " +
+				"write it as status: open or status: [open, closed]"},
 		},
 		{
 			name: "query_tags",
