@@ -4,14 +4,15 @@ import (
 	"bytes"
 	"cmp"
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // Git commits written files in the vault folder Dir, as Name <Email>, so
@@ -49,7 +50,10 @@ func (g *Git) Commit(ctx context.Context, paths []string, msg string) (hash, war
 	if timeout <= 0 {
 		timeout = defaultGitTimeout
 	}
-	ctx, cancel := context.WithTimeout(ctx, timeout)
+	// The files are saved by now, and a later commit covers only its own paths,
+	// so a commit cut short is never made: a cancelled call still commits, and
+	// only the timeout stops git.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)
 	defer cancel()
 
 	hash, err := g.commit(ctx, paths, msg, timeout)
@@ -83,6 +87,9 @@ func (g *Git) commit(ctx context.Context, paths []string, msg string, timeout ti
 		timeout: timeout,
 	}
 
+	if err := c.dropRepoEnv(ctx); err != nil {
+		return "", err
+	}
 	if err := c.checkRoot(ctx); err != nil {
 		return "", err
 	}
@@ -105,6 +112,24 @@ type commitRun struct {
 	paths       []string
 	msg, author string
 	timeout     time.Duration
+}
+
+// dropRepoEnv removes from git's environment the variables that tie git to one
+// repository (GIT_DIR, GIT_WORK_TREE, GIT_INDEX_FILE and the rest). The server
+// inherits them when, say, another repository's hook starts it, and they would
+// send the commit to that repository. git lists them itself, so the list
+// matches the git that runs.
+func (c *commitRun) dropRepoEnv(ctx context.Context) error {
+	out, err := c.git.run(ctx, "rev-parse", "--local-env-vars")
+	if err != nil {
+		return c.explainFailure(ctx, "git rev-parse", out, err)
+	}
+	local := strings.Fields(out)
+	c.git.env = slices.DeleteFunc(c.git.env, func(kv string) bool {
+		k, _, _ := strings.Cut(kv, "=")
+		return slices.Contains(local, k)
+	})
+	return nil
 }
 
 // checkRoot fails unless the vault is the root of its git repository.
@@ -178,16 +203,13 @@ func (c *commitRun) readHead(ctx context.Context) (string, error) {
 // telling a timeout and a lock left by another git process from other failures.
 func (c *commitRun) explainFailure(ctx context.Context, what, out string, err error) error {
 	fix := c.renderFix()
-	switch {
-	case errors.Is(ctx.Err(), context.DeadlineExceeded):
+	if ctx.Err() != nil { // only the timeout ends ctx: Commit ignores the caller's cancellation
 		return fmt.Errorf(
 			"git timed out after %s during %s (a hook or a prompt may be hanging). The file is saved; to commit it, %s",
 			c.timeout,
 			what,
 			fix,
 		)
-	case ctx.Err() != nil:
-		return fmt.Errorf("cancelled during %s. The file is saved; to commit it, %s", what, fix)
 	}
 	if m := lockRE.FindStringSubmatch(out); m != nil {
 		// A lock stops git add (index.lock) or only the commit (HEAD.lock, a branch's lock).
@@ -253,7 +275,11 @@ func describe(out string, err error) string {
 	}
 	s := strings.Join(lines, "; ")
 	if len(s) > maxOutputInWarn {
-		s = s[:maxOutputInWarn] + "..."
+		n := maxOutputInWarn
+		for n > 0 && !utf8.RuneStart(s[n]) { // cut between characters, so the warning stays valid UTF-8
+			n--
+		}
+		s = s[:n] + "..."
 	}
 	if s == "" {
 		return err.Error()

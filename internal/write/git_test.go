@@ -1,6 +1,7 @@
 package write_test
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/arkoes07/prep-mcp/internal/testvault"
 	"github.com/arkoes07/prep-mcp/internal/vault"
@@ -347,6 +349,49 @@ func TestGitSubdirOfRepo(t *testing.T) {
 	}
 }
 
+// A GIT_DIR inherited from the server's environment, as when a hook of another
+// repository starts it, must not send the commit there.
+func TestGitInheritedGitDir(t *testing.T) {
+	e := newGitEnv(t, gitTimeout)
+	initRepo(t, e.root)
+	other := t.TempDir()
+	testvault.Write(t, other, "README.md", "other\n")
+	initRepo(t, other)
+	before, otherBefore := commitCount(t, e.root), commitCount(t, other)
+	t.Setenv("GIT_DIR", filepath.Join(other, ".git"))
+
+	res := createNote(t, e)
+	os.Unsetenv("GIT_DIR") // the helpers below find each repository from its folder
+
+	wantNoWarnings(t, res)
+	wantCommitted(t, e, res, before, "create_doc: learning/ddia-ch5.md", "learning/ddia-ch5.md")
+	if got := commitCount(t, other); got != otherBefore {
+		t.Errorf("commit count in the other repository = %s, want %s", got, otherBefore)
+	}
+}
+
+// A call cancelled while it writes still commits what it wrote: a later commit
+// covers only its own paths, so this one would never be made.
+func TestGitCancelledCall(t *testing.T) {
+	e := newGitEnv(t, gitTimeout)
+	initRepo(t, e.root)
+	before := commitCount(t, e.root)
+	cctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	e.w.SetBeforeRename(func(string) error {
+		cancel()
+		return nil
+	})
+
+	res, err := e.w.Apply(cctx, ddiaOp(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	wantNoWarnings(t, res)
+	wantCommitted(t, e, res, before, "create_doc: learning/ddia-ch5.md", "learning/ddia-ch5.md")
+}
+
 // ~/prep may be a symlink to the real repo. The repo's toplevel and the vault
 // root must be compared after resolving symlinks, both through the writer and
 // when Git is handed the unresolved path directly.
@@ -418,6 +463,21 @@ func TestGitHookFails(t *testing.T) {
 	wantWarning(t, res, "not committed", "hook says no: lint failed")
 	if res.Commit != "" {
 		t.Errorf("Result.Commit = %q, want empty", res.Commit)
+	}
+}
+
+// Git output quoted in a warning is cut short, never inside a character.
+func TestGitLongOutputStaysUTF8(t *testing.T) {
+	e := newGitEnv(t, gitTimeout)
+	initRepo(t, e.root)
+	// 256 two-byte characters after an "x", so a cut at an even byte count splits one.
+	writeHook(t, e.root, "s=é; for i in 1 2 3 4 5 6 7 8; do s=$s$s; done\necho \"x$s\" >&2\nexit 1")
+
+	res := createNote(t, e)
+
+	wantWarning(t, res, "not committed", "x"+strings.Repeat("é", 10))
+	if !utf8.ValidString(res.Warnings[0]) {
+		t.Errorf("warning is not valid UTF-8: %q", res.Warnings[0])
 	}
 }
 
