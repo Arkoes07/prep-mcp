@@ -31,12 +31,12 @@ func TestFailureBeforeRenameLeavesNothingBehind(t *testing.T) {
 		return errors.New("injected failure")
 	})
 
-	_, err = w.Apply(context.Background(), write.AppendOp(p, "Log", "- Tue: x"))
+	_, err = w.Apply(context.Background(), write.NewAppendOp(p, "Log", "- Tue: x"))
 	if err == nil || !strings.Contains(err.Error(), "injected failure") {
 		t.Fatalf("append error = %v, want the injected failure", err)
 	}
 	d := write.Draft{Type: "reference", Frontmatter: node(t, `{"title":"T"}`), Body: "x"}
-	if _, err := w.Apply(context.Background(), write.CreateOp(d)); err == nil {
+	if _, err := w.Apply(context.Background(), write.NewCreateOp(d)); err == nil {
 		t.Fatal("create succeeded despite the injected failure")
 	}
 	if got, _ := os.ReadFile(filepath.Join(root, p)); string(got) != string(orig) {
@@ -67,7 +67,7 @@ func TestHumanEditDuringWriteIsKept(t *testing.T) {
 		}
 		return nil
 	})
-	res, err := w.Apply(context.Background(), write.AppendOp(p, "Log", "- Tue: x"))
+	res, err := w.Apply(context.Background(), write.NewAppendOp(p, "Log", "- Tue: x"))
 	if err != nil {
 		t.Fatalf("AppendSection: %v", err)
 	}
@@ -95,7 +95,7 @@ func TestGivesUpWhenFileKeepsChanging(t *testing.T) {
 		b, _ := os.ReadFile(target)
 		return os.WriteFile(target, append(b, "- edit\n"...), 0o644)
 	})
-	_, err := w.Apply(context.Background(), write.AppendOp(p, "Log", "- Tue: x"))
+	_, err := w.Apply(context.Background(), write.NewAppendOp(p, "Log", "- Tue: x"))
 	if err == nil || !strings.Contains(err.Error(), "re-read it with read_doc") {
 		t.Fatalf("error = %v, want a retry hint", err)
 	}
@@ -120,7 +120,7 @@ func TestReplaceConflictAtRename(t *testing.T) {
 	w.SetBeforeRename(func(string) error {
 		return os.WriteFile(target, append(append([]byte{}, orig...), "- human edit\n"...), 0o644)
 	})
-	_, err := w.Apply(context.Background(), write.ReplaceOp(p, string(orig)+"- ai\n", vault.Hash(orig)))
+	_, err := w.Apply(context.Background(), write.NewReplaceOp(p, string(orig)+"- ai\n", vault.Hash(orig)))
 	var ce *write.ConflictError
 	if !errors.As(err, &ce) {
 		t.Fatalf("error %T (%v), want *write.ConflictError", err, err)
@@ -172,10 +172,14 @@ func TestBatchFailureMidwayRollsBack(t *testing.T) {
 		return nil
 	})
 	ops := []write.Op{
-		write.PatchOp(seamA, write.Patch{Set: node(t, `{"status":"improving"}`)}),
-		write.CreateOp(write.Draft{Type: "learning", Frontmatter: node(t, `{"title":"DDIA ch5","track":"ddia"}`), Body: "x"}),
-		write.AppendOp(seamC, "Log", "- Tue: x"),
-		write.PatchOp(seamD, write.Patch{Set: node(t, `{"status":"open"}`)}),
+		write.NewPatchOp(seamA, write.Patch{Set: node(t, `{"status":"improving"}`)}),
+		write.NewCreateOp(write.Draft{
+			Type:        "learning",
+			Frontmatter: node(t, `{"title":"DDIA ch5","track":"ddia"}`),
+			Body:        "x",
+		}),
+		write.NewAppendOp(seamC, "Log", "- Tue: x"),
+		write.NewPatchOp(seamD, write.Patch{Set: node(t, `{"status":"open"}`)}),
 	}
 
 	_, err := w.Batch(context.Background(), ops, "")
@@ -225,8 +229,8 @@ func TestBatchRollbackKeepsHumanSave(t *testing.T) {
 		return errors.New("injected failure")
 	})
 	ops := []write.Op{
-		write.PatchOp(seamA, write.Patch{Set: node(t, `{"status":"improving"}`)}),
-		write.AppendOp(seamC, "Log", "- Tue: x"),
+		write.NewPatchOp(seamA, write.Patch{Set: node(t, `{"status":"improving"}`)}),
+		write.NewAppendOp(seamC, "Log", "- Tue: x"),
 	}
 
 	_, err := w.Batch(context.Background(), ops, "")
@@ -262,8 +266,8 @@ func TestBatchHumanEditDuringApplyIsKept(t *testing.T) {
 		return nil
 	})
 	ops := []write.Op{
-		write.PatchOp(seamA, write.Patch{Set: node(t, `{"status":"improving"}`)}),
-		write.AppendOp(seamC, "Log", "- Tue: x"),
+		write.NewPatchOp(seamA, write.Patch{Set: node(t, `{"status":"improving"}`)}),
+		write.NewAppendOp(seamC, "Log", "- Tue: x"),
 	}
 
 	if _, err := w.Batch(context.Background(), ops, ""); err != nil {
@@ -295,9 +299,9 @@ func TestBatchWritesEachFileOnce(t *testing.T) {
 		return nil
 	})
 	ops := []write.Op{
-		write.PatchOp(seamA, write.Patch{Set: node(t, `{"status":"improving"}`)}),
-		write.AppendOp(seamA, "Notes", "- a"),
-		write.PatchOp(seamA, write.Patch{AddTags: []string{"meta/plan"}}),
+		write.NewPatchOp(seamA, write.Patch{Set: node(t, `{"status":"improving"}`)}),
+		write.NewAppendOp(seamA, "Notes", "- a"),
+		write.NewPatchOp(seamA, write.Patch{AddTags: []string{"meta/plan"}}),
 	}
 
 	if _, err := w.Batch(context.Background(), ops, ""); err != nil {

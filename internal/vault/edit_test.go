@@ -213,7 +213,7 @@ func FuzzEditSet(f *testing.F) {
 		// The key and value arrive as update_frontmatter gets them: as JSON,
 		// which holds only valid UTF-8.
 		quoted, _ := json.Marshal(key)
-		set, err := vault.JSONToNode(json.RawMessage("{" + string(quoted) + ":" + value + "}"))
+		set, err := vault.DecodeJSON(json.RawMessage("{" + string(quoted) + ":" + value + "}"))
 		if err != nil {
 			return
 		}

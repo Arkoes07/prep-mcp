@@ -14,9 +14,9 @@ var (
 	listItemRE = regexp.MustCompile(`^\s*([-*+]|\d+[.)])\s+`)
 )
 
-// AppendOp adds content to the end of a "## heading" section, or adds the
-// section at the end of the file.
-func AppendOp(path, heading, content string) Op {
+// NewAppendOp returns the op that adds content to the end of a "## heading"
+// section, or adds the section at the end of the file.
+func NewAppendOp(path, heading, content string) Op {
 	return Op{tool: ToolAppend, target: path, apply: func(p *batchPlan) (*file, []byte, []string, error) {
 		return p.modify(path, contentRules, func(f *file, _ parsed) ([]byte, *vault.Frontmatter, []string, error) {
 			next, err := insertSection(f.cur, heading, content)
@@ -42,15 +42,15 @@ func insertSection(src []byte, heading, content string) ([]byte, error) {
 	}
 	block := strings.ReplaceAll(content, "\n", eol) + eol
 
-	lines := bodyLines(src)
+	lines := splitBodyLines(src)
 	match := findSection(lines, heading)
 	if match < 0 {
-		return []byte(text + newSection(text, heading, block, eol)), nil
+		return []byte(text + renderNewSection(text, heading, block, eol)), nil
 	}
 
 	// Insert after the last non-blank line of the section, so blank lines before
 	// the next heading stay where they were.
-	end := sectionEnd(lines, match)
+	end := findSectionEnd(lines, match)
 	last := match
 	for i := match + 1; i < end; i++ {
 		if strings.TrimSpace(lines[i].text) != "" {
@@ -95,9 +95,9 @@ type line struct {
 	end  int    // offset just after the line ending
 }
 
-// bodyLines splits src into lines, starting after the frontmatter if it has
+// splitBodyLines splits src into lines, starting after the frontmatter if it has
 // valid frontmatter.
-func bodyLines(src []byte) []line {
+func splitBodyLines(src []byte) []line {
 	text := string(src)
 	start := 0
 	if fm, err := vault.SplitFrontmatter(src); err == nil && fm != nil {
@@ -112,9 +112,9 @@ func bodyLines(src []byte) []line {
 	return lines
 }
 
-// unfenced yields the lines from index from on that are outside code fences,
+// walkUnfenced yields the lines from index from on that are outside code fences,
 // with their index. The fence lines themselves are not yielded.
-func unfenced(lines []line, from int) iter.Seq2[int, line] {
+func walkUnfenced(lines []line, from int) iter.Seq2[int, line] {
 	return func(yield func(int, line) bool) {
 		inFence := false
 		for i := from; i < len(lines); i++ {
@@ -129,9 +129,9 @@ func unfenced(lines []line, from int) iter.Seq2[int, line] {
 	}
 }
 
-// headingLevel returns the level and title of a markdown heading line, or 0
+// parseHeading returns the level and title of a markdown heading line, or 0
 // when the line is not a heading.
-func headingLevel(l string) (level int, title string) {
+func parseHeading(l string) (level int, title string) {
 	m := headingRE.FindStringSubmatch(l)
 	if m == nil {
 		return 0, ""
@@ -142,28 +142,28 @@ func headingLevel(l string) (level int, title string) {
 // findSection returns the index of the last "## heading" line, or -1.
 func findSection(lines []line, heading string) int {
 	match := -1
-	for i, l := range unfenced(lines, 0) {
-		if level, title := headingLevel(l.text); level == 2 && title == heading {
+	for i, l := range walkUnfenced(lines, 0) {
+		if level, title := parseHeading(l.text); level == 2 && title == heading {
 			match = i
 		}
 	}
 	return match
 }
 
-// sectionEnd returns the index of the next level 1 or 2 heading after the
+// findSectionEnd returns the index of the next level 1 or 2 heading after the
 // heading at match, or len(lines) when the section runs to the end.
-func sectionEnd(lines []line, match int) int {
-	for i, l := range unfenced(lines, match+1) {
-		if level, _ := headingLevel(l.text); level > 0 && level <= 2 {
+func findSectionEnd(lines []line, match int) int {
+	for i, l := range walkUnfenced(lines, match+1) {
+		if level, _ := parseHeading(l.text); level > 0 && level <= 2 {
 			return i
 		}
 	}
 	return len(lines)
 }
 
-// newSection is the text that adds "## heading" with block at the end of text,
+// renderNewSection renders the text that adds "## heading" with block at the end of text,
 // separated from what is there by one blank line.
-func newSection(text, heading, block, eol string) string {
+func renderNewSection(text, heading, block, eol string) string {
 	var b strings.Builder
 	if len(text) > 0 {
 		if !strings.HasSuffix(text, "\n") {

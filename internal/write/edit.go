@@ -8,9 +8,9 @@ import (
 	"github.com/arkoes07/prep-mcp/internal/vault"
 )
 
-// EditOp replaces the one occurrence of old in a file with replacement. An
-// empty replacement deletes it.
-func EditOp(path, old, replacement string) Op {
+// NewEditOp returns the op that replaces the one occurrence of old in a file
+// with replacement. An empty replacement deletes it.
+func NewEditOp(path, old, replacement string) Op {
 	return Op{tool: ToolEdit, target: path, apply: func(p *batchPlan) (*file, []byte, []string, error) {
 		return p.modify(path, editRules, func(f *file, _ parsed) ([]byte, *vault.Frontmatter, []string, error) {
 			next, err := editText(f.cur, f.rel, old, replacement)

@@ -63,13 +63,13 @@ func TestParseVocabulary(t *testing.T) {
 		if voc.Known("a/b") {
 			t.Error("empty vocabulary should know nothing")
 		}
-		if got := voc.Closest("a/b"); got != "" {
-			t.Errorf("Closest on an empty vocabulary = %q, want empty", got)
+		if got := voc.FindClosest("a/b"); got != "" {
+			t.Errorf("FindClosest on an empty vocabulary = %q, want empty", got)
 		}
 	})
 }
 
-func TestClosest(t *testing.T) {
+func TestFindClosest(t *testing.T) {
 	root := testvault.Copy(t)
 	src, err := os.ReadFile(filepath.Join(root, "tags.md"))
 	if err != nil {
@@ -91,8 +91,8 @@ func TestClosest(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := tc.voc.Closest(tc.in); got != tc.want {
-				t.Errorf("Closest(%q) = %q, want %q", tc.in, got, tc.want)
+			if got := tc.voc.FindClosest(tc.in); got != tc.want {
+				t.Errorf("FindClosest(%q) = %q, want %q", tc.in, got, tc.want)
 			}
 		})
 	}

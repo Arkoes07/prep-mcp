@@ -41,18 +41,23 @@ func New(r *read.Reader, w *write.Writer, cfg *config.Config, version string) *m
 }
 
 // guard turns a panic in a handler into an error result, so one bad call
-// cannot take the server down: the SDK does not recover handler panics. The stack goes to slog.Default(), never to the client.
+// cannot take the server down: the SDK does not recover handler panics. The
+// stack goes to slog.Default(), never to the client.
 func guard[In any](name string, h mcp.ToolHandlerFor[In, any]) mcp.ToolHandlerFor[In, any] {
 	return func(ctx context.Context, req *mcp.CallToolRequest, in In) (res *mcp.CallToolResult, out any, err error) {
 		defer func() {
 			if r := recover(); r != nil {
-				slog.Error("tool handler panicked",
+				slog.ErrorContext(ctx, "tool handler panicked",
 					slog.String("tool", name),
 					slog.Any("panic", r),
 					slog.String("stack", string(debug.Stack())),
 				)
-				res, out, err = nil, nil, fmt.Errorf("internal error in %s: %v. "+
-					"This is a bug in prep-mcp; report it and check the server's stderr for the stack", name, r)
+				res, out, err = nil, nil, fmt.Errorf(
+					"internal error in %s: %v. "+
+						"This is a bug in prep-mcp; report it and check the server's stderr for the stack",
+					name,
+					r,
+				)
 			}
 		}()
 		return h(ctx, req, in)
@@ -65,14 +70,14 @@ type handlers struct {
 	cfg *config.Config
 }
 
-func text(s string) *mcp.CallToolResult {
+func renderText(s string) *mcp.CallToolResult {
 	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: s}}}
 }
 
-func jsonResult(v any) (*mcp.CallToolResult, any, error) {
+func renderJSON(v any) (*mcp.CallToolResult, any, error) {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return nil, nil, fmt.Errorf("encode result: %w; report this as a bug", err)
 	}
-	return text(string(b)), nil, nil
+	return renderText(string(b)), nil, nil
 }

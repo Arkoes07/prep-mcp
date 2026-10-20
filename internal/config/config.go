@@ -126,10 +126,10 @@ func (c *Config) Validate() error {
 			errs = append(errs, fmt.Errorf("tags_file %q: %w", c.TagsFile, err))
 		}
 	}
-	errs = append(errs, fieldListErrors("summary_fields", c.SummaryFields, AlwaysShown, DefaultDateField)...)
-	errs = append(errs, c.typeErrors()...)
-	errs = append(errs, c.weekErrors()...)
-	errs = append(errs, c.queryErrors()...)
+	errs = append(errs, checkFieldList("summary_fields", c.SummaryFields, AlwaysShown, DefaultDateField)...)
+	errs = append(errs, c.checkTypes()...)
+	errs = append(errs, c.checkWeek()...)
+	errs = append(errs, c.checkQueries()...)
 	return errors.Join(errs...)
 }
 
@@ -137,10 +137,10 @@ func (c *Config) Validate() error {
 // but path and fields), so no list of fields to show can name them.
 var AlwaysShown = []string{"type", "title", "tags", "date", "date_source", "updated"}
 
-// fieldListErrors checks a list of fields to show, named label in the
+// checkFieldList checks a list of fields to show, named label in the
 // messages, for empty names, names in shown and repeats. dateField dates the
 // documents the list is for.
-func fieldListErrors(label string, fields, shown []string, dateField string) []error {
+func checkFieldList(label string, fields, shown []string, dateField string) []error {
 	var errs []error
 	seen := map[string]bool{}
 	for i, f := range fields {
@@ -149,8 +149,12 @@ func fieldListErrors(label string, fields, shown []string, dateField string) []e
 			errs = append(errs, fmt.Errorf("%s[%d] is empty; name a frontmatter field or remove the entry", label, i))
 		case f == DefaultDateField && dateField != DefaultDateField:
 			// The field would collide with the date key, which holds dateField.
-			errs = append(errs, fmt.Errorf("%s: date is get_context's date attribute (this type is dated by %s); "+
-				`remove it, and pass fields: ["date"] to list_docs when you need it`, label, dateField))
+			errs = append(errs, fmt.Errorf(
+				"%s: date is get_context's date attribute (this type is dated by %s); "+
+					`remove it, and pass fields: ["date"] to list_docs when you need it`,
+				label,
+				dateField,
+			))
 		case slices.Contains(shown, f):
 			errs = append(errs, fmt.Errorf("%s: %s is always shown; remove it from the list", label, f))
 		case seen[f]:
@@ -164,7 +168,7 @@ func fieldListErrors(label string, fields, shown []string, dateField string) []e
 // notDates are the frontmatter fields that can never date a document.
 var notDates = []string{vault.FieldType, vault.FieldTitle, vault.FieldTags}
 
-func (c *Config) typeErrors() []error {
+func (c *Config) checkTypes() []error {
 	var errs []error
 	for _, name := range c.TypeNames() {
 		t := c.Types[name]
@@ -179,7 +183,7 @@ func (c *Config) typeErrors() []error {
 		}
 		// The type's date field is shown as date already.
 		shown := append(slices.Clone(AlwaysShown), t.DateField)
-		errs = append(errs, fieldListErrors("type "+name+": show", t.Show, shown, t.DateField)...)
+		errs = append(errs, checkFieldList("type "+name+": show", t.Show, shown, t.DateField)...)
 		if t.Folder == "" {
 			errs = append(errs, fmt.Errorf("type %s: folder is required (for example folder: notes)", name))
 		} else if err := checkFolder(t.Folder); err != nil {
@@ -189,33 +193,43 @@ func (c *Config) typeErrors() []error {
 	return errs
 }
 
-// weekErrors checks that the current-week settings name a type and one of
+// checkWeek checks that the current-week settings name a type and one of
 // its required fields, or are both left out.
-func (c *Config) weekErrors() []error {
+func (c *Config) checkWeek() []error {
 	ctx := c.Context
 	if ctx.CurrentWeekType == "" {
 		if ctx.CurrentWeekField != "" {
 			return []error{errors.New(
-				"context.current_week_field is set but context.current_week_type is not; set both or neither")}
+				"context.current_week_field is set but context.current_week_type is not; set both or neither",
+			)}
 		}
 		return nil
 	}
+
 	t, ok := c.Types[ctx.CurrentWeekType]
 	switch {
 	case !ok:
-		return []error{fmt.Errorf("context.current_week_type %q is not a defined type; defined types: %s",
-			ctx.CurrentWeekType, c.TypeList())}
+		return []error{fmt.Errorf(
+			"context.current_week_type %q is not a defined type; defined types: %s",
+			ctx.CurrentWeekType,
+			c.DescribeTypes(),
+		)}
 	case ctx.CurrentWeekField == "":
-		return []error{errors.New("context.current_week_type is set; " +
-			"set context.current_week_field to the field that holds the week (for example week)")}
+		return []error{errors.New(
+			"context.current_week_type is set; " +
+				"set context.current_week_field to the field that holds the week (for example week)",
+		)}
 	case !slices.Contains(t.Required, ctx.CurrentWeekField):
-		return []error{fmt.Errorf("type %s: add %s to required (context.current_week_field uses it)",
-			ctx.CurrentWeekType, ctx.CurrentWeekField)}
+		return []error{fmt.Errorf(
+			"type %s: add %s to required (context.current_week_field uses it)",
+			ctx.CurrentWeekType,
+			ctx.CurrentWeekField,
+		)}
 	}
 	return nil
 }
 
-func (c *Config) queryErrors() []error {
+func (c *Config) checkQueries() []error {
 	var errs []error
 	for _, group := range []struct {
 		name string
@@ -226,13 +240,21 @@ func (c *Config) queryErrors() []error {
 	} {
 		for i, q := range group.qs {
 			if _, ok := c.Types[q.Type]; !ok {
-				errs = append(errs, fmt.Errorf("context.%s[%d]: type %q is not a defined type; defined types: %s",
-					group.name, i, q.Type, c.TypeList()))
+				errs = append(errs, fmt.Errorf(
+					"context.%s[%d]: type %q is not a defined type; defined types: %s",
+					group.name,
+					i,
+					q.Type,
+					c.DescribeTypes(),
+				))
 			}
 			if q.Limit < 0 {
 				errs = append(errs, fmt.Errorf(
 					"context.%s[%d]: limit must be positive (or leave it out for the default %d)",
-					group.name, i, DefaultQueryLimit))
+					group.name,
+					i,
+					DefaultQueryLimit,
+				))
 			}
 		}
 	}
@@ -272,9 +294,9 @@ func checkFolder(p string) error {
 	return nil
 }
 
-// TypeList is the configured type names, sorted and comma-separated, or a
-// hint to add a types: section when there are none. Error messages use it.
-func (c *Config) TypeList() string {
+// DescribeTypes returns the configured type names, sorted and comma-separated,
+// or a hint to add a types: section when there are none. Error messages use it.
+func (c *Config) DescribeTypes() string {
 	if len(c.Types) == 0 {
 		return "none (add a types: section to prep.config.yaml and restart the server)"
 	}

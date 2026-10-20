@@ -19,12 +19,12 @@ const (
 
 func statusOp(t *testing.T, p, status string) write.Op {
 	t.Helper()
-	return write.PatchOp(p, write.Patch{Set: node(t, `{"status":"`+status+`"}`)})
+	return write.NewPatchOp(p, write.Patch{Set: node(t, `{"status":"`+status+`"}`)})
 }
 
 func noteOp(t *testing.T, fm string) write.Op {
 	t.Helper()
-	return write.CreateOp(write.Draft{Type: "learning", Frontmatter: node(t, fm), Body: "x"})
+	return write.NewCreateOp(write.Draft{Type: "learning", Frontmatter: node(t, fm), Body: "x"})
 }
 
 // Every op is checked before anything is written. One bad op among good ones
@@ -34,9 +34,9 @@ func TestBatchInvalidOpsWriteNothing(t *testing.T) {
 	before := snapshot(t, e.root)
 	ops := []write.Op{
 		statusOp(t, headline, "improving"),
-		write.AppendOp("../x.md", "Log", "- x"),
-		write.AppendOp(week, "Log", "- Tue: x"),
-		write.AppendOp("weeks/none.md", "Log", "- x"),
+		write.NewAppendOp("../x.md", "Log", "- x"),
+		write.NewAppendOp(week, "Log", "- Tue: x"),
+		write.NewAppendOp("weeks/none.md", "Log", "- x"),
 		noteOp(t, `{"title":"DDIA ch5","track":"ddia"}`),
 		noteOp(t, `{"title":"No track"}`),
 	}
@@ -64,8 +64,8 @@ func TestBatchInvalidOpsWriteNothing(t *testing.T) {
 func TestBatchFailedOpLeavesPlanAsItWas(t *testing.T) {
 	e := newEnv(t)
 	ops := []write.Op{
-		write.EditOp(week, "tags: [meta/plan]", "tags: [meta/plan, issue/buries-headlin]"),
-		write.EditOp(week, "issue/buries-headlin", "issue/buries-headline"),
+		write.NewEditOp(week, "tags: [meta/plan]", "tags: [meta/plan, issue/buries-headlin]"),
+		write.NewEditOp(week, "issue/buries-headlin", "issue/buries-headline"),
 	}
 
 	_, err := e.w.Batch(ctx, ops, "")
@@ -85,8 +85,8 @@ func TestBatchFailedOpReportedWithOthers(t *testing.T) {
 	e := newEnv(t)
 	before := snapshot(t, e.root)
 	ops := []write.Op{
-		write.FailedOp("update_frontmatter", errors.New("set must be an object")),
-		write.AppendOp("nope.md", "Log", "- x"),
+		write.NewFailedOp("update_frontmatter", errors.New("set must be an object")),
+		write.NewAppendOp("nope.md", "Log", "- x"),
 	}
 
 	_, err := e.w.Batch(ctx, ops, "")
@@ -109,7 +109,7 @@ func TestBatchStaleReplaceRejectsAll(t *testing.T) {
 	current := vault.Hash([]byte(e.read(t, week)))
 	ops := []write.Op{
 		statusOp(t, headline, "improving"),
-		write.ReplaceOp(week, "---\ntype: week\nweek: 2026-W03\n---\n", vault.Hash([]byte("an older version"))),
+		write.NewReplaceOp(week, "---\ntype: week\nweek: 2026-W03\n---\n", vault.Hash([]byte("an older version"))),
 	}
 
 	_, err := e.w.Batch(ctx, ops, "")
@@ -128,7 +128,7 @@ func TestBatchSamePathInOrder(t *testing.T) {
 		e := newEnv(t)
 		ops := []write.Op{
 			statusOp(t, headline, "improving"),
-			write.AppendOp(headline, "Notes", "- tried headline first"),
+			write.NewAppendOp(headline, "Notes", "- tried headline first"),
 		}
 
 		res, err := e.w.Batch(ctx, ops, "")
@@ -154,7 +154,7 @@ func TestBatchSamePathInOrder(t *testing.T) {
 		e := newEnv(t)
 		ops := []write.Op{
 			noteOp(t, `{"title":"DDIA ch5","track":"ddia"}`),
-			write.AppendOp(newNote, "Notes", "- y"),
+			write.NewAppendOp(newNote, "Notes", "- y"),
 		}
 
 		if _, err := e.w.Batch(ctx, ops, ""); err != nil {
@@ -169,8 +169,8 @@ func TestBatchSamePathInOrder(t *testing.T) {
 	t.Run("append_then_edit", func(t *testing.T) {
 		e := newEnv(t)
 		ops := []write.Op{
-			write.AppendOp(week, "Log", "- Tue: x"),
-			write.EditOp(week, "- Tue: x", "- Tue: mock, headline first"),
+			write.NewAppendOp(week, "Log", "- Tue: x"),
+			write.NewEditOp(week, "- Tue: x", "- Tue: mock, headline first"),
 		}
 
 		if _, err := e.w.Batch(ctx, ops, ""); err != nil {
@@ -187,8 +187,8 @@ func TestBatchSamePathInOrder(t *testing.T) {
 		before := snapshot(t, e.root)
 		old := e.read(t, week)
 		ops := []write.Op{
-			write.AppendOp(week, "Log", "- Tue: x"),
-			write.ReplaceOp(week, old+"more\n", vault.Hash([]byte(old))),
+			write.NewAppendOp(week, "Log", "- Tue: x"),
+			write.NewReplaceOp(week, old+"more\n", vault.Hash([]byte(old))),
 		}
 
 		_, err := e.w.Batch(ctx, ops, "")
@@ -215,8 +215,8 @@ func TestBatchSamePathInOrder(t *testing.T) {
 
 // The tag rule reads the tags file as the earlier ops leave it.
 func TestBatchVocabularyInOrder(t *testing.T) {
-	addTag := write.EditOp("tags.md", "`meta/plan`", "`meta/plan` `skill/new`")
-	useTag := write.PatchOp(headline, write.Patch{AddTags: []string{"skill/new"}})
+	addTag := write.NewEditOp("tags.md", "`meta/plan`", "`meta/plan` `skill/new`")
+	useTag := write.NewPatchOp(headline, write.Patch{AddTags: []string{"skill/new"}})
 
 	t.Run("tag_added_then_used", func(t *testing.T) {
 		e := newEnv(t)
@@ -247,7 +247,7 @@ func TestBatchLimits(t *testing.T) {
 	e := newEnv(t)
 	tooMany := make([]write.Op, write.MaxBatchOps+1)
 	for i := range tooMany {
-		tooMany[i] = write.AppendOp(week, "Log", fmt.Sprintf("- line %d", i))
+		tooMany[i] = write.NewAppendOp(week, "Log", fmt.Sprintf("- line %d", i))
 	}
 
 	_, err := e.w.Batch(ctx, nil, "")
@@ -276,7 +276,7 @@ func TestBatchResults(t *testing.T) {
 		statusOp(t, headline, "improving"),
 		noteOp(t, `{"title":"DDIA ch5","track":"ddia","tags":["issue/missing-tradeoff"]}`),
 		// Nothing to write, and a warning that the tag was not there.
-		write.PatchOp(tradeoff, write.Patch{RemoveTags: []string{"meta/plan"}}),
+		write.NewPatchOp(tradeoff, write.Patch{RemoveTags: []string{"meta/plan"}}),
 	}
 
 	res, err := e.w.Batch(ctx, ops, "")
@@ -295,8 +295,12 @@ func TestBatchResults(t *testing.T) {
 	}
 	quiet := len(res.Results[0].Warnings) == 0 && len(res.Results[1].Warnings) == 0
 	if !quiet || !hasWarning(&res.Results[2], `tag "meta/plan" is not on this document`) {
-		t.Errorf("warnings = %q / %q / %q, want only the third op's warning",
-			res.Results[0].Warnings, res.Results[1].Warnings, res.Results[2].Warnings)
+		t.Errorf(
+			"warnings = %q / %q / %q, want only the third op's warning",
+			res.Results[0].Warnings,
+			res.Results[1].Warnings,
+			res.Results[2].Warnings,
+		)
 	}
 	if res.Commit != "" || len(res.Warnings) != 0 {
 		t.Errorf("commit = %q, warnings = %q; want neither without git", res.Commit, res.Warnings)

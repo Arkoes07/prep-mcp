@@ -9,8 +9,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// KeyNode is a mapping key, quoted when other tools would read it as a boolean.
-func KeyNode(k string) *yaml.Node {
+// NewKeyNode returns a mapping key, quoted when other tools would read it as a boolean.
+func NewKeyNode(k string) *yaml.Node {
 	n := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: k}
 	if needsQuotes(k) {
 		n.Style = yaml.DoubleQuotedStyle
@@ -18,8 +18,8 @@ func KeyNode(k string) *yaml.Node {
 	return n
 }
 
-// StrNode is a string value written the way a person would write it.
-func StrNode(s string) *yaml.Node {
+// NewStrNode returns a string value written the way a person would write it.
+func NewStrNode(s string) *yaml.Node {
 	n := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: s}
 	switch {
 	case isPlainDate(s):
@@ -30,8 +30,8 @@ func StrNode(s string) *yaml.Node {
 	return n
 }
 
-// TagsNode is a flow list of tags, the form new documents and patches write.
-func TagsNode(tags []string) *yaml.Node {
+// NewTagsNode returns a flow list of tags, the form new documents and patches write.
+func NewTagsNode(tags []string) *yaml.Node {
 	seq := &yaml.Node{
 		Kind:    yaml.SequenceNode,
 		Tag:     "!!seq",
@@ -39,13 +39,13 @@ func TagsNode(tags []string) *yaml.Node {
 		Content: make([]*yaml.Node, 0, len(tags)),
 	}
 	for _, t := range tags {
-		seq.Content = append(seq.Content, StrNode(t))
+		seq.Content = append(seq.Content, NewStrNode(t))
 	}
 	return seq
 }
 
 // Encode writes n as YAML with a two-space indent. It panics on a node tree
-// the encoder rejects: trees built from JSONToNode and these builders never
+// the encoder rejects: trees built from DecodeJSON and these builders never
 // are, so that is a bug, not an input to report.
 func Encode(n *yaml.Node) string {
 	var b bytes.Buffer

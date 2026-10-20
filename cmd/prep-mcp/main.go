@@ -59,7 +59,7 @@ func run(ctx context.Context, args []string, getenv func(string) string, stderr 
 	logger := slog.New(slog.NewTextHandler(stderr, nil))
 	slog.SetDefault(logger)
 
-	root, err := vaultRoot(*rootFlag, getenv)
+	root, err := resolveRoot(*rootFlag, getenv)
 	if err != nil {
 		return err
 	}
@@ -79,18 +79,8 @@ func run(ctx context.Context, args []string, getenv func(string) string, stderr 
 	}()
 	logger.Info("serving vault", slog.String("root", v.Dir()), slog.Int("types", len(cfg.Types)))
 	r := read.New(v, cfg, time.Now)
-	w := write.New(
-		v,
-		cfg,
-		newGit(cfg, v.Dir()),
-		time.Now,
-	)
-	srv := server.New(
-		r,
-		w,
-		cfg,
-		version,
-	)
+	w := write.New(v, cfg, newGit(cfg, v.Dir()), time.Now)
+	srv := server.New(r, w, cfg, version)
 	err = srv.Run(ctx, &mcp.StdioTransport{})
 	if err != nil && ctx.Err() == nil && !errors.Is(err, io.EOF) {
 		return err
@@ -108,9 +98,9 @@ func newGit(cfg *config.Config, dir string) *write.Git {
 	return &write.Git{Dir: dir, Name: name, Email: email}
 }
 
-// vaultRoot picks the vault directory: --root, else PREP_ROOT, else the
+// resolveRoot picks the vault directory: --root, else PREP_ROOT, else the
 // current directory.
-func vaultRoot(flagValue string, getenv func(string) string) (string, error) {
+func resolveRoot(flagValue string, getenv func(string) string) (string, error) {
 	if root := cmp.Or(flagValue, getenv("PREP_ROOT")); root != "" {
 		return root, nil
 	}
@@ -133,8 +123,7 @@ func loadConfig(path, root string, logger *slog.Logger) (*config.Config, error) 
 	cfg, err := config.Load(path)
 	switch {
 	case errors.Is(err, fs.ErrNotExist) && !explicit:
-		logger.Warn("no config file; starting with no document types (queries still work)",
-			slog.String("config", path))
+		logger.Warn("no config file; starting with no document types (queries still work)", slog.String("config", path))
 		return config.Parse(nil)
 	case err != nil:
 		return nil, fmt.Errorf("%w\nfix the config, or point --config / PREP_CONFIG at a valid file", err)

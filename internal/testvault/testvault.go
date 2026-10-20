@@ -23,7 +23,7 @@ var Day = time.Date(2026, 1, 14, 9, 0, 0, 0, time.Local)
 // Day, so documents dated by mtime sort below documents with a date field.
 var Mtime = time.Date(2026, 1, 10, 12, 0, 0, 0, time.Local)
 
-func Clock() func() time.Time {
+func NewClock() func() time.Time {
 	return func() time.Time { return Day }
 }
 

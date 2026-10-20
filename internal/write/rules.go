@@ -61,14 +61,14 @@ var (
 // an error. It returns the result as a document, empty for a file without
 // frontmatter.
 func (p *batchPlan) check(r opRules, before, after parsed) (*document.Doc, []string, error) {
-	voc, vocErr := p.vocabulary()
-	was, wasErr := p.doc(before, voc)
-	now, nowErr := p.doc(after, voc)
+	voc, vocErr := p.loadVocabulary()
+	was, wasErr := p.buildDoc(before, voc)
+	now, nowErr := p.buildDoc(after, voc)
 	switch {
 	case nowErr != nil && wasErr != nil:
-		return nil, []string{reason(nowErr) + "; fix the frontmatter with edit_text"}, nil
+		return nil, []string{extractReason(nowErr) + "; fix the frontmatter with edit_text"}, nil
 	case nowErr != nil:
-		return nil, nil, fmt.Errorf("this write breaks the frontmatter: %s; %s", reason(nowErr), r.fixParse)
+		return nil, nil, fmt.Errorf("this write breaks the frontmatter: %s; %s", extractReason(nowErr), r.fixParse)
 	case wasErr != nil:
 		// Nothing to compare against: check the result as if the file had been
 		// so all along, so what the rules find is a warning and a write can
@@ -81,11 +81,18 @@ func (p *batchPlan) check(r opRules, before, after parsed) (*document.Doc, []str
 	var errs []error
 	switch {
 	case now.Type != was.Type && r.keepType:
-		errs = append(errs, fmt.Errorf("this edit changes the type %q to %q; "+
-			"keep the frontmatter's type line as it is", was.Type, now.Type))
+		errs = append(errs, fmt.Errorf(
+			"this edit changes the type %q to %q; keep the frontmatter's type line as it is",
+			was.Type,
+			now.Type,
+		))
 	case now.Type == "" && was.Type != "":
-		errs = append(errs, fmt.Errorf("this write removes the type %q, but every document needs one: "+
-			"keep it, or set it to one of the configured types: %s", was.Type, p.w.cfg.TypeList()))
+		errs = append(errs, fmt.Errorf(
+			"this write removes the type %q, but every document needs one: "+
+				"keep it, or set it to one of the configured types: %s",
+			was.Type,
+			p.w.cfg.DescribeTypes(),
+		))
 	}
 
 	var broke, already []document.Finding
@@ -99,10 +106,10 @@ func (p *batchPlan) check(r opRules, before, after parsed) (*document.Doc, []str
 			broke = append(broke, f)
 		}
 	}
-	for _, msg := range p.messages(broke, now.Type, true, r.fixMissing) {
+	for _, msg := range p.renderFindings(broke, now.Type, true, r.fixMissing) {
 		errs = append(errs, errors.New(msg))
 	}
-	warnings := p.messages(already, now.Type, false, "give them values with update_frontmatter")
+	warnings := p.renderFindings(already, now.Type, false, "give them values with update_frontmatter")
 	// A plain file has no rules, so the tags file has nothing to vouch for.
 	if vocErr != nil && now.Type != "" && len(now.Tags) > 0 {
 		if slices.ContainsFunc(now.Tags, func(t string) bool { return !slices.Contains(was.Tags, t) }) {
@@ -129,21 +136,22 @@ func parse(src []byte) parsed {
 	return parsed{fm: fm, err: err}
 }
 
-// doc reads s as a document, an empty one for a file without frontmatter.
+// buildDoc reads s as a document, an empty one for a file without frontmatter.
 // Findings are worked out every time: the vocabulary can change within a batch.
-func (p *batchPlan) doc(s parsed, voc *vault.Vocabulary) (*document.Doc, error) {
+func (p *batchPlan) buildDoc(s parsed, voc *vault.Vocabulary) (*document.Doc, error) {
 	switch {
 	case s.err != nil:
 		return nil, s.err
 	case s.fm == nil:
 		return &document.Doc{}, nil
 	}
-	return document.Of(s.fm, p.w.cfg, voc), nil
+	return document.Read(s.fm, p.w.cfg, voc), nil
 }
 
-// reason is why frontmatter does not parse, alone: the parser's advice to fix
-// the file does not fit an op that broke it, nor a write that already succeeded.
-func reason(err error) string {
+// extractReason returns why frontmatter does not parse, alone: the parser's
+// advice to fix the file does not fit an op that broke it, nor a write that
+// already succeeded.
+func extractReason(err error) string {
 	var fe *vault.FrontmatterError
 	if errors.As(err, &fe) {
 		return fe.Reason
@@ -151,15 +159,19 @@ func reason(err error) string {
 	return err.Error()
 }
 
-// messages words findings of a document of type typ, which the op broke or
+// renderFindings words findings of a document of type typ, which the op broke or
 // the file already broke: one message each, but one for every missing
 // required field, ending in fixMissing.
-func (p *batchPlan) messages(fs []document.Finding, typ string, broke bool, fixMissing string) []string {
+func (p *batchPlan) renderFindings(fs []document.Finding, typ string, broke bool, fixMissing string) []string {
 	var out, missing []string
 	flush := func() {
 		if len(missing) > 0 {
-			out = append(out, fmt.Sprintf("missing required fields for %s: %s; %s",
-				typ, strings.Join(missing, ", "), fixMissing))
+			out = append(out, fmt.Sprintf(
+				"missing required fields for %s: %s; %s",
+				typ,
+				strings.Join(missing, ", "),
+				fixMissing,
+			))
 			missing = nil
 		}
 	}
@@ -169,21 +181,21 @@ func (p *batchPlan) messages(fs []document.Finding, typ string, broke bool, fixM
 			continue
 		}
 		flush()
-		out = append(out, f.Reason+p.nextStep(f.Rule, broke))
+		out = append(out, f.Reason+p.suggestNextStep(f.Rule, broke))
 	}
 	flush()
 	return out
 }
 
-// nextStep is what to do after a finding of rule, which the op broke or the
-// file already broke.
-func (p *batchPlan) nextStep(rule document.Rule, broke bool) string {
+// suggestNextStep says what to do after a finding of rule, which the op broke
+// or the file already broke.
+func (p *batchPlan) suggestNextStep(rule document.Rule, broke bool) string {
 	tagsFile := p.w.cfg.TagsFile
 	switch {
 	case rule == document.RuleType && broke:
-		return "; " + p.useTypes()
+		return "; " + p.suggestTypes()
 	case rule == document.RuleType:
-		return "; " + p.useTypes() + "; set it with update_frontmatter"
+		return "; " + p.suggestTypes() + "; set it with update_frontmatter"
 	case rule == document.RuleTag && broke:
 		return ". Use a known tag (list_tags shows them all), or add it to " + tagsFile + " first"
 	case rule == document.RuleTag:
@@ -194,16 +206,16 @@ func (p *batchPlan) nextStep(rule document.Rule, broke bool) string {
 	return "; set it with update_frontmatter"
 }
 
-// useTypes is what to do about a type the config does not define.
-func (p *batchPlan) useTypes() string {
-	return "use one of the configured types: " + p.w.cfg.TypeList()
+// suggestTypes says what to do about a type the config does not define.
+func (p *batchPlan) suggestTypes() string {
+	return "use one of the configured types: " + p.w.cfg.DescribeTypes()
 }
 
-// vocabulary reads the tags file as the earlier ops leave it, so a batch can
+// loadVocabulary reads the tags file as the earlier ops leave it, so a batch can
 // add a tag and then use it.
-func (p *batchPlan) vocabulary() (*vault.Vocabulary, error) {
+func (p *batchPlan) loadVocabulary() (*vault.Vocabulary, error) {
 	if f := p.byPath[path.Clean(p.w.cfg.TagsFile)]; f != nil && f.exists {
 		return vault.ParseVocabulary(f.cur), nil
 	}
-	return p.w.v.Vocabulary(p.w.cfg.TagsFile)
+	return p.w.v.LoadVocabulary(p.w.cfg.TagsFile)
 }

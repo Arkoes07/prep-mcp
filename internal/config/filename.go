@@ -47,6 +47,7 @@ func (f *Filename) parse(typ string, required []string, dateField string) []erro
 	if f.raw == "" {
 		return []error{fmt.Errorf(`type %s: filename is required (for example filename: "{slug}.md")`, typ)}
 	}
+
 	var errs []error
 	add := func(format string, args ...any) {
 		errs = append(errs, fmt.Errorf("type %s: filename %q: "+format, append([]any{typ, f.raw}, args...)...))
@@ -57,6 +58,7 @@ func (f *Filename) parse(typ string, required []string, dateField string) []erro
 	if !strings.HasSuffix(strings.ToLower(f.raw), ".md") {
 		add("must end in .md")
 	}
+
 	f.dateField = dateField
 	f.parts = nil
 	last := 0
@@ -65,6 +67,7 @@ func (f *Filename) parse(typ string, required []string, dateField string) []erro
 		last = m[1]
 	}
 	f.parts = append(f.parts, f.raw[last:])
+
 	if strings.ContainsAny(placeholderRE.ReplaceAllString(f.raw, ""), "{}") {
 		add("has an unbalanced { or }; write placeholders like {slug}")
 	}
@@ -98,7 +101,7 @@ const FilenameRules = "In a pattern, {slug} is the slug argument, else the title
 // config.
 func (f Filename) Render(fm *yaml.Node, slug string, today time.Time) (string, error) {
 	if strings.ContainsAny(slug, `/\`) {
-		return f.folderName(slug)
+		return f.renderFolderName(slug)
 	}
 	// A date field holding something else is the date rule's to report.
 	day, err := vault.Day(fm, f.dateField)
@@ -111,7 +114,7 @@ func (f Filename) Render(fm *yaml.Node, slug string, today time.Time) (string, e
 			b.WriteString(part)
 			continue
 		}
-		val, err := placeholderValue(part, fm, slug, day)
+		val, err := resolvePlaceholder(part, fm, slug, day)
 		if err != nil {
 			return "", err
 		}
@@ -120,17 +123,19 @@ func (f Filename) Render(fm *yaml.Node, slug string, today time.Time) (string, e
 	return b.String(), nil
 }
 
-// placeholderValue is the value of the {name} placeholder for frontmatter fm;
+// resolvePlaceholder returns the value of the {name} placeholder for frontmatter fm;
 // day is the already resolved {date}.
-func placeholderValue(name string, fm *yaml.Node, slug string, day time.Time) (string, error) {
+func resolvePlaceholder(name string, fm *yaml.Node, slug string, day time.Time) (string, error) {
 	switch name {
 	case "slug":
 		if strings.TrimSpace(slug) != "" {
 			if s := slugify(slug); s != "" {
 				return s, nil
 			}
-			return "", fmt.Errorf("slug %q has no letters or digits to build a filename from; pass a different slug",
-				slug)
+			return "", fmt.Errorf(
+				"slug %q has no letters or digits to build a filename from; pass a different slug",
+				slug,
+			)
 		}
 		if s := slugify(vault.Text(fm, vault.FieldTitle)); s != "" {
 			return s, nil
@@ -139,6 +144,7 @@ func placeholderValue(name string, fm *yaml.Node, slug string, day time.Time) (s
 	case "date":
 		return day.Format(time.DateOnly), nil
 	}
+
 	// A field with no value fails here too, but never reaches it: parse makes
 	// it required, and the document rules check that first.
 	vals := vault.Values(fm, name)
@@ -147,26 +153,35 @@ func placeholderValue(name string, fm *yaml.Node, slug string, day time.Time) (s
 	}
 	s := slugify(vals[0])
 	if s == "" {
-		return "", fmt.Errorf("%s (%q) has no letters or digits to build a filename from; use a different value",
-			name, vals[0])
+		return "", fmt.Errorf(
+			"%s (%q) has no letters or digits to build a filename from; use a different value",
+			name,
+			vals[0],
+		)
 	}
 	return s, nil
 }
 
-// folderName builds "folder/name.md" from a slug that holds folders,
+// renderFolderName builds "folder/name.md" from a slug that holds folders,
 // slugifying each "/"-separated part. A part that slugifies to nothing ("",
 // ".", "..") fails, and so does "\\", which would otherwise slugify to "-".
-func (f Filename) folderName(slug string) (string, error) {
+func (f Filename) renderFolderName(slug string) (string, error) {
 	if f.raw != "{slug}.md" {
-		return "", fmt.Errorf("this type builds names from %q, so slug cannot contain \"/\" or \"\\\"; "+
-			"pass a plain name", f.raw)
+		return "", fmt.Errorf(
+			"this type builds names from %q, so slug cannot contain \"/\" or \"\\\"; pass a plain name",
+			f.raw,
+		)
 	}
 	parts := strings.Split(slug, "/")
 	for i, part := range parts {
 		s := slugify(part)
 		if s == "" || strings.Contains(part, `\`) {
-			return "", fmt.Errorf("slug %q has a part %q with no letters or digits, or with \"\\\"; "+
-				"pass folder/name with letters and digits in each part", slug, part)
+			return "", fmt.Errorf(
+				"slug %q has a part %q with no letters or digits, or with \"\\\"; "+
+					"pass folder/name with letters and digits in each part",
+				slug,
+				part,
+			)
 		}
 		parts[i] = s
 	}

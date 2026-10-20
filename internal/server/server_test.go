@@ -33,9 +33,9 @@ func connectRoot(t *testing.T) (string, *mcp.ClientSession) {
 func connectAt(t *testing.T, root string) *mcp.ClientSession {
 	t.Helper()
 	cfg, v := testvault.Open(t, root)
-	r := read.New(v, cfg, testvault.Clock())
+	r := read.New(v, cfg, testvault.NewClock())
 	// A nil Git: the server tests do not commit.
-	return serve(t, New(r, write.New(v, cfg, nil, testvault.Clock()), cfg, "test"))
+	return serve(t, New(r, write.New(v, cfg, nil, testvault.NewClock()), cfg, "test"))
 }
 
 func serve(t *testing.T, s *mcp.Server) *mcp.ClientSession {
@@ -121,14 +121,21 @@ func TestToolSet(t *testing.T) {
 func neutralVault(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
-	testvault.Write(t, root, "prep.config.yaml", "types:\n  note:\n    folder: notes\n    filename: \"{slug}.md\"\n    required: [title]\n  log:\n    folder: logs\n    filename: \"{date}-{slug}.md\"\n    required: [date]\n")
+	testvault.Write(
+		t,
+		root,
+		"prep.config.yaml",
+		"types:\n"+
+			"  note:\n    folder: notes\n    filename: \"{slug}.md\"\n    required: [title]\n"+
+			"  log:\n    folder: logs\n    filename: \"{date}-{slug}.md\"\n    required: [date]\n",
+	)
 	return root
 }
 
 // Tool descriptions and schemas are shown to the model; they must stay
 // domain-neutral like the rest of the Go code.
 func TestDescriptionsAreDomainNeutral(t *testing.T) {
-	re := testvault.ForbiddenWords(t)
+	re := testvault.LoadForbiddenWords(t)
 
 	cs := connectAt(t, neutralVault(t))
 	res, err := cs.ListTools(context.Background(), nil)
@@ -151,14 +158,20 @@ func TestPanicBecomesToolError(t *testing.T) {
 	slog.SetDefault(slog.New(slog.DiscardHandler)) // guard logs the stack; keep test output clean
 	t.Cleanup(func() { slog.SetDefault(prev) })
 	s := mcp.NewServer(&mcp.Implementation{Name: "t", Version: "0"}, nil)
-	mcp.AddTool(s, &mcp.Tool{Name: "boom", Description: "panics"},
+	mcp.AddTool(
+		s,
+		&mcp.Tool{Name: "boom", Description: "panics"},
 		guard("boom", func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, any, error) {
 			panic("kaboom")
-		}))
-	mcp.AddTool(s, &mcp.Tool{Name: "fine", Description: "works"},
+		}),
+	)
+	mcp.AddTool(
+		s,
+		&mcp.Tool{Name: "fine", Description: "works"},
 		guard("fine", func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, any, error) {
-			return text("still here"), nil, nil
-		}))
+			return renderText("still here"), nil, nil
+		}),
+	)
 	cs := serve(t, s)
 
 	out, isErr := call(t, cs, "boom", map[string]any{})

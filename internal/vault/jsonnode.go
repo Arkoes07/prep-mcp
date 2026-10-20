@@ -11,11 +11,11 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// JSONToNode decodes a JSON object into a mapping node that keeps key order.
+// DecodeJSON decodes a JSON object into a mapping node that keeps key order.
 // Scalars carry the tag and style that make the encoder write them the way a
 // person would: date-like strings plain (so editors still see a date), strings
 // that YAML would read as something else quoted, short lists in flow style.
-func JSONToNode(raw json.RawMessage) (*yaml.Node, error) {
+func DecodeJSON(raw json.RawMessage) (*yaml.Node, error) {
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.UseNumber()
 	const want = `must be a JSON object such as {"key": "value"}`
@@ -36,7 +36,7 @@ func JSONToNode(raw json.RawMessage) (*yaml.Node, error) {
 	return n, nil
 }
 
-func invalidJSON(err error) error {
+func explainInvalidJSON(err error) error {
 	return fmt.Errorf("invalid JSON: %w; check its quotes, commas and brackets", err)
 }
 
@@ -46,7 +46,7 @@ func decodeObject(dec *json.Decoder) (*yaml.Node, error) {
 	for dec.More() {
 		kt, err := dec.Token()
 		if err != nil {
-			return nil, invalidJSON(err)
+			return nil, explainInvalidJSON(err)
 		}
 		key, _ := kt.(string) // inside an object the decoder only yields string keys
 		if seen[key] {
@@ -57,10 +57,10 @@ func decodeObject(dec *json.Decoder) (*yaml.Node, error) {
 		if err != nil {
 			return nil, err
 		}
-		m.Content = append(m.Content, KeyNode(key), v)
+		m.Content = append(m.Content, NewKeyNode(key), v)
 	}
 	if _, err := dec.Token(); err != nil { // the closing brace
-		return nil, invalidJSON(err)
+		return nil, explainInvalidJSON(err)
 	}
 	if len(m.Content) == 0 {
 		m.Style = yaml.FlowStyle
@@ -71,7 +71,7 @@ func decodeObject(dec *json.Decoder) (*yaml.Node, error) {
 func decodeValue(dec *json.Decoder) (*yaml.Node, error) {
 	tok, err := dec.Token()
 	if err != nil {
-		return nil, invalidJSON(err)
+		return nil, explainInvalidJSON(err)
 	}
 	switch t := tok.(type) {
 	case json.Delim:
@@ -80,7 +80,7 @@ func decodeValue(dec *json.Decoder) (*yaml.Node, error) {
 		}
 		return decodeArray(dec)
 	case string:
-		return StrNode(t), nil
+		return NewStrNode(t), nil
 	case json.Number:
 		tag := "!!float"
 		if _, err := strconv.ParseInt(string(t), 10, 64); err == nil {
@@ -107,7 +107,7 @@ func decodeArray(dec *json.Decoder) (*yaml.Node, error) {
 		seq.Content = append(seq.Content, v)
 	}
 	if _, err := dec.Token(); err != nil { // the closing bracket
-		return nil, invalidJSON(err)
+		return nil, explainInvalidJSON(err)
 	}
 	return seq, nil
 }

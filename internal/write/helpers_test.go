@@ -34,7 +34,7 @@ func newEnv(t testing.TB) *env {
 	t.Helper()
 	root := testvault.Copy(t)
 	cfg, v := testvault.Open(t, root)
-	return &env{root: root, v: v, cfg: cfg, w: write.New(v, cfg, nil, testvault.Clock())}
+	return &env{root: root, v: v, cfg: cfg, w: write.New(v, cfg, nil, testvault.NewClock())}
 }
 
 func (e *env) abs(rel string) string { return filepath.Join(e.root, filepath.FromSlash(rel)) }
@@ -113,9 +113,9 @@ func leftovers(t testing.TB, root string) []string {
 // server hands frontmatter to the writer.
 func node(t testing.TB, js string) *yaml.Node {
 	t.Helper()
-	n, err := vault.JSONToNode(json.RawMessage(js))
+	n, err := vault.DecodeJSON(json.RawMessage(js))
 	if err != nil {
-		t.Fatalf("JSONToNode(%s): %v", js, err)
+		t.Fatalf("DecodeJSON(%s): %v", js, err)
 	}
 	return n
 }

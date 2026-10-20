@@ -73,9 +73,9 @@ func ParseVocabulary(src []byte) *Vocabulary {
 	return voc
 }
 
-// Vocabulary loads the vault-relative tags file. It returns nil, nil when
+// LoadVocabulary loads the vault-relative tags file. It returns nil, nil when
 // tagsFile is empty or the file does not exist.
-func (v *Vault) Vocabulary(tagsFile string) (*Vocabulary, error) {
+func (v *Vault) LoadVocabulary(tagsFile string) (*Vocabulary, error) {
 	if tagsFile == "" {
 		return nil, nil
 	}
@@ -84,8 +84,11 @@ func (v *Vault) Vocabulary(tagsFile string) (*Vocabulary, error) {
 		return nil, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("read tags file %s: %w; check its permissions or fix tags_file in the config",
-			tagsFile, err)
+		return nil, fmt.Errorf(
+			"read tags file %s: %w; check its permissions or fix tags_file in the config",
+			tagsFile,
+			err,
+		)
 	}
 	return ParseVocabulary(src), nil
 }
@@ -106,23 +109,23 @@ func (voc *Vocabulary) Tags() []string {
 	return voc.list
 }
 
-// Closest returns the vocabulary tag with the smallest edit distance to tag,
+// FindClosest returns the vocabulary tag with the smallest edit distance to tag,
 // the alphabetically first on a tie, or "" for an empty vocabulary.
-func (voc *Vocabulary) Closest(tag string) string {
+func (voc *Vocabulary) FindClosest(tag string) string {
 	if voc == nil {
 		return ""
 	}
 	tag = strings.ToLower(strings.TrimSpace(tag))
 	best, bestDist := "", -1
 	for _, cand := range voc.list {
-		if d := levenshtein(tag, cand); bestDist < 0 || d < bestDist {
+		if d := measureEditDistance(tag, cand); bestDist < 0 || d < bestDist {
 			best, bestDist = cand, d
 		}
 	}
 	return best
 }
 
-func levenshtein(a, b string) int {
+func measureEditDistance(a, b string) int {
 	ra, rb := []rune(a), []rune(b)
 	prev := make([]int, len(rb)+1)
 	cur := make([]int, len(rb)+1)

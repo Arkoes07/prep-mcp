@@ -23,7 +23,7 @@ func fail(format string, args ...any) (string, error) {
 	return "", fmt.Errorf(format, args...)
 }
 
-func notFound(clean string) error {
+func explainNotFound(clean string) error {
 	if InTemplates(clean) {
 		return fmt.Errorf("not found: %s (no tool lists templates; ask the human for its name)", clean)
 	}
@@ -48,7 +48,7 @@ func (v *Vault) Resolve(p string, a Access) (string, error) {
 			if a == AccessWrite {
 				return clean, nil
 			}
-			return "", notFound(clean)
+			return "", explainNotFound(clean)
 		}
 		if err != nil {
 			return fail("cannot access %q: %w; check the permissions of the folders on its path", p, err)

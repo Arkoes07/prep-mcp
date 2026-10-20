@@ -32,7 +32,10 @@ func parseWhere(m *yaml.Node) (Where, *yaml.Node, error) {
 			return nil, k, fmt.Errorf("where.%s appears twice; use each field once", k.Value)
 		}
 		if !isScalarOrList(v) {
-			return nil, v, fmt.Errorf(`where.%s: use one value or a list of values, such as "open" or ["open", "closed"]`, k.Value)
+			return nil, v, fmt.Errorf(
+				`where.%s: use one value or a list of values, such as "open" or ["open", "closed"]`,
+				k.Value,
+			)
 		}
 		w[k.Value] = Values(m, k.Value)
 	}

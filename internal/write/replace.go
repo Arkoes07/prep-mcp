@@ -8,9 +8,9 @@ import (
 	"github.com/arkoes07/prep-mcp/internal/vault"
 )
 
-// ReplaceOp rewrites a whole file, but only if it still has the content whose
-// hash the caller read.
-func ReplaceOp(path, content, expectedHash string) Op {
+// NewReplaceOp returns the op that rewrites a whole file, but only if it still
+// has the content whose hash the caller read.
+func NewReplaceOp(path, content, expectedHash string) Op {
 	return Op{tool: ToolReplace, target: path, apply: func(p *batchPlan) (*file, []byte, []string, error) {
 		return p.modify(path, contentRules, func(f *file, _ parsed) ([]byte, *vault.Frontmatter, []string, error) {
 			next, err := replaceContent(f, content, expectedHash)
@@ -28,8 +28,12 @@ func replaceContent(f *file, content, expectedHash string) ([]byte, error) {
 		return nil, errors.New("expected_hash is required; get it from read_doc")
 	}
 	if f.changed() {
-		return nil, fmt.Errorf("an earlier op in this batch changed %s; "+
-			"put replace_doc first for %s, or fold that change into its content", f.rel, f.rel)
+		return nil, fmt.Errorf(
+			"an earlier op in this batch changed %s; "+
+				"put replace_doc first for %s, or fold that change into its content",
+			f.rel,
+			f.rel,
+		)
 	}
 	if cur := vault.Hash(f.cur); cur != expected {
 		return nil, &ConflictError{Path: f.rel, Current: cur}

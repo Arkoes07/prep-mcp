@@ -92,11 +92,11 @@ func matches(d *Doc, f Filter) bool {
 	if !f.Where.Match(d.Frontmatter) {
 		return false
 	}
-	day := dayOf(d.Date)
-	if f.Since != nil && day.Before(dayOf(*f.Since)) {
+	day := truncateToDay(d.Date)
+	if f.Since != nil && day.Before(truncateToDay(*f.Since)) {
 		return false
 	}
-	if f.Until != nil && day.After(dayOf(*f.Until)) {
+	if f.Until != nil && day.After(truncateToDay(*f.Until)) {
 		return false
 	}
 	return true

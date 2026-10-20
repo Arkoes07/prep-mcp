@@ -38,7 +38,7 @@ func (fm *Frontmatter) Edit() *Edit {
 	lines := slices.Collect(strings.Lines(text))
 	e := &Edit{fm: fm, lines: lines, err: checkLineByLine(fm.Map, text, len(lines)), edits: map[string]lineEdit{}}
 	if e.err == nil {
-		e.spans = keySpans(fm.Map, lines)
+		e.spans = findKeySpans(fm.Map, lines)
 	}
 	return e
 }
@@ -50,7 +50,7 @@ func (e *Edit) Set(key string, val *yaml.Node) {
 	if _, edited := e.edits[key]; !edited && Equal(Field(e.fm.Map, key), val) {
 		return
 	}
-	e.put(key, val, renderKey(key, val, e.commentOf(key)))
+	e.put(key, val, renderKey(key, val, e.findComment(key)))
 }
 
 // Unset removes key, if the block has it.
@@ -69,7 +69,7 @@ func (e *Edit) SetTags(tags []string) {
 	if slices.Equal(Values(e.fm.Map, FieldTags), tags) {
 		return
 	}
-	e.put(FieldTags, TagsNode(tags), renderTags(Field(e.fm.Map, FieldTags), tags, e.commentOf(FieldTags)))
+	e.put(FieldTags, NewTagsNode(tags), renderTags(Field(e.fm.Map, FieldTags), tags, e.findComment(FieldTags)))
 }
 
 // Changed reports whether the edit changes anything.
@@ -99,8 +99,8 @@ func (e *Edit) Apply() ([]byte, *Frontmatter, error) {
 	return out, re, nil
 }
 
-// commentOf returns the line comment of an existing key, so a rewrite keeps it.
-func (e *Edit) commentOf(k string) string {
+// findComment returns the line comment of an existing key, so a rewrite keeps it.
+func (e *Edit) findComment(k string) string {
 	s, ok := e.spans[k]
 	if !ok {
 		return ""
@@ -166,6 +166,7 @@ func (e *Edit) verify(out []byte) (*Frontmatter, error) {
 	if !bytes.Equal(re.Body(), e.fm.Body()) {
 		return nil, errors.New("the body changed")
 	}
+
 	var oldOrder, newOrder []string
 	for key, val := range Pairs(e.fm.Map) {
 		k := key.Value
@@ -185,6 +186,7 @@ func (e *Edit) verify(out []byte) (*Frontmatter, error) {
 	if !slices.Equal(oldOrder, newOrder) {
 		return nil, errors.New("key order changed")
 	}
+
 	for k, ed := range e.edits {
 		switch got := Field(re.Map, k); {
 		case Equal(ed.want, got):
@@ -233,7 +235,7 @@ var errNotLineByLine = &FrontmatterError{
 		`and write any such break inside double quotes as \r, \N, \L or \P, then retry`,
 }
 
-func keySpans(m *yaml.Node, lines []string) map[string]span {
+func findKeySpans(m *yaml.Node, lines []string) map[string]span {
 	spans := make(map[string]span, len(m.Content)/2)
 	for i := 0; i+1 < len(m.Content); i += 2 {
 		key, val := m.Content[i], m.Content[i+1]
@@ -258,7 +260,7 @@ func keySpans(m *yaml.Node, lines []string) map[string]span {
 
 // renderKey encodes one "key: value" pair as YAML lines, keeping the old line comment.
 func renderKey(k string, v *yaml.Node, comment string) []string {
-	pair := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map", Content: []*yaml.Node{KeyNode(k), v}}
+	pair := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map", Content: []*yaml.Node{NewKeyNode(k), v}}
 	lines := strings.Split(strings.TrimSuffix(Encode(pair), "\n"), "\n")
 	if comment != "" {
 		lines[0] += " " + comment
@@ -278,9 +280,9 @@ func renderTags(existing *yaml.Node, tags []string, comment string) []string {
 		}
 		out := []string{head}
 		for _, t := range tags {
-			out = append(out, indent+"- "+strings.TrimSuffix(Encode(StrNode(t)), "\n"))
+			out = append(out, indent+"- "+strings.TrimSuffix(Encode(NewStrNode(t)), "\n"))
 		}
 		return out
 	}
-	return renderKey(FieldTags, TagsNode(tags), comment)
+	return renderKey(FieldTags, NewTagsNode(tags), comment)
 }

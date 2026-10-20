@@ -34,8 +34,11 @@ func (w *Writer) replaceFile(rel string, data []byte, oldHash string) error {
 	return w.finish(rel, tmp, func() error {
 		current, err := w.v.Root().ReadFile(rel)
 		if err != nil {
-			return fmt.Errorf("cannot write %s: it disappeared while it was being edited (%w); re-read it and retry",
-				rel, err)
+			return fmt.Errorf(
+				"cannot write %s: it disappeared while it was being edited (%w); re-read it and retry",
+				rel,
+				err,
+			)
 		}
 		if cur := vault.Hash(current); cur != oldHash {
 			return &ConflictError{Path: rel, Current: cur}
@@ -78,6 +81,7 @@ func (w *Writer) stage(rel string, data []byte, mode fs.FileMode) (string, error
 			return "", fmt.Errorf("cannot create the folder for %s: %w; check permissions", rel, err)
 		}
 	}
+
 	var suffix [6]byte
 	if _, err := rand.Read(suffix[:]); err != nil {
 		return "", fmt.Errorf("cannot write %s: no random name for its temp file (%w); report this as a bug", rel, err)
@@ -87,6 +91,7 @@ func (w *Writer) stage(rel string, data []byte, mode fs.FileMode) (string, error
 	if err != nil {
 		return "", fmt.Errorf("cannot write %s: %w; check the folder's permissions", rel, err)
 	}
+
 	_, werr := f.Write(data)
 	if werr == nil {
 		werr = f.Sync()
@@ -99,7 +104,10 @@ func (w *Writer) stage(rel string, data []byte, mode fs.FileMode) (string, error
 	}
 	if werr != nil {
 		return "", w.discard(tmp, fmt.Errorf(
-			"cannot write %s: %w; check the free disk space and the folder's permissions", rel, werr))
+			"cannot write %s: %w; check the free disk space and the folder's permissions",
+			rel,
+			werr,
+		))
 	}
 	return tmp, nil
 }

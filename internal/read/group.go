@@ -30,7 +30,7 @@ func (r *Reader) Group(f Filter, fields []string) ([]Group, []Problem, error) {
 		if !matches(d, f) {
 			continue
 		}
-		for _, values := range combinations(d, fields) {
+		for _, values := range listCombinations(d, fields) {
 			// A value can hold any character, a NUL too ("\0" in YAML), so no
 			// separator is safe. Quoting each value is: no two combinations share a key.
 			key := fmt.Sprintf("%q", values)
@@ -51,14 +51,14 @@ func (r *Reader) Group(f Filter, fields []string) ([]Group, []Problem, error) {
 	return out, problems, nil
 }
 
-// combinations returns every combination of d's values for fields, one value
+// listCombinations returns every combination of d's values for fields, one value
 // per field, so a document with two tags is in two combinations.
-func combinations(d *Doc, fields []string) [][]string {
+func listCombinations(d *Doc, fields []string) [][]string {
 	combos := [][]string{{}}
 	for _, field := range fields {
 		var next [][]string
 		for _, c := range combos {
-			for _, v := range fieldValues(d, field) {
+			for _, v := range collectValues(d, field) {
 				next = append(next, append(slices.Clone(c), v))
 			}
 		}
@@ -67,9 +67,9 @@ func combinations(d *Doc, fields []string) [][]string {
 	return combos
 }
 
-// fieldValues returns the distinct values of d's field that are not "", or
+// collectValues returns the distinct values of d's field that are not "", or
 // noValue alone if there are none.
-func fieldValues(d *Doc, field string) []string {
+func collectValues(d *Doc, field string) []string {
 	vals := d.values(field)
 	if len(vals) == 0 {
 		return []string{noValue}

@@ -19,7 +19,7 @@ const (
 	rulesFile      = "CLAUDE.md"
 )
 
-// Context builds the start-of-conversation bundle for day: the working rules,
+// BuildContext builds the start-of-conversation bundle for day: the working rules,
 // the week document for day's ISO week, the configured open-item and recent
 // queries as metadata lines, and the most used recent tags. Sections are
 // introduced by "==== name ====" lines. It is deterministic for a given day
@@ -28,14 +28,14 @@ const (
 // Plain text, not JSON: it costs fewer tokens and reads well in a chat, and a
 // "====" line cannot be confused with the week document's "##" headings.
 // testdata/context.golden is the specification of the format.
-func (r *Reader) Context(day time.Time) (string, error) {
+func (r *Reader) BuildContext(day time.Time) (string, error) {
 	docs, problems, err := r.Scan()
 	if err != nil {
 		return "", err
 	}
 	var sections []string
 
-	rules, err := r.rulesSection()
+	rules, err := r.renderRules()
 	if err != nil {
 		return "", err
 	}
@@ -44,30 +44,30 @@ func (r *Reader) Context(day time.Time) (string, error) {
 	}
 
 	if r.cfg.Context.CurrentWeekType != "" {
-		sec, weekProblems := r.weekSection(docs, day)
+		sec, weekProblems := r.renderWeek(docs, day)
 		sections = append(sections, sec)
 		problems = append(problems, weekProblems...)
 	}
 
-	queries, err := r.querySections(docs)
+	queries, err := r.renderQueries(docs)
 	if err != nil {
 		return "", err
 	}
 	sections = append(sections, queries...)
 
-	// No vocabulary: it only marks unknown tags, which tagLine does not show,
+	// No vocabulary: it only marks unknown tags, which renderTopTags does not show,
 	// and a tags file that cannot be read would fail the whole bundle.
 	since := day.AddDate(0, 0, -ContextTagDays)
-	sections = append(sections, "==== Tags ====\n"+tagLine(tagStats(docs, nil, "", &since), since)+"\n")
+	sections = append(sections, "==== Tags ====\n"+renderTopTags(countTags(docs, nil, "", &since), since)+"\n")
 
 	if len(problems) > 0 {
-		sections = append(sections, problemsSection(problems))
+		sections = append(sections, renderProblems(problems))
 	}
 	return strings.Join(sections, "\n"), nil
 }
 
-// rulesSection renders the working rules file, or "" when there is none.
-func (r *Reader) rulesSection() (string, error) {
+// renderRules renders the working rules file, or "" when there is none.
+func (r *Reader) renderRules() (string, error) {
 	rules, err := r.v.Root().ReadFile(rulesFile)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
@@ -75,12 +75,12 @@ func (r *Reader) rulesSection() (string, error) {
 	case err != nil:
 		return "", fmt.Errorf("read %s: %w; check that it is a file you can read", rulesFile, err)
 	}
-	return section(rulesFile, string(rules)), nil
+	return renderSection(rulesFile, string(rules)), nil
 }
 
-// querySections renders the configured open-item and recent queries, one
+// renderQueries renders the configured open-item and recent queries, one
 // section per group that has any.
-func (r *Reader) querySections(docs []*Doc) ([]string, error) {
+func (r *Reader) renderQueries(docs []*Doc) ([]string, error) {
 	var sections []string
 	for _, group := range []struct {
 		name     string
@@ -95,7 +95,7 @@ func (r *Reader) querySections(docs []*Doc) ([]string, error) {
 		}
 		blocks := make([]string, 0, len(group.qs))
 		for _, q := range group.qs {
-			block, err := r.queryBlock(docs, q, group.isRecent)
+			block, err := r.renderQuery(docs, q, group.isRecent)
 			if err != nil {
 				return nil, err
 			}
@@ -106,30 +106,30 @@ func (r *Reader) querySections(docs []*Doc) ([]string, error) {
 	return sections, nil
 }
 
-func problemsSection(problems []Problem) string {
+func renderProblems(problems []Problem) string {
 	slices.SortStableFunc(problems, func(a, b Problem) int { return strings.Compare(a.Path, b.Path) })
 	var b strings.Builder
 	b.WriteString("==== Problems ====\n")
 	for _, p := range problems {
-		fmt.Fprintf(&b, "- %s: %s\n", p.Path, oneLine(p.Msg))
+		fmt.Fprintf(&b, "- %s: %s\n", p.Path, collapseLines(p.Msg))
 	}
 	return b.String()
 }
 
-// section renders "==== name ====" followed by content, always ending in a newline.
-func section(name, content string) string {
+// renderSection renders "==== name ====" followed by content, always ending in a newline.
+func renderSection(name, content string) string {
 	if !strings.HasSuffix(content, "\n") {
 		content += "\n"
 	}
 	return "==== " + name + " ====\n" + content
 }
 
-// weekSection finds the week document for day by field value (not by file
+// renderWeek finds the week document for day by field value (not by file
 // name, so week files a human names by hand are found too) and renders it in
 // full, as scanned, or says how to create it.
-func (r *Reader) weekSection(docs []*Doc, day time.Time) (string, []Problem) {
+func (r *Reader) renderWeek(docs []*Doc, day time.Time) (string, []Problem) {
 	cs := r.cfg.Context
-	week := ISOWeek(day)
+	week := FormatISOWeek(day)
 	title := "Current week: " + week
 
 	var found []*Doc
@@ -146,23 +146,27 @@ func (r *Reader) weekSection(docs []*Doc, day time.Time) (string, []Problem) {
 			cs.CurrentWeekField,
 			week,
 		)
-		return section(title, missing), nil
+		return renderSection(title, missing), nil
 	}
 
 	var problems []Problem
 	for _, extra := range found[1:] {
 		problems = append(problems, Problem{
 			Path: extra.Path,
-			Msg: fmt.Sprintf("has the same %s (%s) as %s, which is the one used; change or remove one of them",
-				cs.CurrentWeekField, week, found[0].Path),
+			Msg: fmt.Sprintf(
+				"has the same %s (%s) as %s, which is the one used; change or remove one of them",
+				cs.CurrentWeekField,
+				week,
+				found[0].Path,
+			),
 		})
 	}
 	doc := found[0]
 	body := fmt.Sprintf("path: %s\nhash: %s\n\n%s", doc.Path, vault.Hash(doc.src), doc.src)
-	return section(title, body), problems
+	return renderSection(title, body), problems
 }
 
-func (r *Reader) queryBlock(docs []*Doc, q config.Query, isRecent bool) (string, error) {
+func (r *Reader) renderQuery(docs []*Doc, q config.Query, isRecent bool) (string, error) {
 	f := Filter{
 		Type:    q.Type,
 		Tags:    q.Tags,
@@ -200,37 +204,37 @@ func (r *Reader) queryBlock(docs []*Doc, q config.Query, isRecent bool) (string,
 	}
 	for _, d := range got {
 		fields := r.cfg.ShowFields(d.Type)
-		b.WriteString(metaLine(d.Meta(fields), fields))
+		b.WriteString(renderMetaLine(d.BuildMeta(fields), fields))
 		b.WriteByte('\n')
 	}
 	return b.String(), nil
 }
 
-// metaLine is "- path | title | attributes | tags". The attributes are the
-// date, followed by date_source=mtime when it is the file's modification time,
+// renderMetaLine renders "- path | title | attributes | tags". The attributes
+// are the date, followed by date_source=mtime when it is the file's modification time,
 // updated when the document sets it, then each of fields, in order, that the
 // document sets.
-func metaLine(m Meta, fields []string) string {
+func renderMetaLine(m Meta, fields []string) string {
 	attrs := []string{"date=" + m.Date}
 	if m.DateSource == "mtime" {
 		attrs = append(attrs, "date_source="+m.DateSource)
 	}
 	if m.Updated != "" {
-		attrs = append(attrs, "updated="+oneLine(m.Updated))
+		attrs = append(attrs, "updated="+collapseLines(m.Updated))
 	}
 	for _, k := range fields {
 		if val := m.Fields[k]; val != "" {
-			attrs = append(attrs, k+"="+oneLine(val))
+			attrs = append(attrs, k+"="+collapseLines(val))
 		}
 	}
 	a, tags := strings.Join(attrs, " "), strings.Join(m.Tags, ", ")
 	if tags == "" {
 		tags = "-"
 	}
-	return fmt.Sprintf("- %s | %s | %s | %s", m.Path, oneLine(m.Title), a, tags)
+	return fmt.Sprintf("- %s | %s | %s | %s", m.Path, collapseLines(m.Title), a, tags)
 }
 
-func tagLine(stats []TagCount, since time.Time) string {
+func renderTopTags(stats []TagCount, since time.Time) string {
 	head := fmt.Sprintf("Top tags, last %d days (since %s): ", ContextTagDays, since.Format(time.DateOnly))
 	if len(stats) == 0 {
 		return head + "none"
@@ -243,7 +247,7 @@ func tagLine(stats []TagCount, since time.Time) string {
 	return head + strings.Join(items, ", ")
 }
 
-// oneLine collapses line breaks so a value cannot break the line-based format.
-func oneLine(s string) string {
+// collapseLines collapses line breaks so a value cannot break the line-based format.
+func collapseLines(s string) string {
 	return strings.Join(strings.Fields(s), " ")
 }

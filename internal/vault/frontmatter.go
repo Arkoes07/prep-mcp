@@ -64,7 +64,7 @@ func SplitFrontmatter(src []byte) (*Frontmatter, error) {
 	if bytes.HasPrefix(src, bom) {
 		pos = len(bom)
 	}
-	first, next := nextLine(src, pos)
+	first, next := splitLine(src, pos)
 	if !isFence(first) {
 		return nil, nil
 	}
@@ -72,7 +72,7 @@ func SplitFrontmatter(src []byte) (*Frontmatter, error) {
 
 	line := 2
 	for pos = next; pos < len(src); {
-		l, n := nextLine(src, pos)
+		l, n := splitLine(src, pos)
 		if isFence(l) {
 			fm.end, fm.bodyOffset, fm.bodyLine = pos, n, line+1
 			return parseBlock(fm)
@@ -86,9 +86,9 @@ func SplitFrontmatter(src []byte) (*Frontmatter, error) {
 	}
 }
 
-// nextLine returns the line starting at pos without its line ending, and the
+// splitLine returns the line starting at pos without its line ending, and the
 // offset of the following line.
-func nextLine(src []byte, pos int) (line []byte, next int) {
+func splitLine(src []byte, pos int) (line []byte, next int) {
 	i := bytes.IndexByte(src[pos:], '\n')
 	if i < 0 {
 		return src[pos:], len(src)
@@ -119,18 +119,22 @@ func parseBlock(fm *Frontmatter) (*Frontmatter, error) {
 			Fix:    "fix it in the file, then retry",
 		}
 	}
+
 	switch {
 	case doc.Kind == 0 || len(doc.Content) == 0: // empty, or only comments
 		fm.Map = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
 	case doc.Content[0].Kind != yaml.MappingNode:
 		return nil, &FrontmatterError{
-			Reason: fmt.Sprintf("frontmatter must be a mapping of key: value lines (line %d is not)",
-				doc.Content[0].Line+lineShift),
+			Reason: fmt.Sprintf(
+				"frontmatter must be a mapping of key: value lines (line %d is not)",
+				doc.Content[0].Line+lineShift,
+			),
 			Fix: "fix it, or move the content below the closing ---",
 		}
 	default:
 		fm.Map = doc.Content[0]
 	}
+
 	// yaml.v3 does not reject duplicate keys when decoding into a Node.
 	seen := make(map[string]bool, len(fm.Map.Content)/2)
 	for k := range Pairs(fm.Map) {

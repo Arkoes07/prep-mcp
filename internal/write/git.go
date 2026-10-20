@@ -239,7 +239,7 @@ func (c *commitRun) explainFailure(ctx context.Context, what, out string, err er
 func (c *commitRun) renderFix() string {
 	return fmt.Sprintf(
 		"run `git add -- %[1]s && git commit --only -m %[2]s --author=%[3]s -- %[1]s` in %[4]s",
-		pathList(c.paths),
+		quotePaths(c.paths),
 		shellQuote(c.msg),
 		shellQuote(c.author),
 		c.git.dir,
@@ -294,9 +294,9 @@ func describe(out string, err error) string {
 	return s
 }
 
-// pathList is paths quoted for a hint's command, or a pointer to the result's
+// quotePaths quotes paths for a hint's command, or points to the result's
 // paths when there are more than maxPathsInWarn.
-func pathList(paths []string) string {
+func quotePaths(paths []string) string {
 	if len(paths) > maxPathsInWarn {
 		return "<the paths in results>"
 	}

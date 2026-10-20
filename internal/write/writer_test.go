@@ -128,7 +128,7 @@ func TestWriterCreate(t *testing.T) {
 				}
 			}
 			d := write.Draft{Type: tc.typ, Frontmatter: node(t, tc.fm), Body: tc.body, Slug: tc.slug}
-			res, err := e.w.Apply(ctx, write.CreateOp(d))
+			res, err := e.w.Apply(ctx, write.NewCreateOp(d))
 			if err != nil {
 				t.Fatalf("Create: %v", err)
 			}
@@ -187,7 +187,7 @@ func TestWriterCreate(t *testing.T) {
 			}
 			before := snapshot(t, e.root)
 			d := write.Draft{Type: tc.typ, Frontmatter: node(t, tc.fm), Body: tc.body, Slug: tc.slug}
-			res, err := e.w.Apply(ctx, write.CreateOp(d))
+			res, err := e.w.Apply(ctx, write.NewCreateOp(d))
 			if err == nil {
 				t.Fatalf("create succeeded (%+v), want an error", res)
 			}
@@ -221,7 +221,7 @@ func TestWriterCreateHostileSlug(t *testing.T) {
 		t.Run(slug, func(t *testing.T) {
 			e := newEnv(t)
 			d := write.Draft{Type: "learning", Frontmatter: node(t, `{"title":"T","track":"k"}`), Slug: slug}
-			res, err := e.w.Apply(ctx, write.CreateOp(d))
+			res, err := e.w.Apply(ctx, write.NewCreateOp(d))
 			if err != nil {
 				return
 			}
@@ -238,7 +238,7 @@ func TestWriterAppend(t *testing.T) {
 	t.Run("existing_section", func(t *testing.T) {
 		e := newEnv(t)
 		orig := e.read(t, week)
-		res, err := e.w.Apply(ctx, write.AppendOp(week, "Log", "- Tue: x"))
+		res, err := e.w.Apply(ctx, write.NewAppendOp(week, "Log", "- Tue: x"))
 		if err != nil {
 			t.Fatalf("AppendSection: %v", err)
 		}
@@ -262,7 +262,7 @@ func TestWriterAppend(t *testing.T) {
 		e := newEnv(t)
 		const p = "improvements/missing-tradeoff.md"
 		orig := e.read(t, p)
-		if _, err := e.w.Apply(ctx, write.AppendOp(p, "Countermeasure", "State the cost first.")); err != nil {
+		if _, err := e.w.Apply(ctx, write.NewAppendOp(p, "Countermeasure", "State the cost first.")); err != nil {
 			t.Fatalf("AppendSection: %v", err)
 		}
 		if want := orig + "\n## Countermeasure\n\nState the cost first.\n"; e.read(t, p) != want {
@@ -273,7 +273,7 @@ func TestWriterAppend(t *testing.T) {
 	t.Run("missing_file", func(t *testing.T) {
 		e := newEnv(t)
 		before := snapshot(t, e.root)
-		_, err := e.w.Apply(ctx, write.AppendOp("weeks/none.md", "Log", "x"))
+		_, err := e.w.Apply(ctx, write.NewAppendOp("weeks/none.md", "Log", "x"))
 		mustContain(t, err, "not found", "create_doc")
 		sameSnapshot(t, before, snapshot(t, e.root))
 	})
@@ -285,7 +285,7 @@ func TestWriterUpdate(t *testing.T) {
 	t.Run("set_status", func(t *testing.T) {
 		e := newEnv(t)
 		orig := e.read(t, p)
-		res, err := e.w.Apply(ctx, write.PatchOp(p, write.Patch{Set: node(t, `{"status":"improving"}`)}))
+		res, err := e.w.Apply(ctx, write.NewPatchOp(p, write.Patch{Set: node(t, `{"status":"improving"}`)}))
 		if err != nil {
 			t.Fatalf("UpdateFrontmatter: %v", err)
 		}
@@ -304,7 +304,7 @@ func TestWriterUpdate(t *testing.T) {
 	t.Run("noop_writes_nothing", func(t *testing.T) {
 		e := newEnv(t)
 		orig := e.read(t, p)
-		res, err := e.w.Apply(ctx, write.PatchOp(p, write.Patch{Unset: []string{"nope"}}))
+		res, err := e.w.Apply(ctx, write.NewPatchOp(p, write.Patch{Unset: []string{"nope"}}))
 		if err != nil {
 			t.Fatalf("UpdateFrontmatter: %v", err)
 		}
@@ -341,7 +341,7 @@ func TestWriterReplace(t *testing.T) {
 		e := newEnv(t)
 		orig, h := readHash(t, e)
 		next := orig + "- Tue: x\n"
-		res, err := e.w.Apply(ctx, write.ReplaceOp(p, next, h))
+		res, err := e.w.Apply(ctx, write.NewReplaceOp(p, next, h))
 		if err != nil {
 			t.Fatalf("Replace: %v", err)
 		}
@@ -360,7 +360,7 @@ func TestWriterReplace(t *testing.T) {
 		if err := os.WriteFile(e.abs(p), []byte(human), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		_, err := e.w.Apply(ctx, write.ReplaceOp(p, orig+"- ai edit\n", h))
+		_, err := e.w.Apply(ctx, write.NewReplaceOp(p, orig+"- ai edit\n", h))
 		var ce *write.ConflictError
 		if !errors.As(err, &ce) {
 			t.Fatalf("error %T (%v), want *write.ConflictError", err, err)
@@ -377,7 +377,7 @@ func TestWriterReplace(t *testing.T) {
 	t.Run("bad_hash", func(t *testing.T) {
 		e := newEnv(t)
 		orig, _ := readHash(t, e)
-		_, err := e.w.Apply(ctx, write.ReplaceOp(p, orig+"x\n", "abc"))
+		_, err := e.w.Apply(ctx, write.NewReplaceOp(p, orig+"x\n", "abc"))
 		var ce *write.ConflictError
 		if !errors.As(err, &ce) {
 			t.Fatalf("error %T (%v), want *write.ConflictError", err, err)
@@ -390,7 +390,7 @@ func TestWriterReplace(t *testing.T) {
 	t.Run("empty_hash", func(t *testing.T) {
 		e := newEnv(t)
 		orig, _ := readHash(t, e)
-		_, err := e.w.Apply(ctx, write.ReplaceOp(p, orig+"x\n", ""))
+		_, err := e.w.Apply(ctx, write.NewReplaceOp(p, orig+"x\n", ""))
 		mustContain(t, err, "expected_hash is required; get it from read_doc")
 		if e.read(t, p) != orig {
 			t.Error("file changed without a hash")
@@ -409,7 +409,7 @@ func TestWriterReplace(t *testing.T) {
 			e := newEnv(t)
 			before := snapshot(t, e.root)
 			hash := vault.Hash([]byte(before[tc.path]))
-			_, err := e.w.Apply(ctx, write.ReplaceOp(tc.path, tc.content, hash))
+			_, err := e.w.Apply(ctx, write.NewReplaceOp(tc.path, tc.content, hash))
 			mustContain(t, err, tc.wantErr...)
 			sameSnapshot(t, before, snapshot(t, e.root))
 		})
@@ -427,16 +427,16 @@ func TestWriterTemplate(t *testing.T) {
 		want string // in the file after the write
 	}{
 		{"append_section", func(*testing.T, *env) write.Op {
-			return write.AppendOp(p, "Log", "- Mon:")
+			return write.NewAppendOp(p, "Log", "- Mon:")
 		}, "## Log\n\n- Mon:\n"},
 		{"update_frontmatter", func(t *testing.T, _ *env) write.Op {
-			return write.PatchOp(p, write.Patch{Set: node(t, `{"energy":"low"}`)})
+			return write.NewPatchOp(p, write.Patch{Set: node(t, `{"energy":"low"}`)})
 		}, "energy: low\n"},
 		{"edit_text", func(*testing.T, *env) write.Op {
-			return write.EditOp(p, "Weekly review", "Retro")
+			return write.NewEditOp(p, "Weekly review", "Retro")
 		}, "| Retro |"},
 		{"replace_doc", func(t *testing.T, e *env) write.Op {
-			return write.ReplaceOp(p, "---\ntype: week\nweek:\n---\n", vault.Hash([]byte(e.read(t, p))))
+			return write.NewReplaceOp(p, "---\ntype: week\nweek:\n---\n", vault.Hash([]byte(e.read(t, p))))
 		}, "week:\n"},
 	}
 	for _, tc := range tests {
@@ -460,7 +460,7 @@ func TestWriterTemplate(t *testing.T) {
 	t.Run("breaks_frontmatter", func(t *testing.T) {
 		e := newEnv(t)
 		before := snapshot(t, e.root)
-		_, err := e.w.Apply(ctx, write.EditOp(p, "focus: []", "focus: ["))
+		_, err := e.w.Apply(ctx, write.NewEditOp(p, "focus: []", "focus: ["))
 		mustContain(t, err, "this write breaks the frontmatter", "change new so the frontmatter stays valid")
 		sameSnapshot(t, before, snapshot(t, e.root))
 	})
@@ -468,7 +468,7 @@ func TestWriterTemplate(t *testing.T) {
 	t.Run("missing", func(t *testing.T) {
 		e := newEnv(t)
 		before := snapshot(t, e.root)
-		_, err := e.w.Apply(ctx, write.EditOp("templates/new.md", "x", "y"))
+		_, err := e.w.Apply(ctx, write.NewEditOp("templates/new.md", "x", "y"))
 		mustContain(t, err, "not found: templates/new.md", "cannot create a template", "ask the human to add it")
 		sameSnapshot(t, before, snapshot(t, e.root))
 	})
@@ -480,7 +480,7 @@ func TestWriterEdit(t *testing.T) {
 	t.Run("one_match", func(t *testing.T) {
 		e := newEnv(t)
 		orig := e.read(t, p)
-		res, err := e.w.Apply(ctx, write.EditOp(p, "headline late", "headline first"))
+		res, err := e.w.Apply(ctx, write.NewEditOp(p, "headline late", "headline first"))
 		if err != nil {
 			t.Fatalf("Edit: %v", err)
 		}
@@ -496,7 +496,7 @@ func TestWriterEdit(t *testing.T) {
 	t.Run("empty_new_deletes", func(t *testing.T) {
 		e := newEnv(t)
 		orig := e.read(t, p)
-		if _, err := e.w.Apply(ctx, write.EditOp(p, "- Mon: deep dive, headline late\n", "")); err != nil {
+		if _, err := e.w.Apply(ctx, write.NewEditOp(p, "- Mon: deep dive, headline late\n", "")); err != nil {
 			t.Fatalf("Edit: %v", err)
 		}
 		if got, want := e.read(t, p), strings.TrimSuffix(orig, "- Mon: deep dive, headline late\n"); got != want {
@@ -506,7 +506,7 @@ func TestWriterEdit(t *testing.T) {
 
 	t.Run("frontmatter_text", func(t *testing.T) {
 		e := newEnv(t)
-		op := write.EditOp(p, "focus: [Headline first,", "focus: [Lead with impact,")
+		op := write.NewEditOp(p, "focus: [Headline first,", "focus: [Lead with impact,")
 		if _, err := e.w.Apply(ctx, op); err != nil {
 			t.Fatalf("Edit: %v", err)
 		}
@@ -517,7 +517,7 @@ func TestWriterEdit(t *testing.T) {
 
 	t.Run("error_names_the_resolved_path", func(t *testing.T) {
 		e := newEnv(t)
-		_, err := e.w.Apply(ctx, write.EditOp("./weeks//2026-w03.md", "nope", "x"))
+		_, err := e.w.Apply(ctx, write.NewEditOp("./weeks//2026-w03.md", "nope", "x"))
 		mustContain(t, err, `"nope" not found in `+p+`;`)
 	})
 
@@ -540,7 +540,7 @@ func TestWriterEdit(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			e := newEnv(t)
 			before := snapshot(t, e.root)
-			_, err := e.w.Apply(ctx, write.EditOp(p, tc.old, tc.replacement))
+			_, err := e.w.Apply(ctx, write.NewEditOp(p, tc.old, tc.replacement))
 			mustContain(t, err, tc.wantErr...)
 			sameSnapshot(t, before, snapshot(t, e.root))
 		})

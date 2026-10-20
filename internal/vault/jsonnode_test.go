@@ -10,7 +10,7 @@ import (
 	"github.com/arkoes07/prep-mcp/internal/vault"
 )
 
-func TestJSONToNode(t *testing.T) {
+func TestDecodeJSON(t *testing.T) {
 	keys := func(n *yaml.Node) []string {
 		var out []string
 		for k := range vault.Pairs(n) {
@@ -57,7 +57,7 @@ func TestJSONToNode(t *testing.T) {
 		{"array", `[1]`}, {"string", `"x"`}, {"number", `1`},
 	} {
 		t.Run("not_an_object_"+tc.name, func(t *testing.T) {
-			_, err := vault.JSONToNode(json.RawMessage(tc.in))
+			_, err := vault.DecodeJSON(json.RawMessage(tc.in))
 			mustContain(t, err, "object")
 		})
 	}

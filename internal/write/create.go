@@ -19,9 +19,9 @@ type Draft struct {
 	Slug        string // fills {slug} in the filename; empty means the title field
 }
 
-// CreateOp makes a new document of a configured type. The path comes from the
-// type's folder and filename pattern.
-func CreateOp(d Draft) Op {
+// NewCreateOp returns the op that makes a new document of a configured type.
+// The path comes from the type's folder and filename pattern.
+func NewCreateOp(d Draft) Op {
 	return Op{tool: ToolCreate, target: d.Type, apply: func(p *batchPlan) (*file, []byte, []string, error) {
 		return p.create(d)
 	}}
@@ -33,7 +33,7 @@ func (p *batchPlan) create(d Draft) (*file, []byte, []string, error) {
 	w := p.w
 	spec, ok := w.cfg.Types[d.Type]
 	if !ok {
-		return nil, nil, nil, fmt.Errorf("unknown type %q; %s", d.Type, p.useTypes())
+		return nil, nil, nil, fmt.Errorf("unknown type %q; %s", d.Type, p.suggestTypes())
 	}
 	day := w.now()
 	fm, err := newFrontmatter(d.Type, d.Frontmatter, day.Format(time.DateOnly))
@@ -60,7 +60,7 @@ func (p *batchPlan) create(d Draft) (*file, []byte, []string, error) {
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	f, err := p.file(rel)
+	f, err := p.loadFile(rel)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -77,25 +77,34 @@ func newFrontmatter(typ string, fm *yaml.Node, today string) (*yaml.Node, error)
 	if fm != nil && fm.Kind != yaml.MappingNode {
 		return nil, errors.New("frontmatter must be an object of key: value pairs")
 	}
-	doc := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map", Content: []*yaml.Node{vault.KeyNode(vault.FieldType), vault.StrNode(typ)}}
+
+	doc := &yaml.Node{
+		Kind:    yaml.MappingNode,
+		Tag:     "!!map",
+		Content: []*yaml.Node{vault.NewKeyNode(vault.FieldType), vault.NewStrNode(typ)},
+	}
 	hasCreated := false
 	for key, val := range vault.Pairs(fm) {
 		switch key.Value {
 		case vault.FieldType:
 			if got := vault.Text(fm, vault.FieldType); got != typ {
-				return nil, fmt.Errorf("frontmatter type %q conflicts with type %q; "+
-					"drop it from frontmatter or make them match", got, typ)
+				return nil, fmt.Errorf(
+					"frontmatter type %q conflicts with type %q; drop it from frontmatter or make them match",
+					got,
+					typ,
+				)
 			}
 			continue
 		case vault.FieldCreated:
 			hasCreated = true
 		case vault.FieldTags:
-			val = vault.TagsNode(vault.Values(fm, vault.FieldTags))
+			val = vault.NewTagsNode(vault.Values(fm, vault.FieldTags))
 		}
 		doc.Content = append(doc.Content, key, val)
 	}
+
 	if !hasCreated {
-		doc.Content = append(doc.Content, vault.KeyNode(vault.FieldCreated), vault.StrNode(today))
+		doc.Content = append(doc.Content, vault.NewKeyNode(vault.FieldCreated), vault.NewStrNode(today))
 	}
 	return doc, nil
 }

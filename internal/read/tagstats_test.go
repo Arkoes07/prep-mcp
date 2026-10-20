@@ -49,10 +49,10 @@ func checkRows(t *testing.T, got []read.TagCount, want []tagRow) {
 	}
 }
 
-func TestTagStats(t *testing.T) {
+func TestCountTags(t *testing.T) {
 	t.Run("no_prefix_sorted_by_count_then_name", func(t *testing.T) {
 		_, r := copyOpen(t)
-		got, err := r.TagStats("")
+		got, err := r.CountTags("")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -66,7 +66,7 @@ func TestTagStats(t *testing.T) {
 
 	t.Run("prefix", func(t *testing.T) {
 		_, r := copyOpen(t)
-		got, err := r.TagStats("issue/")
+		got, err := r.CountTags("issue/")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -78,7 +78,7 @@ func TestTagStats(t *testing.T) {
 
 	t.Run("prefix_covers_unused_vocabulary", func(t *testing.T) {
 		_, r := copyOpen(t)
-		got, err := r.TagStats("q/")
+		got, err := r.CountTags("q/")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -95,7 +95,7 @@ func TestTagStats(t *testing.T) {
 		root := testvault.Copy(t)
 		testvault.Write(t, root, "notes/typo.md", typo)
 		r := openAt(t, root)
-		got, err := r.TagStats("issue/")
+		got, err := r.CountTags("issue/")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -115,7 +115,7 @@ func TestTagStats(t *testing.T) {
 			t.Fatal(err)
 		}
 		r := openAt(t, root)
-		got, err := r.TagStats("")
+		got, err := r.CountTags("")
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -21,7 +21,12 @@ func BenchmarkScan(b *testing.B) {
 	for i := range docs {
 		// 20 folders of 100 files, a mix of dated and undated documents.
 		rel := fmt.Sprintf("notes/group-%02d/doc-%04d.md", i%20, i)
-		fm := fmt.Sprintf("---\ntype: note\ntitle: Note number %d\ntags: [topic/a%d, topic/b%d, area/c]\nstatus: open\n", i, i%7, i%13)
+		fm := fmt.Sprintf(
+			"---\ntype: note\ntitle: Note number %d\ntags: [topic/a%d, topic/b%d, area/c]\nstatus: open\n",
+			i,
+			i%7,
+			i%13,
+		)
 		if i%2 == 0 {
 			fm += fmt.Sprintf("date: 2026-01-%02d\n", i%28+1)
 		}

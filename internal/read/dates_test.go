@@ -7,7 +7,7 @@ import (
 	"github.com/arkoes07/prep-mcp/internal/read"
 )
 
-func TestISOWeek(t *testing.T) {
+func TestFormatISOWeek(t *testing.T) {
 	tests := []struct {
 		y    int
 		m    time.Month
@@ -22,8 +22,8 @@ func TestISOWeek(t *testing.T) {
 	}
 	for _, tc := range tests {
 		day := time.Date(tc.y, tc.m, tc.d, 9, 0, 0, 0, time.Local)
-		if got := read.ISOWeek(day); got != tc.want {
-			t.Errorf("ISOWeek(%s) = %q, want %q", day.Format(time.DateOnly), got, tc.want)
+		if got := read.FormatISOWeek(day); got != tc.want {
+			t.Errorf("FormatISOWeek(%s) = %q, want %q", day.Format(time.DateOnly), got, tc.want)
 		}
 	}
 }

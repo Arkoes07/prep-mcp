@@ -85,10 +85,22 @@ func TestScan(t *testing.T) {
 			}
 			if w.Date == "" {
 				if !d.DateFromMtime || !d.Date.Equal(testvault.Mtime) {
-					t.Errorf("%s: Date = %v (from mtime %v), want mtime %v", w.Path, d.Date, d.DateFromMtime, testvault.Mtime)
+					t.Errorf(
+						"%s: Date = %v (from mtime %v), want mtime %v",
+						w.Path,
+						d.Date,
+						d.DateFromMtime,
+						testvault.Mtime,
+					)
 				}
 			} else if d.DateFromMtime || d.Date.Format(time.DateOnly) != w.Date {
-				t.Errorf("%s: Date = %s (from mtime %v), want %s from the date field", w.Path, d.Date.Format(time.DateOnly), d.DateFromMtime, w.Date)
+				t.Errorf(
+					"%s: Date = %s (from mtime %v), want %s from the date field",
+					w.Path,
+					d.Date.Format(time.DateOnly),
+					d.DateFromMtime,
+					w.Date,
+				)
 			}
 			for k, wantVal := range w.Fields {
 				if got := vault.Text(d.Frontmatter, k); got != wantVal {
@@ -128,12 +140,7 @@ func TestScan(t *testing.T) {
 	wantMtime := func(t *testing.T, d *read.Doc) {
 		t.Helper()
 		if !d.DateFromMtime || !d.Date.Equal(testvault.Mtime) {
-			t.Errorf(
-				"Date = %v (from mtime %v), want mtime %v",
-				d.Date,
-				d.DateFromMtime,
-				testvault.Mtime,
-			)
+			t.Errorf("Date = %v (from mtime %v), want mtime %v", d.Date, d.DateFromMtime, testvault.Mtime)
 		}
 	}
 	extra := []struct {
@@ -158,7 +165,12 @@ func TestScan(t *testing.T) {
 		{
 			name: "nested_folder_included",
 			setup: func(t *testing.T, root string) {
-				testvault.Write(t, root, "improvements/sub/x.md", "---\ntype: improvement\nstatus: open\nexit_criteria: e\n---\nb\n")
+				testvault.Write(
+					t,
+					root,
+					"improvements/sub/x.md",
+					"---\ntype: improvement\nstatus: open\nexit_criteria: e\n---\nb\n",
+				)
 			},
 			check: func(t *testing.T, _ string, _ *read.Reader, docs []*read.Doc, _ []read.Problem) {
 				if !slices.Contains(paths(docs), "improvements/sub/x.md") {
@@ -267,12 +279,21 @@ func TestScan(t *testing.T) {
 		{
 			name: "quoted_date",
 			setup: func(t *testing.T, root string) {
-				testvault.Write(t, root, "notes/q.md", "---\ntype: learning\ntitle: T\ntrack: t\ndate: \"2026-01-12\"\n---\nb\n")
+				testvault.Write(
+					t,
+					root,
+					"notes/q.md",
+					"---\ntype: learning\ntitle: T\ntrack: t\ndate: \"2026-01-12\"\n---\nb\n",
+				)
 			},
 			check: func(t *testing.T, _ string, _ *read.Reader, docs []*read.Doc, problems []read.Problem) {
 				d := find(t, docs, "notes/q.md")
 				if d.DateFromMtime || d.Date.Format(time.DateOnly) != "2026-01-12" {
-					t.Errorf("Date = %s (from mtime %v), want 2026-01-12 from the field", d.Date.Format(time.DateOnly), d.DateFromMtime)
+					t.Errorf(
+						"Date = %s (from mtime %v), want 2026-01-12 from the field",
+						d.Date.Format(time.DateOnly),
+						d.DateFromMtime,
+					)
 				}
 				if len(problems) != 0 {
 					t.Errorf("problems = %v, want none", problems)
@@ -282,7 +303,12 @@ func TestScan(t *testing.T) {
 		{
 			name: "unparseable_date_falls_back_and_reports",
 			setup: func(t *testing.T, root string) {
-				testvault.Write(t, root, "notes/d.md", "---\ntype: learning\ntitle: T\ntrack: t\ndate: garbage\n---\nb\n")
+				testvault.Write(
+					t,
+					root,
+					"notes/d.md",
+					"---\ntype: learning\ntitle: T\ntrack: t\ndate: garbage\n---\nb\n",
+				)
 			},
 			check: func(t *testing.T, _ string, _ *read.Reader, docs []*read.Doc, problems []read.Problem) {
 				d := find(t, docs, "notes/d.md")

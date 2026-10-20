@@ -16,19 +16,19 @@ type TagCount struct {
 	Unknown bool      // not in the tags file (never set without one)
 }
 
-// TagStats counts tags over typed documents, most used first, then by name,
+// CountTags counts tags over typed documents, most used first, then by name,
 // followed by the vocabulary's unused tags with count 0. prefix limits both to
 // tags starting with it.
-func (r *Reader) TagStats(prefix string) ([]TagCount, error) {
-	docs, _, err := r.Scan() // problems are reported by List and Context
+func (r *Reader) CountTags(prefix string) ([]TagCount, error) {
+	docs, _, err := r.Scan() // problems are reported by List and BuildContext
 	if err != nil {
 		return nil, err
 	}
-	voc, err := r.v.Vocabulary(r.cfg.TagsFile)
+	voc, err := r.v.LoadVocabulary(r.cfg.TagsFile)
 	if err != nil {
 		return nil, err
 	}
-	stats := tagStats(docs, voc, prefix, nil)
+	stats := countTags(docs, voc, prefix, nil)
 	used := make(map[string]bool, len(stats))
 	for _, s := range stats {
 		used[s.Tag] = true
@@ -42,11 +42,11 @@ func (r *Reader) TagStats(prefix string) ([]TagCount, error) {
 	return stats, nil
 }
 
-func tagStats(docs []*Doc, voc *vault.Vocabulary, prefix string, since *time.Time) []TagCount {
+func countTags(docs []*Doc, voc *vault.Vocabulary, prefix string, since *time.Time) []TagCount {
 	prefix = strings.ToLower(strings.TrimSpace(prefix))
 	byTag := map[string]*TagCount{}
 	for _, d := range docs {
-		if since != nil && dayOf(d.Date).Before(dayOf(*since)) {
+		if since != nil && truncateToDay(d.Date).Before(truncateToDay(*since)) {
 			continue
 		}
 		for _, tag := range d.Tags {

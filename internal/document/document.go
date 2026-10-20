@@ -61,12 +61,12 @@ func Parse(src []byte, cfg *config.Config, voc *vault.Vocabulary) (*Doc, error) 
 	if fm == nil || err != nil {
 		return nil, err
 	}
-	return Of(fm, cfg, voc), nil
+	return Read(fm, cfg, voc), nil
 }
 
-// Of reads parsed frontmatter as a document. A nil vocabulary skips the tag
+// Read reads parsed frontmatter as a document. A nil vocabulary skips the tag
 // rule.
-func Of(fm *vault.Frontmatter, cfg *config.Config, voc *vault.Vocabulary) *Doc {
+func Read(fm *vault.Frontmatter, cfg *config.Config, voc *vault.Vocabulary) *Doc {
 	m := fm.Map
 	d := &Doc{
 		Frontmatter: fm,
@@ -83,14 +83,18 @@ func Of(fm *vault.Frontmatter, cfg *config.Config, voc *vault.Vocabulary) *Doc {
 
 	spec, known := cfg.Types[d.Type]
 	if !known {
-		d.Findings = append(d.Findings, Finding{RuleType, Key{Type: d.Type}, fmt.Sprintf("unknown type %q", d.Type)})
+		d.Findings = append(d.Findings, Finding{
+			Rule:   RuleType,
+			Key:    Key{Type: d.Type},
+			Reason: fmt.Sprintf("unknown type %q", d.Type),
+		})
 	}
 	for _, f := range spec.Required {
 		if !vault.HasValue(m, f) {
 			d.Findings = append(d.Findings, Finding{
-				RuleRequired,
-				Key{Type: d.Type, Field: f},
-				fmt.Sprintf("missing required field for %s: %s", d.Type, f),
+				Rule:   RuleRequired,
+				Key:    Key{Type: d.Type, Field: f},
+				Reason: fmt.Sprintf("missing required field for %s: %s", d.Type, f),
 			})
 		}
 	}
@@ -98,15 +102,19 @@ func Of(fm *vault.Frontmatter, cfg *config.Config, voc *vault.Vocabulary) *Doc {
 		// One string keeps Key comparable. Values practically never hold a NUL,
 		// and two lists that join the same only make an error a warning.
 		value := strings.Join(vault.Values(m, d.DateField), "\x00")
-		d.Findings = append(d.Findings, Finding{RuleDate, Key{d.Type, d.DateField, value}, dateErr.Error()})
+		d.Findings = append(d.Findings, Finding{
+			Rule:   RuleDate,
+			Key:    Key{Type: d.Type, Field: d.DateField, Value: value},
+			Reason: dateErr.Error(),
+		})
 	}
 	if len(voc.Tags()) > 0 {
 		for _, t := range d.Tags {
 			if !voc.Known(t) {
 				d.Findings = append(d.Findings, Finding{
-					RuleTag,
-					Key{Value: t},
-					fmt.Sprintf("unknown tag %q; closest known tag: %q", t, voc.Closest(t)),
+					Rule:   RuleTag,
+					Key:    Key{Value: t},
+					Reason: fmt.Sprintf("unknown tag %q; closest known tag: %q", t, voc.FindClosest(t)),
 				})
 			}
 		}

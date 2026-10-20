@@ -16,8 +16,9 @@ type Patch struct {
 	Unset, AddTags, RemoveTags []string
 }
 
-// PatchOp changes frontmatter keys and tags, leaving the body's bytes alone.
-func PatchOp(path string, patch Patch) Op {
+// NewPatchOp returns the op that changes frontmatter keys and tags, leaving the
+// body's bytes alone.
+func NewPatchOp(path string, patch Patch) Op {
 	return Op{tool: ToolPatch, target: path, apply: func(p *batchPlan) (*file, []byte, []string, error) {
 		return p.modify(path, patchRules, func(f *file, before parsed) ([]byte, *vault.Frontmatter, []string, error) {
 			// No updated date on a template: every document made from it would copy it.
@@ -57,13 +58,13 @@ func applyPatch(before parsed, p Patch, today string, stamp bool) ([]byte, *vaul
 		ed.SetTags(vault.Values(p.Set, vault.FieldTags))
 	} else if p.hasTagOps() {
 		var tags []string
-		tags, warnings = changedTags(vault.Values(fm.Map, vault.FieldTags), p)
+		tags, warnings = applyTagOps(vault.Values(fm.Map, vault.FieldTags), p)
 		ed.SetTags(tags)
 	}
 	// setKeys, not what changed: a set to the value updated already has keeps it.
 	ownUpdated := slices.Contains(setKeys, vault.FieldUpdated) || slices.Contains(p.Unset, vault.FieldUpdated)
 	if stamp && ed.Changed() && !ownUpdated {
-		ed.Set(vault.FieldUpdated, vault.StrNode(today))
+		ed.Set(vault.FieldUpdated, vault.NewStrNode(today))
 	}
 	out, after, err := ed.Apply()
 	var fe *vault.FrontmatterError
@@ -71,8 +72,10 @@ func applyPatch(before parsed, p Patch, today string, stamp bool) ([]byte, *vaul
 	case errors.As(err, &fe):
 		return nil, nil, nil, err // the file's layout, which its Fix says how to change
 	case err != nil:
-		return nil, nil, nil, fmt.Errorf("internal error: %w; nothing was written. "+
-			"Report this as a bug and use replace_doc instead", err)
+		return nil, nil, nil, fmt.Errorf(
+			"internal error: %w; nothing was written. Report this as a bug and use replace_doc instead",
+			err,
+		)
 	}
 	return out, after, warnings, nil
 }
@@ -80,7 +83,7 @@ func applyPatch(before parsed, p Patch, today string, stamp bool) ([]byte, *vaul
 // checkPatch rejects a patch that contradicts itself and returns the keys of
 // p.Set in order.
 func checkPatch(p Patch) ([]string, error) {
-	setKeys, err := setKeyList(p.Set)
+	setKeys, err := listSetKeys(p.Set)
 	if err != nil {
 		return nil, err
 	}
@@ -100,9 +103,9 @@ func checkPatch(p Patch) ([]string, error) {
 
 func (p Patch) hasTagOps() bool { return len(p.AddTags) > 0 || len(p.RemoveTags) > 0 }
 
-// changedTags is the tag list add_tags and remove_tags make of cur, with a
+// applyTagOps returns the tag list add_tags and remove_tags make of cur, with a
 // warning for each tag to remove that is not there.
-func changedTags(cur []string, p Patch) ([]string, []string) {
+func applyTagOps(cur []string, p Patch) ([]string, []string) {
 	want := slices.Clone(cur)
 	for _, t := range vault.NormalizeTagList(p.AddTags) {
 		if !slices.Contains(want, t) {
@@ -113,13 +116,16 @@ func changedTags(cur []string, p Patch) ([]string, []string) {
 	drop := vault.NormalizeTagList(p.RemoveTags)
 	for _, t := range drop {
 		if !slices.Contains(cur, t) {
-			warnings = append(warnings, fmt.Sprintf("tag %q is not on this document, so there was nothing to remove", t))
+			warnings = append(
+				warnings,
+				fmt.Sprintf("tag %q is not on this document, so there was nothing to remove", t),
+			)
 		}
 	}
 	return slices.DeleteFunc(want, func(t string) bool { return slices.Contains(drop, t) }), warnings
 }
 
-func setKeyList(set *yaml.Node) ([]string, error) {
+func listSetKeys(set *yaml.Node) ([]string, error) {
 	if set == nil {
 		return nil, nil
 	}

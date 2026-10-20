@@ -16,17 +16,17 @@ type opFor func(t *testing.T, e *env) write.Op
 
 func replaceOf(path, content string) opFor {
 	return func(t *testing.T, e *env) write.Op {
-		return write.ReplaceOp(path, content, vault.Hash([]byte(e.read(t, path))))
+		return write.NewReplaceOp(path, content, vault.Hash([]byte(e.read(t, path))))
 	}
 }
 
 func editOf(path, old, replacement string) opFor {
-	return func(*testing.T, *env) write.Op { return write.EditOp(path, old, replacement) }
+	return func(*testing.T, *env) write.Op { return write.NewEditOp(path, old, replacement) }
 }
 
 func createOf(typ, fm string) opFor {
 	return func(t *testing.T, _ *env) write.Op {
-		return write.CreateOp(write.Draft{Type: typ, Frontmatter: node(t, fm), Slug: "x"})
+		return write.NewCreateOp(write.Draft{Type: typ, Frontmatter: node(t, fm), Slug: "x"})
 	}
 }
 
@@ -37,16 +37,16 @@ func patchOf(path, set string, unset ...string) opFor {
 		if set != "" {
 			p.Set = node(t, set)
 		}
-		return write.PatchOp(path, p)
+		return write.NewPatchOp(path, p)
 	}
 }
 
 func addTagsOf(path string, tags ...string) opFor {
-	return func(*testing.T, *env) write.Op { return write.PatchOp(path, write.Patch{AddTags: tags}) }
+	return func(*testing.T, *env) write.Op { return write.NewPatchOp(path, write.Patch{AddTags: tags}) }
 }
 
 func appendOf(path string) opFor {
-	return func(*testing.T, *env) write.Op { return write.AppendOp(path, "Log", "- Tue") }
+	return func(*testing.T, *env) write.Op { return write.NewAppendOp(path, "Log", "- Tue") }
 }
 
 // TestDocumentRules holds every write tool to the document rules, alone and
@@ -397,7 +397,7 @@ func TestRequiredTagsWithoutATag(t *testing.T) {
 	spec.Required = append(spec.Required, "tags")
 	e.cfg.Types["week"] = spec
 
-	_, err := e.w.Apply(ctx, write.EditOp(week, "tags: [meta/plan]", `tags: " , "`))
+	_, err := e.w.Apply(ctx, write.NewEditOp(week, "tags: [meta/plan]", `tags: " , "`))
 	mustContain(t, err, "missing required fields for week: tags; keep them in the frontmatter")
 }
 
@@ -409,10 +409,10 @@ func TestTypeDateField(t *testing.T) {
 	spec.DateField = "start"
 	e.cfg.Types["week"] = spec
 
-	_, err := e.w.Apply(ctx, write.PatchOp(week, write.Patch{Set: node(t, `{"start":"soon"}`)}))
+	_, err := e.w.Apply(ctx, write.NewPatchOp(week, write.Patch{Set: node(t, `{"start":"soon"}`)}))
 	mustContain(t, err, `start "soon" is not a date; use YYYY-MM-DD`)
 
-	res, err := e.w.Apply(ctx, write.PatchOp(week, write.Patch{Set: node(t, `{"date":"soon","created":"soon"}`)}))
+	res, err := e.w.Apply(ctx, write.NewPatchOp(week, write.Patch{Set: node(t, `{"date":"soon","created":"soon"}`)}))
 	if err != nil {
 		t.Fatalf("set date and created to non-dates: %v", err)
 	}
@@ -427,7 +427,7 @@ func TestUnconfiguredTypeIsDatedByDate(t *testing.T) {
 	e := newEnv(t)
 	testvault.Write(t, e.root, week, "---\ntype: old\n---\n")
 
-	_, err := e.w.Apply(ctx, write.PatchOp(week, write.Patch{Set: node(t, `{"date":"soon"}`)}))
+	_, err := e.w.Apply(ctx, write.NewPatchOp(week, write.Patch{Set: node(t, `{"date":"soon"}`)}))
 	mustContain(t, err, `date "soon" is not a date; use YYYY-MM-DD`)
 }
 
@@ -435,9 +435,13 @@ func TestUnconfiguredTypeIsDatedByDate(t *testing.T) {
 // named too, as for any write.
 func TestEditThatChangesTheType(t *testing.T) {
 	e := newEnv(t)
-	_, err := e.w.Apply(ctx, write.EditOp(week, "type: week", "type: improvement"))
-	mustContain(t, err, `this edit changes the type "week" to "improvement"`,
-		"missing required fields for improvement: status, exit_criteria; keep them in the frontmatter")
+	_, err := e.w.Apply(ctx, write.NewEditOp(week, "type: week", "type: improvement"))
+	mustContain(
+		t,
+		err,
+		`this edit changes the type "week" to "improvement"`,
+		"missing required fields for improvement: status, exit_criteria; keep them in the frontmatter",
+	)
 	if strings.Contains(err.Error(), "unknown type") {
 		t.Errorf("error %q also names the type rule", err)
 	}
@@ -448,7 +452,10 @@ func TestPlainFileTagsAreNotChecked(t *testing.T) {
 	e := newEnv(t)
 	testvault.Write(t, e.root, "notes/plain.md", "---\ntitle: T\n---\n")
 
-	res, err := e.w.Apply(ctx, write.PatchOp("notes/plain.md", write.Patch{AddTags: []string{"issue/buries-headlin"}}))
+	res, err := e.w.Apply(ctx, write.NewPatchOp(
+		"notes/plain.md",
+		write.Patch{AddTags: []string{"issue/buries-headlin"}},
+	))
 	if err != nil {
 		t.Fatalf("add an unknown tag to a plain file: %v", err)
 	}
@@ -463,7 +470,10 @@ func TestTypingAPlainFileChecksItsTags(t *testing.T) {
 	e := newEnv(t)
 	testvault.Write(t, e.root, "notes/plain.md", "---\ntags: [issue/buries-headlin]\n---\n")
 
-	_, err := e.w.Apply(ctx, write.PatchOp("notes/plain.md", write.Patch{Set: node(t, `{"type":"week","week":"2026-W05"}`)}))
+	_, err := e.w.Apply(ctx, write.NewPatchOp(
+		"notes/plain.md",
+		write.Patch{Set: node(t, `{"type":"week","week":"2026-W05"}`)},
+	))
 	mustContain(t, err, `unknown tag "issue/buries-headlin"`, "Use a known tag")
 }
 
@@ -493,7 +503,7 @@ func TestUnreadableVocabulary(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	res, err := e.w.Apply(ctx, write.AppendOp(week, "Log", "- Tue"))
+	res, err := e.w.Apply(ctx, write.NewAppendOp(week, "Log", "- Tue"))
 	if err != nil {
 		t.Fatalf("append to a tagged document: %v", err)
 	}
@@ -501,6 +511,6 @@ func TestUnreadableVocabulary(t *testing.T) {
 		t.Errorf("warnings = %q, want one saying the tags file could not be read", res.Warnings)
 	}
 
-	_, err = e.w.Apply(ctx, write.PatchOp(week, write.Patch{AddTags: []string{"meta/plan2"}}))
+	_, err = e.w.Apply(ctx, write.NewPatchOp(week, write.Patch{AddTags: []string{"meta/plan2"}}))
 	mustContain(t, err, "read tags file tags.md", "check its permissions")
 }

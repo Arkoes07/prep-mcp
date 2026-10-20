@@ -45,9 +45,13 @@ func git(t *testing.T, dir string, args ...string) string {
 	t.Helper()
 	cmd := exec.Command("git", args...)
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(),
-		"GIT_AUTHOR_NAME=Human", "GIT_AUTHOR_EMAIL=human@local",
-		"GIT_COMMITTER_NAME=Human", "GIT_COMMITTER_EMAIL=human@local")
+	cmd.Env = append(
+		os.Environ(),
+		"GIT_AUTHOR_NAME=Human",
+		"GIT_AUTHOR_EMAIL=human@local",
+		"GIT_COMMITTER_NAME=Human",
+		"GIT_COMMITTER_EMAIL=human@local",
+	)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
@@ -72,7 +76,7 @@ func newGitEnv(t *testing.T, timeout time.Duration) *env {
 	t.Helper()
 	isolateGit(t)
 	e := newEnv(t)
-	e.w = write.New(e.v, e.cfg, gitFor(e.v.Dir(), "git", timeout), testvault.Clock())
+	e.w = write.New(e.v, e.cfg, gitFor(e.v.Dir(), "git", timeout), testvault.NewClock())
 	return e
 }
 
@@ -85,7 +89,7 @@ const gitTimeout = 10 * time.Second
 
 // ddiaOp creates learning/ddia-ch5.md.
 func ddiaOp(t *testing.T) write.Op {
-	return write.CreateOp(write.Draft{
+	return write.NewCreateOp(write.Draft{
 		Type:        "learning",
 		Frontmatter: node(t, `{"title":"DDIA ch5","track":"ddia"}`),
 		Body:        "x",
@@ -133,7 +137,8 @@ func wantCommitted(t *testing.T, e *env, res *write.Result, before, msg string, 
 	if got := commitCount(t, e.root); got == before {
 		t.Fatalf("commit count is still %s, want one more", before)
 	}
-	if got := git(t, e.root, "log", "-1", "--format=%an <%ae>|%cn <%ce>"); got != "Claude <claude@local>|Claude <claude@local>" {
+	const wantAuthors = "Claude <claude@local>|Claude <claude@local>"
+	if got := git(t, e.root, "log", "-1", "--format=%an <%ae>|%cn <%ce>"); got != wantAuthors {
 		t.Errorf("author|committer = %q, want the configured author for both", got)
 	}
 	if got := git(t, e.root, "log", "-1", "--format=%B"); got != msg {
@@ -171,7 +176,7 @@ func TestGitNoCommitOnUnknownTag(t *testing.T) {
 	initRepo(t, e.root)
 	before := commitCount(t, e.root)
 
-	_, err := e.w.Apply(ctx, write.PatchOp(
+	_, err := e.w.Apply(ctx, write.NewPatchOp(
 		"improvements/buries-headline.md",
 		write.Patch{AddTags: []string{"issue/buries-headlin"}},
 	))
@@ -208,21 +213,21 @@ func TestGitEachTool(t *testing.T) {
 			return e.w.Apply(ctx, ddiaOp(t))
 		}},
 		{"append_section: weeks/2026-w03.md", "weeks/2026-w03.md", func(t *testing.T) (*write.Result, error) {
-			return e.w.Apply(ctx, write.AppendOp("weeks/2026-w03.md", "Log", "- Tue: x"))
+			return e.w.Apply(ctx, write.NewAppendOp("weeks/2026-w03.md", "Log", "- Tue: x"))
 		}},
 		{"update_frontmatter: improvements/buries-headline.md", "improvements/buries-headline.md", func(t *testing.T) (*write.Result, error) {
 			patch := write.Patch{Set: node(t, `{"status":"improving"}`)}
-			return e.w.Apply(ctx, write.PatchOp("improvements/buries-headline.md", patch))
+			return e.w.Apply(ctx, write.NewPatchOp("improvements/buries-headline.md", patch))
 		}},
 		{"edit_text: weeks/2026-w03.md", "weeks/2026-w03.md", func(t *testing.T) (*write.Result, error) {
-			return e.w.Apply(ctx, write.EditOp("weeks/2026-w03.md", "- Tue: x", "- Tue: y"))
+			return e.w.Apply(ctx, write.NewEditOp("weeks/2026-w03.md", "- Tue: x", "- Tue: y"))
 		}},
 		{"replace_doc: learning/ddia-ch5.md", "learning/ddia-ch5.md", func(t *testing.T) (*write.Result, error) {
 			old := e.read(t, "learning/ddia-ch5.md")
-			return e.w.Apply(ctx, write.ReplaceOp("learning/ddia-ch5.md", old+"more\n", vault.Hash([]byte(old))))
+			return e.w.Apply(ctx, write.NewReplaceOp("learning/ddia-ch5.md", old+"more\n", vault.Hash([]byte(old))))
 		}},
 		{"edit_text: templates/week.md", "templates/week.md", func(t *testing.T) (*write.Result, error) {
-			return e.w.Apply(ctx, write.EditOp("templates/week.md", "Weekly review", "Retro"))
+			return e.w.Apply(ctx, write.NewEditOp("templates/week.md", "Weekly review", "Retro"))
 		}},
 	}
 	for _, s := range steps {
@@ -244,7 +249,7 @@ func TestGitBatchOneCommit(t *testing.T) {
 	e := newGitEnv(t, gitTimeout)
 	initRepo(t, e.root)
 	set := func(p, js string) write.Op {
-		return write.PatchOp(p, write.Patch{Set: node(t, js)})
+		return write.NewPatchOp(p, write.Patch{Set: node(t, js)})
 	}
 	threeFiles := []string{"improvements/buries-headline.md", "improvements/missing-tradeoff.md", "weeks/2026-w03.md"}
 	steps := []struct {
@@ -267,7 +272,7 @@ func TestGitBatchOneCommit(t *testing.T) {
 		{
 			name: "mixed_tools",
 			ops: []write.Op{
-				write.AppendOp("weeks/2026-w03.md", "Log", "- Tue: x"),
+				write.NewAppendOp("weeks/2026-w03.md", "Log", "- Tue: x"),
 				set("improvements/buries-headline.md", `{"status":"open"}`),
 				set("improvements/missing-tradeoff.md", `{"status":"improving"}`),
 			},
@@ -278,7 +283,7 @@ func TestGitBatchOneCommit(t *testing.T) {
 			name: "caller_message",
 			ops: []write.Op{
 				ddiaOp(t),
-				write.AppendOp("weeks/2026-w03.md", "Log", "- Wed: y"),
+				write.NewAppendOp("weeks/2026-w03.md", "Log", "- Wed: y"),
 			},
 			message: "  Import reading notes\n",
 			wantMsg: "Import reading notes",
@@ -409,7 +414,7 @@ func TestGitRootViaSymlink(t *testing.T) {
 			t.Fatal(err)
 		}
 		testvault.CloseOnCleanup(t, v)
-		w := write.New(v, e.cfg, gitFor(v.Dir(), "git", gitTimeout), testvault.Clock())
+		w := write.New(v, e.cfg, gitFor(v.Dir(), "git", gitTimeout), testvault.NewClock())
 		before := commitCount(t, e.root)
 
 		res, err := w.Apply(ctx, ddiaOp(t))
@@ -581,8 +586,8 @@ func TestGitBatchLock(t *testing.T) {
 		t.Fatal(err)
 	}
 	ops := []write.Op{
-		write.AppendOp("weeks/2026-w03.md", "Log", "- Tue: x"),
-		write.PatchOp("improvements/buries-headline.md", write.Patch{Set: node(t, `{"status":"improving"}`)}),
+		write.NewAppendOp("weeks/2026-w03.md", "Log", "- Tue: x"),
+		write.NewPatchOp("improvements/buries-headline.md", write.Patch{Set: node(t, `{"status":"improving"}`)}),
 	}
 
 	res, err := e.w.Batch(ctx, ops, "")
@@ -617,7 +622,7 @@ func TestGitHintCommandRuns(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	res, err := e.w.Apply(ctx, write.AppendOp(p, "Log", "- Tue: x"))
+	res, err := e.w.Apply(ctx, write.NewAppendOp(p, "Log", "- Tue: x"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -645,7 +650,7 @@ func TestGitHintCommandRuns(t *testing.T) {
 func TestGitNoBinary(t *testing.T) {
 	e := newGitEnv(t, gitTimeout)
 	initRepo(t, e.root)
-	e.w = write.New(e.v, e.cfg, gitFor(e.v.Dir(), "/nonexistent/git", gitTimeout), testvault.Clock())
+	e.w = write.New(e.v, e.cfg, gitFor(e.v.Dir(), "/nonexistent/git", gitTimeout), testvault.NewClock())
 	before := commitCount(t, e.root)
 
 	res := createNote(t, e)
@@ -667,7 +672,7 @@ func TestGitNoopUpdate(t *testing.T) {
 	before := commitCount(t, e.root)
 
 	patch := write.Patch{Set: node(t, `{"status":"open"}`)}
-	res, err := e.w.Apply(ctx, write.PatchOp("improvements/buries-headline.md", patch))
+	res, err := e.w.Apply(ctx, write.NewPatchOp("improvements/buries-headline.md", patch))
 	if err != nil {
 		t.Fatal(err)
 	}

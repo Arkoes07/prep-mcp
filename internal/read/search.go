@@ -40,7 +40,7 @@ func (r *Reader) Search(q, typ string, limit int) ([]Hit, error) {
 	limit = min(limit, MaxSearchLimit)
 	needle := []byte(strings.ToLower(q))
 
-	docs, _, err := r.Scan() // problems are reported by List and Context
+	docs, _, err := r.Scan() // problems are reported by List and BuildContext
 	if err != nil {
 		return nil, err
 	}

@@ -17,7 +17,7 @@ func TestAtomicWrite(t *testing.T) {
 		if err := os.Chmod(e.abs(p), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := e.w.Apply(ctx, write.AppendOp(p, "Log", "- Tue: x")); err != nil {
+		if _, err := e.w.Apply(ctx, write.NewAppendOp(p, "Log", "- Tue: x")); err != nil {
 			t.Fatalf("AppendSection: %v", err)
 		}
 		fi, err := os.Stat(e.abs(p))
@@ -39,7 +39,7 @@ func TestAtomicWrite(t *testing.T) {
 		if err := os.Link(e.abs(p), outside); err != nil {
 			t.Skipf("hard links not available: %v", err)
 		}
-		if _, err := e.w.Apply(ctx, write.AppendOp(p, "Log", "- Tue: x")); err != nil {
+		if _, err := e.w.Apply(ctx, write.NewAppendOp(p, "Log", "- Tue: x")); err != nil {
 			t.Fatalf("AppendSection: %v", err)
 		}
 		b, err := os.ReadFile(outside)
@@ -63,7 +63,7 @@ func TestAtomicWrite(t *testing.T) {
 		e := newEnv(t)
 		before := snapshot(t, e.root)
 		d := write.Draft{Type: "week", Frontmatter: node(t, `{"week":"2026-W03"}`)}
-		if _, err := e.w.Apply(ctx, write.CreateOp(d)); err == nil {
+		if _, err := e.w.Apply(ctx, write.NewCreateOp(d)); err == nil {
 			t.Fatal("create over an existing file succeeded")
 		}
 		sameSnapshot(t, before, snapshot(t, e.root))
@@ -79,7 +79,7 @@ func TestAtomicWrite(t *testing.T) {
 		}
 		t.Cleanup(func() { os.Chmod(e.abs("weeks"), 0o755) })
 		before := snapshot(t, e.root)
-		_, err := e.w.Apply(ctx, write.AppendOp(p, "Log", "- Tue: x"))
+		_, err := e.w.Apply(ctx, write.NewAppendOp(p, "Log", "- Tue: x"))
 		mustContain(t, err, p)
 		sameSnapshot(t, before, snapshot(t, e.root))
 	})

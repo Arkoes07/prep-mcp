@@ -134,23 +134,13 @@ func TestListDocsDateAndSource(t *testing.T) {
 			}
 			for _, d := range got.Docs {
 				if d.DateSource != tc.source {
-					t.Errorf(
-						"%s: date_source = %q, want %q",
-						d.Path,
-						d.DateSource,
-						tc.source,
-					)
+					t.Errorf("%s: date_source = %q, want %q", d.Path, d.DateSource, tc.source)
 				}
 				if _, err := time.Parse(time.DateOnly, d.Date); err != nil {
 					t.Errorf("%s: date = %q, want YYYY-MM-DD", d.Path, d.Date)
 				}
 				if want, ok := tc.want[d.Path]; ok && d.Date != want {
-					t.Errorf(
-						"%s: date = %q, want %q",
-						d.Path,
-						d.Date,
-						want,
-					)
+					t.Errorf("%s: date = %q, want %q", d.Path, d.Date, want)
 				}
 			}
 		})

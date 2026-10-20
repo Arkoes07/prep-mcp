@@ -26,7 +26,7 @@ func (r *Reader) Now() time.Time { return r.now() }
 // ReadDoc reads the file at a vault-relative path, or the one file a
 // [[wikilink]] or bare name points to.
 func (r *Reader) ReadDoc(p string) (rel string, content []byte, hash string, err error) {
-	if target, isLink := linkTarget(p); isLink {
+	if target, isLink := parseLink(p); isLink {
 		if p, err = r.resolveLink(target); err != nil {
 			return "", nil, "", err
 		}

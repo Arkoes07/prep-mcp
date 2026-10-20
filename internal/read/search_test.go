@@ -93,7 +93,15 @@ func TestSearch(t *testing.T) {
 				}
 				for j, wl := range w.Lines {
 					if h.Lines[j].N != wl.N || h.Lines[j].Text != wl.Text {
-						t.Errorf("%s: line %d = {%d %q}, want {%d %q}", w.Path, j, h.Lines[j].N, h.Lines[j].Text, wl.N, wl.Text)
+						t.Errorf(
+							"%s: line %d = {%d %q}, want {%d %q}",
+							w.Path,
+							j,
+							h.Lines[j].N,
+							h.Lines[j].Text,
+							wl.N,
+							wl.Text,
+						)
 					}
 				}
 			}
@@ -105,9 +113,13 @@ func TestSearch(t *testing.T) {
 func TestSearchLineCap(t *testing.T) {
 	root := testvault.Copy(t)
 	// The frontmatter is 5 lines, so the body starts on line 6.
-	testvault.Write(t, root, "notes/many.md",
+	testvault.Write(
+		t,
+		root,
+		"notes/many.md",
 		"---\ntype: learning\ntitle: Many\ntrack: t\n---\n"+
-			"needle one\nfiller\nneedle two\nneedle three\nneedle four\nneedle five\n")
+			"needle one\nfiller\nneedle two\nneedle three\nneedle four\nneedle five\n",
+	)
 	r := openAt(t, root)
 
 	hits, err := r.Search("needle", "", 0)

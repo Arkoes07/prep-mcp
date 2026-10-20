@@ -12,7 +12,7 @@ import (
 func openAt(t testing.TB, dir string) *read.Reader {
 	t.Helper()
 	cfg, v := testvault.Open(t, dir)
-	return read.New(v, cfg, testvault.Clock())
+	return read.New(v, cfg, testvault.NewClock())
 }
 
 func copyOpen(t testing.TB) (string, *read.Reader) {

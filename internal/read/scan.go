@@ -199,8 +199,8 @@ type Meta struct {
 	Fields     map[string]string `json:"fields,omitempty"` // the fields to show that the document sets
 }
 
-// Meta is d's metadata, with each of fields that d sets.
-func (d *Doc) Meta(fields []string) Meta {
+// BuildMeta returns d's metadata, with each of fields that d sets.
+func (d *Doc) BuildMeta(fields []string) Meta {
 	m := Meta{
 		Path:       d.Path,
 		Type:       d.Type,
@@ -212,16 +212,16 @@ func (d *Doc) Meta(fields []string) Meta {
 		Fields:     map[string]string{},
 	}
 	for _, k := range fields {
-		if v := d.Shown(k); v != "" {
+		if v := d.RenderField(k); v != "" {
 			m.Fields[k] = v
 		}
 	}
 	return m
 }
 
-// Shown is field as a listing shows it: its values that are not "", joined
-// by ", ", or "" when there are none.
-func (d *Doc) Shown(field string) string {
+// RenderField renders field as a listing shows it: its values that are not "",
+// joined by ", ", or "" when there are none.
+func (d *Doc) RenderField(field string) string {
 	return strings.Join(d.values(field), ", ")
 }
 

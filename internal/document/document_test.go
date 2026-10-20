@@ -39,7 +39,7 @@ func parse(t *testing.T, src string, voc *vault.Vocabulary) *document.Doc {
 	if err != nil || fm == nil {
 		t.Fatalf("SplitFrontmatter(%q): %v", src, err)
 	}
-	return document.Of(fm, cfg, voc)
+	return document.Read(fm, cfg, voc)
 }
 
 func TestParse(t *testing.T) {
@@ -170,8 +170,19 @@ func TestParse(t *testing.T) {
 			}
 			if d.Type != tc.typ || d.Title != tc.title || !slices.Equal(d.Tags, tc.tags) ||
 				d.DateField != tc.dateField || date != tc.date {
-				t.Errorf("Parse = type %q, title %q, tags %q, date %s %q; want %q, %q, %q, %s %q",
-					d.Type, d.Title, d.Tags, d.DateField, date, tc.typ, tc.title, tc.tags, tc.dateField, tc.date)
+				t.Errorf(
+					"Parse = type %q, title %q, tags %q, date %s %q; want %q, %q, %q, %s %q",
+					d.Type,
+					d.Title,
+					d.Tags,
+					d.DateField,
+					date,
+					tc.typ,
+					tc.title,
+					tc.tags,
+					tc.dateField,
+					tc.date,
+				)
 			}
 			if !slices.Equal(d.Findings, tc.findings) {
 				t.Errorf("Findings = %+v, want %+v", d.Findings, tc.findings)

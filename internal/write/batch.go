@@ -41,31 +41,27 @@ const (
 
 // Op is one write: the tool it stands for, what it targets (a path, or the
 // type for create_doc) and the new content it works out for one file. Build it
-// with CreateOp, AppendOp, PatchOp, ReplaceOp, EditOp or FailedOp, and run it
-// with Apply or Batch.
+// with NewCreateOp, NewAppendOp, NewPatchOp, NewReplaceOp, NewEditOp or
+// NewFailedOp, and run it with Apply or Batch.
 type Op struct {
 	tool, target string
 	// apply works out next without touching f; plan stores it if the op passes.
 	apply func(p *batchPlan) (f *file, next []byte, warnings []string, err error)
 }
 
-// FailedOp stands for an op of tool the caller could not build, for example
-// because its arguments did not decode. Apply and Batch report err as its failure.
-func FailedOp(tool string, err error) Op {
+// NewFailedOp returns the op of a tool call the caller could not build, for
+// example because its arguments did not decode. Apply and Batch report err as
+// its failure.
+func NewFailedOp(tool string, err error) Op {
 	return Op{tool: tool, apply: func(*batchPlan) (*file, []byte, []string, error) { return nil, nil, nil, err }}
 }
 
-// label names op number i (0-based) in an error: its position, tool and target.
-func (o Op) label(i int) string {
+// renderLabel names op number i (0-based) in an error: its position, tool and target.
+func (o Op) renderLabel(i int) string {
 	if o.target == "" {
 		return fmt.Sprintf("op %d (%s)", i+1, o.tool)
 	}
-	return fmt.Sprintf(
-		"op %d (%s %s)",
-		i+1,
-		o.tool,
-		o.target,
-	)
+	return fmt.Sprintf("op %d (%s %s)", i+1, o.tool, o.target)
 }
 
 // BatchResult is what Batch returns: a Result per op, in op order, and the one
@@ -84,20 +80,23 @@ func (w *Writer) Batch(ctx context.Context, ops []Op, message string) (*BatchRes
 	case len(ops) == 0:
 		return nil, errors.New("the batch is empty; pass at least one op")
 	case len(ops) > MaxBatchOps:
-		return nil, fmt.Errorf("the batch has %d ops; at most %d per call. "+
-			"Split it into smaller batches (each is one commit)", len(ops), MaxBatchOps)
+		return nil, fmt.Errorf(
+			"the batch has %d ops; at most %d per call. Split it into smaller batches (each is one commit)",
+			len(ops),
+			MaxBatchOps,
+		)
 	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
 	p, failed, err := w.run(ops)
 	if len(failed) > 0 {
-		return nil, checksFailed(ops, failed)
+		return nil, explainFailedChecks(ops, failed)
 	}
 	if err != nil {
 		return nil, err
 	}
-	msg := cmp.Or(strings.TrimSpace(message), batchMessage(ops))
+	msg := cmp.Or(strings.TrimSpace(message), renderBatchMessage(ops))
 	hash, warnings := w.commit(ctx, p.written, msg)
 	return &BatchResult{Results: p.results, Commit: hash, Warnings: append([]string{}, warnings...)}, nil
 }
@@ -128,10 +127,10 @@ type opError struct {
 	err error
 }
 
-func checksFailed(ops []Op, failed []opError) error {
+func explainFailedChecks(ops []Op, failed []opError) error {
 	errs := make([]error, len(failed))
 	for i, f := range failed {
-		errs[i] = fmt.Errorf("%s: %w", ops[f.op].label(f.op), f.err)
+		errs[i] = fmt.Errorf("%s: %w", ops[f.op].renderLabel(f.op), f.err)
 	}
 	return fmt.Errorf(
 		"nothing was written; %d of %d ops failed (fix them and send the whole batch again):\n%w",
@@ -141,9 +140,9 @@ func checksFailed(ops []Op, failed []opError) error {
 	)
 }
 
-// batchMessage counts the ops per tool, tools sorted by name, for example
+// renderBatchMessage counts the ops per tool, tools sorted by name, for example
 // "batch: 2 create_doc, 9 update_frontmatter".
-func batchMessage(ops []Op) string {
+func renderBatchMessage(ops []Op) string {
 	counts := map[string]int{}
 	for _, op := range ops {
 		counts[op.tool]++
@@ -179,8 +178,8 @@ type batchPlan struct {
 	written []string // set once the plan is written
 }
 
-// file returns rel as the batch sees it, reading it the first time.
-func (p *batchPlan) file(rel string) (*file, error) {
+// loadFile returns rel as the batch sees it, reading it the first time.
+func (p *batchPlan) loadFile(rel string) (*file, error) {
 	if f, ok := p.byPath[rel]; ok {
 		return f, nil
 	}
@@ -194,20 +193,23 @@ func (p *batchPlan) file(rel string) (*file, error) {
 	return f, nil
 }
 
-// existing resolves path for writing and returns it as the batch sees it,
+// loadExisting resolves path for writing and returns it as the batch sees it,
 // which must exist.
-func (p *batchPlan) existing(path string) (*file, error) {
+func (p *batchPlan) loadExisting(path string) (*file, error) {
 	rel, err := p.w.v.Resolve(path, vault.AccessWrite)
 	if err != nil {
 		return nil, err
 	}
-	f, err := p.file(rel)
+	f, err := p.loadFile(rel)
 	if err != nil {
 		return nil, err
 	}
 	if !f.exists && f.template {
-		return nil, fmt.Errorf("not found: %s; the write tools cannot create a template, "+
-			"so edit an existing one or ask the human to add it", rel)
+		return nil, fmt.Errorf(
+			"not found: %s; the write tools cannot create a template, "+
+				"so edit an existing one or ask the human to add it",
+			rel,
+		)
 	}
 	if !f.exists {
 		return nil, fmt.Errorf("not found: %s (use create_doc to make a new document)", rel)
@@ -231,11 +233,14 @@ func (w *Writer) run(ops []Op) (*batchPlan, []opError, error) {
 		problems := w.rollback(done)
 		var ce *ConflictError
 		if !errors.As(err, &ce) || len(problems) > 0 {
-			return nil, nil, writeFailed(err, done, problems)
+			return nil, nil, explainWriteFailure(err, done, problems)
 		}
 		if attempt == 2 {
-			return nil, nil, fmt.Errorf("%s changed again while it was being edited, twice in a row. "+
-				"Nothing was written: re-read it with read_doc and retry", ce.Path)
+			return nil, nil, fmt.Errorf(
+				"%s changed again while it was being edited, twice in a row. "+
+					"Nothing was written: re-read it with read_doc and retry",
+				ce.Path,
+			)
 		}
 	}
 }
@@ -271,7 +276,7 @@ func (p *batchPlan) modify(
 	r opRules,
 	transform func(f *file, before parsed) (next []byte, after *vault.Frontmatter, warnings []string, err error),
 ) (*file, []byte, []string, error) {
-	f, err := p.existing(path)
+	f, err := p.loadExisting(path)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -342,8 +347,10 @@ func (w *Writer) putBack(f *file) error {
 		err := w.replaceFile(f.rel, f.orig, ours)
 		var ce *ConflictError
 		if errors.As(err, &ce) {
-			return fmt.Errorf("%s was changed after this batch wrote it, so it was left as it is now; "+
-				"check it by hand", f.rel)
+			return fmt.Errorf(
+				"%s was changed after this batch wrote it, so it was left as it is now; check it by hand",
+				f.rel,
+			)
 		}
 		if err != nil {
 			return fmt.Errorf("%s could not be put back (%w); check it by hand", f.rel, err)
@@ -355,8 +362,10 @@ func (w *Writer) putBack(f *file) error {
 		return fmt.Errorf("%s could not be removed (%w); delete it by hand", f.rel, err)
 	}
 	if vault.Hash(current) != ours {
-		return fmt.Errorf("%s was changed after this batch created it, so it was left as it is now; "+
-			"check it by hand", f.rel)
+		return fmt.Errorf(
+			"%s was changed after this batch created it, so it was left as it is now; check it by hand",
+			f.rel,
+		)
 	}
 	if err := w.v.Root().Remove(f.rel); err != nil {
 		return fmt.Errorf("%s could not be removed (%w); delete it by hand", f.rel, err)
@@ -364,16 +373,22 @@ func (w *Writer) putBack(f *file) error {
 	return nil
 }
 
-// writeFailed explains a write that failed after done were written and then
-// put back, except for problems.
-func writeFailed(err error, done []*file, problems []error) error {
+// explainWriteFailure explains a write that failed after done were written and
+// then put back, except for problems.
+func explainWriteFailure(err error, done []*file, problems []error) error {
 	switch {
 	case len(done) == 0:
 		return err
 	case len(problems) == 0:
-		return fmt.Errorf("%w; nothing was written: the %d files this batch had already written were put back",
-			err, len(done))
+		return fmt.Errorf(
+			"%w; nothing was written: the %d files this batch had already written were put back",
+			err,
+			len(done),
+		)
 	}
-	return fmt.Errorf("%w; the files this batch had already written were put back, except:\n%w",
-		err, errors.Join(problems...))
+	return fmt.Errorf(
+		"%w; the files this batch had already written were put back, except:\n%w",
+		err,
+		errors.Join(problems...),
+	)
 }

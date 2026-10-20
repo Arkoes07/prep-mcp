@@ -43,10 +43,15 @@ func TestCreateDocDescriptionComesFromConfig(t *testing.T) {
 
 	// A pattern with {date} names the type's date field when it isn't date.
 	root := t.TempDir()
-	testvault.Write(t, root, "prep.config.yaml", "types:\n"+
-		"  book: {folder: books, filename: \"{date}-{slug}.md\", date_field: finished}\n"+
-		"  log: {folder: logs, filename: \"{date}-{slug}.md\"}\n"+
-		"  memo: {folder: memos, filename: \"{slug}.md\", date_field: finished}\n")
+	testvault.Write(
+		t,
+		root,
+		"prep.config.yaml",
+		"types:\n"+
+			"  book: {folder: books, filename: \"{date}-{slug}.md\", date_field: finished}\n"+
+			"  log: {folder: logs, filename: \"{date}-{slug}.md\"}\n"+
+			"  memo: {folder: memos, filename: \"{slug}.md\", date_field: finished}\n",
+	)
 	desc = toolDescription(t, connectAt(t, root), "create_doc")
 	for _, want := range []string{
 		"- book: books/{date}-{slug}.md ({date}: finished); required: none",
@@ -121,7 +126,10 @@ func TestEachWriteToolAnswers(t *testing.T) {
 		t.Errorf("append_section result:\n%s", got)
 	}
 
-	callOK("update_frontmatter", map[string]any{"path": "improvements/buries-headline.md", "set": map[string]any{"status": "improving"}})
+	callOK("update_frontmatter", map[string]any{
+		"path": "improvements/buries-headline.md",
+		"set":  map[string]any{"status": "improving"},
+	})
 	if got := read("improvements/buries-headline.md"); !strings.Contains(got, "status: improving\n") || !strings.Contains(got, "updated: 2026-01-14\n") {
 		t.Errorf("update_frontmatter result:\n%s", got)
 	}
@@ -139,7 +147,11 @@ func TestEachWriteToolAnswers(t *testing.T) {
 	out, _ := call(t, cs, "read_doc", map[string]any{"path": "weeks/2026-w03.md"})
 	hash := regexp.MustCompile(`hash: ([0-9a-f]{64})`).FindStringSubmatch(out)[1]
 	content := read("weeks/2026-w03.md") + "- Wed: y\n"
-	replaced := callOK("replace_doc", map[string]any{"path": "weeks/2026-w03.md", "content": content, "expected_hash": hash})
+	replaced := callOK("replace_doc", map[string]any{
+		"path":          "weeks/2026-w03.md",
+		"content":       content,
+		"expected_hash": hash,
+	})
 	if read("weeks/2026-w03.md") != content || replaced.Hash == hash {
 		t.Errorf("replace_doc did not write the new content")
 	}

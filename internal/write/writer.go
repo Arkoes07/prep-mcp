@@ -47,8 +47,12 @@ type Result struct {
 type ConflictError struct{ Path, Current string }
 
 func (e *ConflictError) Error() string {
-	return fmt.Sprintf("%s changed since you read it; its current hash is %s. Nothing was written: "+
-		"re-read with read_doc, merge, retry with expected_hash set to the current hash", e.Path, e.Current)
+	return fmt.Sprintf(
+		"%s changed since you read it; its current hash is %s. Nothing was written: "+
+			"re-read with read_doc, merge, retry with expected_hash set to the current hash",
+		e.Path,
+		e.Current,
+	)
 }
 
 // commit commits paths with msg when commits are on and anything was written,

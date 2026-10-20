@@ -17,68 +17,89 @@ import (
 func registerReadTools(s *mcp.Server, h *handlers) {
 	readOnly := &mcp.ToolAnnotations{ReadOnlyHint: true}
 
-	mcp.AddTool(s, &mcp.Tool{
-		Name:  "get_context",
-		Title: "Get start-of-conversation context",
-		Description: "Start-of-conversation bundle in one call: the vault's working rules (CLAUDE.md), " +
-			"the current ISO week's document in full, " +
-			"metadata for open items and recent documents (with the fields list_docs shows, " +
-			"a list field's values joined by \", \"), and the most used tags of the last 30 days. " +
-			"Call this first. " +
-			"Optional date (YYYY-MM-DD) builds the bundle as of another day.",
-		Annotations: readOnly,
-	}, guard("get_context", h.getContext))
+	mcp.AddTool(
+		s,
+		&mcp.Tool{
+			Name:  "get_context",
+			Title: "Get start-of-conversation context",
+			Description: "Start-of-conversation bundle in one call: the vault's working rules (CLAUDE.md), " +
+				"the current ISO week's document in full, " +
+				"metadata for open items and recent documents (with the fields list_docs shows, " +
+				"a list field's values joined by \", \"), and the most used tags of the last 30 days. " +
+				"Call this first. " +
+				"Optional date (YYYY-MM-DD) builds the bundle as of another day.",
+			Annotations: readOnly,
+		},
+		guard("get_context", h.getContext),
+	)
 
-	mcp.AddTool(s, &mcp.Tool{
-		Name:        "list_docs",
-		Title:       "List documents",
-		Description: listDocsDescription(h.cfg),
-		Annotations: readOnly,
-	}, guard("list_docs", h.listDocs))
+	mcp.AddTool(
+		s,
+		&mcp.Tool{
+			Name:        "list_docs",
+			Title:       "List documents",
+			Description: describeListDocs(h.cfg),
+			Annotations: readOnly,
+		},
+		guard("list_docs", h.listDocs),
+	)
 
-	mcp.AddTool(s, &mcp.Tool{
-		Name:  "read_doc",
-		Title: "Read a document",
-		Description: "Read one markdown file. Pass either a path exactly as another tool returned it " +
-			"(for example notes/x.md), or a [[wikilink]] exactly as written in a file " +
-			"([[x]], [[notes/x]], [[x|alias]]); brackets are optional. " +
-			"Do not build a path by adding .md to a name: anything ending in .md is read as a path " +
-			"from the vault root, so x.md only finds a file at the root. " +
-			"A name that matches several files fails with their paths; pass one of them. " +
-			"Returns its real path, its content hash (sha256, needed later to rewrite the file safely) " +
-			"and the full content. " +
-			"Any .md file in the vault can be read, including templates/.",
-		Annotations: readOnly,
-	}, guard("read_doc", h.readDoc))
+	mcp.AddTool(
+		s,
+		&mcp.Tool{
+			Name:  "read_doc",
+			Title: "Read a document",
+			Description: "Read one markdown file. Pass either a path exactly as another tool returned it " +
+				"(for example notes/x.md), or a [[wikilink]] exactly as written in a file " +
+				"([[x]], [[notes/x]], [[x|alias]]); brackets are optional. " +
+				"Do not build a path by adding .md to a name: anything ending in .md is read as a path " +
+				"from the vault root, so x.md only finds a file at the root. " +
+				"A name that matches several files fails with their paths; pass one of them. " +
+				"Returns its real path, its content hash (sha256, needed later to rewrite the file safely) " +
+				"and the full content. " +
+				"Any .md file in the vault can be read, including templates/.",
+			Annotations: readOnly,
+		},
+		guard("read_doc", h.readDoc),
+	)
 
-	mcp.AddTool(s, &mcp.Tool{
-		Name:  "search_text",
-		Title: "Search document text",
-		Description: "Case-insensitive substring search over document bodies and titles. " +
-			"Returns path, title, the total number of matching lines and up to 3 of them " +
-			"with 1-based file line numbers. " +
-			"Other frontmatter fields are not searched. Optionally limit to one type; limit defaults to 20.",
-		Annotations: readOnly,
-	}, guard("search_text", h.searchText))
+	mcp.AddTool(
+		s,
+		&mcp.Tool{
+			Name:  "search_text",
+			Title: "Search document text",
+			Description: "Case-insensitive substring search over document bodies and titles. " +
+				"Returns path, title, the total number of matching lines and up to 3 of them " +
+				"with 1-based file line numbers. " +
+				"Other frontmatter fields are not searched. Optionally limit to one type; limit defaults to 20.",
+			Annotations: readOnly,
+		},
+		guard("search_text", h.searchText),
+	)
 
-	mcp.AddTool(s, &mcp.Tool{
-		Name:  "list_tags",
-		Title: "List tags",
-		Description: "Every tag in use with its document count and most recent date, most used first, " +
-			"then the vocabulary file's unused tags with count 0 and no date, so you can see which tags are valid. " +
-			"Optionally only tags under a prefix such as issue/. " +
-			"Tags missing from the vocabulary file are marked unknown.",
-		Annotations: readOnly,
-	}, guard("list_tags", h.listTags))
+	mcp.AddTool(
+		s,
+		&mcp.Tool{
+			Name:  "list_tags",
+			Title: "List tags",
+			Description: "Every tag in use with its document count and most recent date, most used first, " +
+				"then the vocabulary file's unused tags with count 0 and no date, " +
+				"so you can see which tags are valid. " +
+				"Optionally only tags under a prefix such as issue/. " +
+				"Tags missing from the vocabulary file are marked unknown.",
+			Annotations: readOnly,
+		},
+		guard("list_tags", h.listTags),
+	)
 }
 
-// listDocsDescription names the fields each type shows under fields, so the
+// describeListDocs names the fields each type shows under fields, so the
 // model knows what fields holds without reading the config.
-func listDocsDescription(cfg *config.Config) string {
-	shown := []string{"by default " + listOrNone(cfg.SummaryFields)}
+func describeListDocs(cfg *config.Config) string {
+	shown := []string{"by default " + joinOrNone(cfg.SummaryFields)}
 	for _, name := range cfg.TypeNames() {
 		if show := cfg.Types[name].Show; show != nil {
-			shown = append(shown, "for "+name+" "+listOrNone(show))
+			shown = append(shown, "for "+name+" "+joinOrNone(show))
 		}
 	}
 	return "List document metadata (path, type, title, tags, date, date_source (field or mtime), updated, " +
@@ -102,7 +123,7 @@ func listDocsDescription(cfg *config.Config) string {
 		"once under each of its values, so counts can add up to more than the documents."
 }
 
-func listOrNone(fields []string) string {
+func joinOrNone(fields []string) string {
 	if len(fields) == 0 {
 		return "none"
 	}
@@ -138,16 +159,16 @@ func (h *handlers) getContext(
 		now := h.r.Now()
 		day = &now
 	}
-	out, err := h.r.Context(*day)
+	out, err := h.r.BuildContext(*day)
 	if err != nil {
 		return nil, nil, err
 	}
-	return text(out), nil, nil
+	return renderText(out), nil, nil
 }
 
 // The jsonschema tags are the argument descriptions the model reads, and a
 // struct tag cannot be split, so these lines stay long. Where only gives the
-// schema: filter reads where from the raw arguments.
+// schema: buildFilter reads where from the raw arguments.
 type listDocsIn struct {
 	Type    string         `json:"type,omitempty" jsonschema:"Only documents of this type."`
 	Tags    []string       `json:"tags,omitempty" jsonschema:"All of these tags must match. A trailing / is a prefix match."`
@@ -166,7 +187,7 @@ func (h *handlers) listDocs(
 	req *mcp.CallToolRequest,
 	in listDocsIn,
 ) (*mcp.CallToolResult, any, error) {
-	f, err := in.filter(req.Params.Arguments)
+	f, err := in.buildFilter(req.Params.Arguments)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -189,21 +210,21 @@ func (h *handlers) listDocs(
 		if fields == nil {
 			fields = h.cfg.ShowFields(d.Type)
 		}
-		out.Docs = append(out.Docs, d.Meta(fields))
+		out.Docs = append(out.Docs, d.BuildMeta(fields))
 	}
-	out.Note = h.typeNote(in.Type, len(docs) == 0)
-	return jsonResult(out)
+	out.Note = h.noteUnknownType(in.Type, len(docs) == 0)
+	return renderJSON(out)
 }
 
-// typeNote explains an empty result for a type that is not configured, and is
-// empty otherwise.
-func (h *handlers) typeNote(typ string, empty bool) string {
+// noteUnknownType explains an empty result for a type that is not configured,
+// and returns "" otherwise.
+func (h *handlers) noteUnknownType(typ string, empty bool) string {
 	_, known := h.cfg.Types[typ]
 	unknownAndEmpty := typ != "" && !known && empty
 	if !unknownAndEmpty {
 		return ""
 	}
-	return fmt.Sprintf("type %q is not configured; configured types: %s", typ, h.cfg.TypeList())
+	return fmt.Sprintf("type %q is not configured; configured types: %s", typ, h.cfg.DescribeTypes())
 }
 
 // groupDocs is list_docs with group_by: counts per combination of values
@@ -213,17 +234,17 @@ func (h *handlers) groupDocs(f read.Filter, fields []string) (*mcp.CallToolResul
 	if err != nil {
 		return nil, nil, err
 	}
-	return jsonResult(struct {
+	return renderJSON(struct {
 		GroupBy  []string       `json:"group_by"`
 		Groups   []read.Group   `json:"groups"`
 		Note     string         `json:"note,omitempty"`
 		Problems []read.Problem `json:"problems,omitempty"`
-	}{GroupBy: fields, Groups: groups, Note: h.typeNote(f.Type, len(groups) == 0), Problems: problems})
+	}{GroupBy: fields, Groups: groups, Note: h.noteUnknownType(f.Type, len(groups) == 0), Problems: problems})
 }
 
-// filter builds the Filter, taking where from args, the call's raw JSON:
+// buildFilter builds the Filter, taking where from args, the call's raw JSON:
 // in.Where has been through float64, which turns 1.0 into 1.
-func (in listDocsIn) filter(args json.RawMessage) (read.Filter, error) {
+func (in listDocsIn) buildFilter(args json.RawMessage) (read.Filter, error) {
 	f := read.Filter{Type: in.Type, Tags: in.Tags, AnyTags: in.AnyTags, Sort: in.Sort, Limit: in.Limit}
 	var err error
 	if f.Since, err = parseDay("since", in.Since); err != nil {
@@ -232,23 +253,23 @@ func (in listDocsIn) filter(args json.RawMessage) (read.Filter, error) {
 	if f.Until, err = parseDay("until", in.Until); err != nil {
 		return read.Filter{}, err
 	}
-	if f.Where, err = whereOf(args); err != nil {
+	if f.Where, err = parseWhereArg(args); err != nil {
 		return read.Filter{}, err
 	}
 	return f, nil
 }
 
-// whereOf reads the where argument as frontmatter, so its values are read the
-// way the documents' fields are. It is empty when the call has no where.
-func whereOf(args json.RawMessage) (vault.Where, error) {
-	raw, err := rawArg(args, "where")
+// parseWhereArg reads the where argument as frontmatter, so its values are read
+// the way the documents' fields are. It is empty when the call has no where.
+func parseWhereArg(args json.RawMessage) (vault.Where, error) {
+	raw, err := readRawArg(args, "where")
 	if err != nil {
 		return nil, err
 	}
 	if raw == nil {
 		return vault.Where{}, nil
 	}
-	m, err := vault.JSONToNode(raw)
+	m, err := vault.DecodeJSON(raw)
 	if err != nil {
 		return nil, fmt.Errorf("where: %w", err)
 	}
@@ -264,7 +285,7 @@ func (h *handlers) readDoc(_ context.Context, _ *mcp.CallToolRequest, in readDoc
 	if err != nil {
 		return nil, nil, err
 	}
-	return text(fmt.Sprintf("path: %s\nhash: %s\n\n%s", p, hash, content)), nil, nil
+	return renderText(fmt.Sprintf("path: %s\nhash: %s\n\n%s", p, hash, content)), nil, nil
 }
 
 type searchTextIn struct {
@@ -286,7 +307,7 @@ func (h *handlers) searchText(
 		Hits  []read.Hit `json:"hits"`
 		Count int        `json:"count"`
 	}{Hits: hits, Count: len(hits)}
-	return jsonResult(out)
+	return renderJSON(out)
 }
 
 type listTagsIn struct {
@@ -298,7 +319,7 @@ func (h *handlers) listTags(
 	_ *mcp.CallToolRequest,
 	in listTagsIn,
 ) (*mcp.CallToolResult, any, error) {
-	stats, err := h.r.TagStats(in.Prefix)
+	stats, err := h.r.CountTags(in.Prefix)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -319,5 +340,5 @@ func (h *handlers) listTags(
 		}
 		out.Tags = append(out.Tags, t)
 	}
-	return jsonResult(out)
+	return renderJSON(out)
 }

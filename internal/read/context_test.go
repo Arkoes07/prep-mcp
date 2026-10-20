@@ -36,20 +36,26 @@ func golden(t *testing.T, name, got string) {
 		t.Fatal(err)
 	}
 	if got != string(want) {
-		t.Errorf("output differs from %s (run with -update only if the format change is intended)\n--- got ---\n%s\n--- want ---\n%s", p, got, want)
+		t.Errorf(
+			"output differs from %s (run with -update only if the format change is intended)\n"+
+				"--- got ---\n%s\n--- want ---\n%s",
+			p,
+			got,
+			want,
+		)
 	}
 }
 
 func TestContextGolden(t *testing.T) {
 	t.Run("with_week", func(t *testing.T) {
 		_, r := copyOpen(t)
-		got, err := r.Context(day)
+		got, err := r.BuildContext(day)
 		if err != nil {
-			t.Fatalf("Context: %v", err)
+			t.Fatalf("BuildContext: %v", err)
 		}
 		golden(t, "context.golden", got)
 
-		again, err := r.Context(day)
+		again, err := r.BuildContext(day)
 		if err != nil || again != got {
 			t.Errorf("a second run differs from the first (err %v)", err)
 		}
@@ -71,9 +77,9 @@ func TestContextGolden(t *testing.T) {
 
 	t.Run("no_week_doc", func(t *testing.T) {
 		_, r := copyOpen(t)
-		got, err := r.Context(dayNoWeek)
+		got, err := r.BuildContext(dayNoWeek)
 		if err != nil {
-			t.Fatalf("Context: %v", err)
+			t.Fatalf("BuildContext: %v", err)
 		}
 		golden(t, "context-noweek.golden", got)
 	})
@@ -83,9 +89,9 @@ func TestContextGolden(t *testing.T) {
 		if err := os.Remove(filepath.Join(root, "CLAUDE.md")); err != nil {
 			t.Fatal(err)
 		}
-		got, err := r.Context(day)
+		got, err := r.BuildContext(day)
 		if err != nil {
-			t.Fatalf("Context without CLAUDE.md: %v", err)
+			t.Fatalf("BuildContext without CLAUDE.md: %v", err)
 		}
 		full, err := os.ReadFile("testdata/context.golden")
 		if err != nil {
@@ -137,17 +143,17 @@ func TestContextUnreadableTagsFile(t *testing.T) {
 			root, r := copyOpen(t)
 			tc.setup(t, filepath.Join(root, "tags.md"))
 
-			got, err := r.Context(day)
+			got, err := r.BuildContext(day)
 			if err != nil {
-				t.Fatalf("Context: %v", err)
+				t.Fatalf("BuildContext: %v", err)
 			}
 			if !strings.Contains(got, "==== Tags ====\n"+tagsLine) {
 				t.Errorf("output lacks the Tags section\n%s\n--- got ---\n%s", tagsLine, got)
 			}
 
-			_, err = r.TagStats("")
+			_, err = r.CountTags("")
 			if err == nil || !strings.Contains(err.Error(), "read tags file tags.md") {
-				t.Errorf("TagStats error = %v, want one saying the tags file could not be read", err)
+				t.Errorf("CountTags error = %v, want one saying the tags file could not be read", err)
 			}
 		})
 	}
@@ -176,9 +182,9 @@ func TestContextTagWindow(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			_, r := copyOpen(t)
-			got, err := r.Context(tc.day)
+			got, err := r.BuildContext(tc.day)
 			if err != nil {
-				t.Fatalf("Context: %v", err)
+				t.Fatalf("BuildContext: %v", err)
 			}
 			if !strings.Contains(got, "==== Tags ====\n"+tc.want+"\n") {
 				t.Errorf("output lacks the line\n%s\n--- got ---\n%s", tc.want, got)
@@ -210,9 +216,9 @@ func TestContextSummaryFields(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			root, _ := copyOpen(t)
 			replaceInFile(t, root, "prep.config.yaml", "summary_fields: [kind, stage, status]", tc.fields)
-			got, err := openAt(t, root).Context(day)
+			got, err := openAt(t, root).BuildContext(day)
 			if err != nil {
-				t.Fatalf("Context: %v", err)
+				t.Fatalf("BuildContext: %v", err)
 			}
 			if !strings.Contains(got, tc.want+"\n") {
 				t.Errorf("output lacks the line\n%s\n--- got ---\n%s", tc.want, got)
@@ -254,9 +260,9 @@ func TestContextUpdated(t *testing.T) {
 			if tc.doc != "" {
 				testvault.Write(t, root, "improvements/missing-tradeoff.md", tc.doc)
 			}
-			got, err := r.Context(day)
+			got, err := r.BuildContext(day)
 			if err != nil {
-				t.Fatalf("Context: %v", err)
+				t.Fatalf("BuildContext: %v", err)
 			}
 			if !strings.Contains(got, tc.want+"\n") {
 				t.Errorf("output lacks the line\n%s\n--- got ---\n%s", tc.want, got)
@@ -298,9 +304,9 @@ func TestContextShowFields(t *testing.T) {
 			if tc.doc != "" {
 				testvault.Write(t, root, "improvements/missing-tradeoff.md", tc.doc)
 			}
-			got, err := openAt(t, root).Context(day)
+			got, err := openAt(t, root).BuildContext(day)
 			if err != nil {
-				t.Fatalf("Context: %v", err)
+				t.Fatalf("BuildContext: %v", err)
 			}
 			if !strings.Contains(got, tc.want+"\n") {
 				t.Errorf("output lacks the line\n%s\n--- got ---\n%s", tc.want, got)
@@ -311,7 +317,7 @@ func TestContextShowFields(t *testing.T) {
 
 // TestCurrentWeek checks how the current week doc is found. The vault API has
 // no separate accessor, so it looks at the "path:" line of the week section
-// of Context, and at the Problems section.
+// of BuildContext, and at the Problems section.
 func TestCurrentWeek(t *testing.T) {
 	const week = "weeks/2026-w03.md"
 	const noWeekLine = "no week doc for 2026-W03 (create_doc type=week with week: 2026-W03)"
@@ -375,7 +381,12 @@ func TestCurrentWeek(t *testing.T) {
 				if err := os.Remove(filepath.Join(root, filepath.FromSlash(week))); err != nil {
 					t.Fatal(err)
 				}
-				testvault.Write(t, root, "notes/w.md", "---\ntype: learning\ntitle: T\ntrack: t\nweek: 2026-W03\n---\nb\n")
+				testvault.Write(
+					t,
+					root,
+					"notes/w.md",
+					"---\ntype: learning\ntitle: T\ntrack: t\nweek: 2026-W03\n---\nb\n",
+				)
 			},
 			wantNone: noWeekLine,
 		},
@@ -391,9 +402,9 @@ func TestCurrentWeek(t *testing.T) {
 			root := testvault.Copy(t)
 			tc.setup(t, root)
 			r := openAt(t, root)
-			got, err := r.Context(tc.day)
+			got, err := r.BuildContext(tc.day)
 			if err != nil {
-				t.Fatalf("Context: %v", err)
+				t.Fatalf("BuildContext: %v", err)
 			}
 			if tc.wantPath != "" {
 				if !strings.Contains(got, "\npath: "+tc.wantPath+"\n") {
@@ -423,7 +434,10 @@ func TestCurrentWeek(t *testing.T) {
 
 func rename(t *testing.T, root, from, to string) {
 	t.Helper()
-	if err := os.Rename(filepath.Join(root, filepath.FromSlash(from)), filepath.Join(root, filepath.FromSlash(to))); err != nil {
+	if err := os.Rename(
+		filepath.Join(root, filepath.FromSlash(from)),
+		filepath.Join(root, filepath.FromSlash(to)),
+	); err != nil {
 		t.Fatal(err)
 	}
 }

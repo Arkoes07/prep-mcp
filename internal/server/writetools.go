@@ -31,102 +31,129 @@ func registerWriteTools(s *mcp.Server, h *handlers) {
 	no, yes := false, true
 	additive := &mcp.ToolAnnotations{DestructiveHint: &no, OpenWorldHint: &no}
 
-	mcp.AddTool(s, &mcp.Tool{
-		Name:        write.ToolCreate,
-		Title:       "Create a document",
-		Description: createDocDescription(h.cfg),
-		Annotations: additive,
-	}, writeTool[createDocIn](h, write.ToolCreate))
+	mcp.AddTool(
+		s,
+		&mcp.Tool{
+			Name:        write.ToolCreate,
+			Title:       "Create a document",
+			Description: describeCreateDoc(h.cfg),
+			Annotations: additive,
+		},
+		newWriteHandler[createDocIn](h, write.ToolCreate),
+	)
 
-	mcp.AddTool(s, &mcp.Tool{
-		Name:  write.ToolAppend,
-		Title: "Append to a section",
-		Description: "Add text to a living document without touching the rest of it. " +
-			"Use this, not local memory or notes files, to add to a record that belongs in the vault. " +
-			"The content goes at the end of the \"## heading\" section (before the next # or ## heading); " +
-			"if the file has no such section, a new \"## heading\" section is added at the end. " +
-			"Only level-2 headings match, exactly. " +
-			"Frontmatter and all existing text stay byte for byte. Returns path, new hash, warnings and commit. " +
-			"This is the default way to add to a document. " + documentRules,
-		Annotations: additive,
-	}, writeTool[appendSectionIn](h, write.ToolAppend))
+	mcp.AddTool(
+		s,
+		&mcp.Tool{
+			Name:  write.ToolAppend,
+			Title: "Append to a section",
+			Description: "Add text to a living document without touching the rest of it. " +
+				"Use this, not local memory or notes files, to add to a record that belongs in the vault. " +
+				"The content goes at the end of the \"## heading\" section (before the next # or ## heading); " +
+				"if the file has no such section, a new \"## heading\" section is added at the end. " +
+				"Only level-2 headings match, exactly. " +
+				"Frontmatter and all existing text stay byte for byte. Returns path, new hash, warnings and commit. " +
+				"This is the default way to add to a document. " + documentRules,
+			Annotations: additive,
+		},
+		newWriteHandler[appendSectionIn](h, write.ToolAppend),
+	)
 
-	mcp.AddTool(s, &mcp.Tool{
-		Name:  write.ToolPatch,
-		Title: "Update frontmatter",
-		Description: "Change frontmatter only; the body stays byte for byte and so do untouched keys. " +
-			"set: object of top-level keys to set (new keys are added at the end); unset: keys to remove; " +
-			"add_tags / remove_tags: change the tag list. " +
-			"A change also sets updated to today, unless the patch sets or unsets it, " +
-			"and except on a template, so documents made from it do not copy the date. " +
-			"set.tags cannot be combined with add_tags/remove_tags. " +
-			"To clear a field, use unset; set with \"\" keeps the key with an empty value, " +
-			"which where filters treat differently from a missing key. " +
-			"Setting type to another configured type needs all of that type's required fields in the same call. " +
-			"Frontmatter that does not parse cannot be patched; fix it with edit_text. " +
-			"A patch that changes nothing writes nothing. Returns path, new hash, warnings and commit. " +
-			documentRules,
-		Annotations: additive,
-	}, writeTool[updateFrontmatterIn](h, write.ToolPatch))
+	mcp.AddTool(
+		s,
+		&mcp.Tool{
+			Name:  write.ToolPatch,
+			Title: "Update frontmatter",
+			Description: "Change frontmatter only; the body stays byte for byte and so do untouched keys. " +
+				"set: object of top-level keys to set (new keys are added at the end); unset: keys to remove; " +
+				"add_tags / remove_tags: change the tag list. " +
+				"A change also sets updated to today, unless the patch sets or unsets it, " +
+				"and except on a template, so documents made from it do not copy the date. " +
+				"set.tags cannot be combined with add_tags/remove_tags. " +
+				"To clear a field, use unset; set with \"\" keeps the key with an empty value, " +
+				"which where filters treat differently from a missing key. " +
+				"Setting type to another configured type needs all of that type's required fields in the same call. " +
+				"Frontmatter that does not parse cannot be patched; fix it with edit_text. " +
+				"A patch that changes nothing writes nothing. Returns path, new hash, warnings and commit. " +
+				documentRules,
+			Annotations: additive,
+		},
+		newWriteHandler[updateFrontmatterIn](h, write.ToolPatch),
+	)
 
-	mcp.AddTool(s, &mcp.Tool{
-		Name:  write.ToolReplace,
-		Title: "Replace a whole document",
-		Description: "Rewrite a whole file. Pass expected_hash from read_doc. " +
-			"If the file changed since (someone edited it), " +
-			"nothing is written and the error carries the current hash: " +
-			"re-read with read_doc, merge the changes, and retry. " +
-			"Prefer append_section or update_frontmatter for small changes, and edit_text to change a few words. " +
-			"Returns path, new hash, warnings and commit. " + documentRules,
-		Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes, OpenWorldHint: &no},
-	}, writeTool[replaceDocIn](h, write.ToolReplace))
+	mcp.AddTool(
+		s,
+		&mcp.Tool{
+			Name:  write.ToolReplace,
+			Title: "Replace a whole document",
+			Description: "Rewrite a whole file. Pass expected_hash from read_doc. " +
+				"If the file changed since (someone edited it), " +
+				"nothing is written and the error carries the current hash: " +
+				"re-read with read_doc, merge the changes, and retry. " +
+				"Prefer append_section or update_frontmatter for small changes, and edit_text to change a few words. " +
+				"Returns path, new hash, warnings and commit. " + documentRules,
+			Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes, OpenWorldHint: &no},
+		},
+		newWriteHandler[replaceDocIn](h, write.ToolReplace),
+	)
 
-	mcp.AddTool(s, &mcp.Tool{
-		Name:  write.ToolEdit,
-		Title: "Edit text in a document",
-		Description: "Replace one exact piece of text in a file with new text: " +
-			"for small fixes in the body or in the frontmatter's text, instead of a whole replace_doc. " +
-			"append_section and update_frontmatter remain the default ways to add text and change fields. " +
-			"old must appear exactly once in the file, byte for byte as read_doc showed it; " +
-			"if it is missing or appears several times, nothing is written and the error says which. " +
-			"An empty new deletes old. No hash is needed: if the file changed, old simply does not match. " +
-			"The type cannot change. Returns path, new hash, warnings and commit. " + documentRules,
-		Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes, OpenWorldHint: &no},
-	}, writeTool[editTextIn](h, write.ToolEdit))
+	mcp.AddTool(
+		s,
+		&mcp.Tool{
+			Name:  write.ToolEdit,
+			Title: "Edit text in a document",
+			Description: "Replace one exact piece of text in a file with new text: " +
+				"for small fixes in the body or in the frontmatter's text, instead of a whole replace_doc. " +
+				"append_section and update_frontmatter remain the default ways to add text and change fields. " +
+				"old must appear exactly once in the file, byte for byte as read_doc showed it; " +
+				"if it is missing or appears several times, nothing is written and the error says which. " +
+				"An empty new deletes old. No hash is needed: if the file changed, old simply does not match. " +
+				"The type cannot change. Returns path, new hash, warnings and commit. " + documentRules,
+			Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes, OpenWorldHint: &no},
+		},
+		newWriteHandler[editTextIn](h, write.ToolEdit),
+	)
 
-	mcp.AddTool(s, &mcp.Tool{
-		Name:  "batch",
-		Title: "Apply several writes at once",
-		Description: "Apply several writes in one call, all or nothing, as one commit. " +
-			"Use this, not shell commands or file edits, for imports and for any change to more than one document: " +
-			"every write keeps its checks and the commit author. " +
-			"ops: a list of {tool, args}, where tool is " + batchTools + " " +
-			"and args are exactly that tool's arguments. " +
-			"Ops run in order and later ops see what earlier ones did, so a path may appear more than once; " +
-			"replace_doc must be the first op on its path. " +
-			"Every op is checked before anything is written: if any fails, nothing is written " +
-			"and every failure is listed by op number. " +
-			fmt.Sprintf("At most %d ops per call. ", write.MaxBatchOps) +
-			"message: the commit message (default: the number of ops per tool). " +
-			"Returns per op the path and the file's hash after the whole batch, its warnings, " +
-			"then the commit and its warnings.",
-		Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes, OpenWorldHint: &no},
-	}, guard("batch", h.batch))
+	mcp.AddTool(
+		s,
+		&mcp.Tool{
+			Name:  "batch",
+			Title: "Apply several writes at once",
+			Description: "Apply several writes in one call, all or nothing, as one commit. " +
+				"Use this, not shell commands or file edits, " +
+				"for imports and for any change to more than one document: " +
+				"every write keeps its checks and the commit author. " +
+				"ops: a list of {tool, args}, where tool is " + batchTools + " " +
+				"and args are exactly that tool's arguments. " +
+				"Ops run in order and later ops see what earlier ones did, so a path may appear more than once; " +
+				"replace_doc must be the first op on its path. " +
+				"Every op is checked before anything is written: if any fails, nothing is written " +
+				"and every failure is listed by op number. " +
+				fmt.Sprintf("At most %d ops per call. ", write.MaxBatchOps) +
+				"message: the commit message (default: the number of ops per tool). " +
+				"Returns per op the path and the file's hash after the whole batch, its warnings, " +
+				"then the commit and its warnings.",
+			Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes, OpenWorldHint: &no},
+		},
+		guard("batch", h.batch),
+	)
 }
 
-// createDocDescription lists every configured type with its path pattern and
+// describeCreateDoc lists every configured type with its path pattern and
 // required fields, so the model can call create_doc correctly the first time.
-func createDocDescription(cfg *config.Config) string {
+func describeCreateDoc(cfg *config.Config) string {
 	var b strings.Builder
-	b.WriteString("Create a new document of a configured type. " +
-		"Use this, not local memory or notes files, to save a new record that belongs in the vault. " +
-		"The path is built from the type's folder and filename pattern. " +
-		"Fails if the file already exists (the error names it). Sets created to today if absent. " +
-		"Required fields must be present and not empty, and one error names every missing field. " +
-		"The type's date field (date unless the config names another) must hold a date, YYYY-MM-DD, when set. " +
-		"tags may be a list or a comma-separated string; " +
-		"a tag missing from the vocabulary file fails the call, naming the closest known tag. " +
-		"Returns path, hash, warnings and commit.\n")
+	b.WriteString(
+		"Create a new document of a configured type. " +
+			"Use this, not local memory or notes files, to save a new record that belongs in the vault. " +
+			"The path is built from the type's folder and filename pattern. " +
+			"Fails if the file already exists (the error names it). Sets created to today if absent. " +
+			"Required fields must be present and not empty, and one error names every missing field. " +
+			"The type's date field (date unless the config names another) must hold a date, YYYY-MM-DD, when set. " +
+			"tags may be a list or a comma-separated string; " +
+			"a tag missing from the vocabulary file fails the call, naming the closest known tag. " +
+			"Returns path, hash, warnings and commit.\n",
+	)
 	names := cfg.TypeNames()
 	if len(names) == 0 {
 		b.WriteString("No types are configured: add a types: section to prep.config.yaml and restart the server.")
@@ -145,35 +172,33 @@ func createDocDescription(cfg *config.Config) string {
 	return b.String()
 }
 
-// writeTool is the handler of a single write tool, run as a batch of one. In
-// is the tool's argument type, for its schema; buildOp decodes the arguments,
-// as it does for a batch op.
-func writeTool[In any](h *handlers, tool string) mcp.ToolHandlerFor[In, any] {
-	handler := func(
-		ctx context.Context,
-		req *mcp.CallToolRequest,
-		_ In,
-	) (*mcp.CallToolResult, any, error) {
+// newWriteHandler returns the handler of a single write tool, run as a batch
+// of one. In is the tool's argument type, for its schema; buildOp decodes the
+// arguments, as it does for a batch op.
+func newWriteHandler[In any](h *handlers, tool string) mcp.ToolHandlerFor[In, any] {
+	handler := func(ctx context.Context, req *mcp.CallToolRequest, _ In) (*mcp.CallToolResult, any, error) {
 		res, err := h.w.Apply(ctx, buildOp(tool, req.Params.Arguments))
 		if err != nil {
 			return nil, nil, err
 		}
-		return jsonResult(res)
+		return renderJSON(res)
 	}
 	return guard(tool, handler)
 }
 
-// rawArg returns the object-valued argument key as the call's raw JSON has
+// readRawArg returns the object-valued argument key as the call's raw JSON has
 // it, because decoding it into a Go map would lose the order of its keys. A
 // client may have sorted the keys before sending; then they are written
 // sorted. Nothing reads them by position, so only a person viewing the file
 // sees the order. It is nil when the key is missing or null.
-func rawArg(args json.RawMessage, key string) (json.RawMessage, error) {
+func readRawArg(args json.RawMessage, key string) (json.RawMessage, error) {
 	var all map[string]json.RawMessage
 	if len(args) > 0 {
 		if err := json.Unmarshal(args, &all); err != nil {
-			return nil, fmt.Errorf("arguments are not a JSON object: %w; pass the tool's arguments as one object, "+
-				"as its schema describes", err)
+			return nil, fmt.Errorf(
+				"arguments are not a JSON object: %w; pass the tool's arguments as one object, as its schema describes",
+				err,
+			)
 		}
 	}
 	if v := all[key]; string(v) != "null" {
@@ -197,19 +222,21 @@ func decodeCreate(args json.RawMessage) (write.Op, error) {
 	if err := decodeArgs(write.ToolCreate, args, &in); err != nil {
 		return write.Op{}, err
 	}
-	raw, err := rawArg(args, "frontmatter")
+	raw, err := readRawArg(args, "frontmatter")
 	if err != nil {
 		return write.Op{}, err
 	}
 	if raw == nil {
-		return write.Op{}, errors.New("frontmatter is required; pass an object holding the type's required fields, " +
-			"which " + write.ToolCreate + "'s description lists, or {} for a type without any")
+		return write.Op{}, errors.New(
+			"frontmatter is required; pass an object holding the type's required fields, " +
+				"which " + write.ToolCreate + "'s description lists, or {} for a type without any",
+		)
 	}
-	fm, err := vault.JSONToNode(raw)
+	fm, err := vault.DecodeJSON(raw)
 	if err != nil {
 		return write.Op{}, fmt.Errorf("frontmatter %w", err)
 	}
-	return write.CreateOp(write.Draft{Type: in.Type, Frontmatter: fm, Body: in.Body, Slug: in.Slug}), nil
+	return write.NewCreateOp(write.Draft{Type: in.Type, Frontmatter: fm, Body: in.Body, Slug: in.Slug}), nil
 }
 
 type appendSectionIn struct {
@@ -223,7 +250,7 @@ func decodeAppend(args json.RawMessage) (write.Op, error) {
 	if err := decodeArgs(write.ToolAppend, args, &in); err != nil {
 		return write.Op{}, err
 	}
-	return write.AppendOp(in.Path, in.Heading, in.Content), nil
+	return write.NewAppendOp(in.Path, in.Heading, in.Content), nil
 }
 
 type updateFrontmatterIn struct {
@@ -242,16 +269,16 @@ func decodePatch(args json.RawMessage) (write.Op, error) {
 		return write.Op{}, err
 	}
 	patch := write.Patch{Unset: in.Unset, AddTags: in.AddTags, RemoveTags: in.RemoveTags}
-	raw, err := rawArg(args, "set")
+	raw, err := readRawArg(args, "set")
 	if err != nil {
 		return write.Op{}, err
 	}
 	if raw != nil {
-		if patch.Set, err = vault.JSONToNode(raw); err != nil {
+		if patch.Set, err = vault.DecodeJSON(raw); err != nil {
 			return write.Op{}, fmt.Errorf("set %w", err)
 		}
 	}
-	return write.PatchOp(in.Path, patch), nil
+	return write.NewPatchOp(in.Path, patch), nil
 }
 
 // The jsonschema tags are argument descriptions and cannot be split; see listDocsIn.
@@ -266,7 +293,7 @@ func decodeReplace(args json.RawMessage) (write.Op, error) {
 	if err := decodeArgs(write.ToolReplace, args, &in); err != nil {
 		return write.Op{}, err
 	}
-	return write.ReplaceOp(in.Path, in.Content, in.ExpectedHash), nil
+	return write.NewReplaceOp(in.Path, in.Content, in.ExpectedHash), nil
 }
 
 type editTextIn struct {
@@ -280,7 +307,7 @@ func decodeEdit(args json.RawMessage) (write.Op, error) {
 	if err := decodeArgs(write.ToolEdit, args, &in); err != nil {
 		return write.Op{}, err
 	}
-	return write.EditOp(in.Path, in.Old, in.New), nil
+	return write.NewEditOp(in.Path, in.Old, in.New), nil
 }
 
 const batchTools = write.ToolCreate + ", " + write.ToolAppend + ", " + write.ToolPatch + ", " +
@@ -297,11 +324,7 @@ type batchOpIn struct {
 	Args map[string]any `json:"args" jsonschema:"That tool's arguments, exactly as the tool itself takes them."`
 }
 
-func (h *handlers) batch(
-	ctx context.Context,
-	req *mcp.CallToolRequest,
-	in batchIn,
-) (*mcp.CallToolResult, any, error) {
+func (h *handlers) batch(ctx context.Context, req *mcp.CallToolRequest, in batchIn) (*mcp.CallToolResult, any, error) {
 	// The ops are read again from the raw JSON, so frontmatter keeps its key order.
 	var raw struct {
 		Ops []struct {
@@ -310,8 +333,10 @@ func (h *handlers) batch(
 		} `json:"ops"`
 	}
 	if err := json.Unmarshal(req.Params.Arguments, &raw); err != nil {
-		return nil, nil, fmt.Errorf("arguments are not a JSON object: %w; "+
-			`pass {"ops": [{"tool": ..., "args": {...}}]}`, err)
+		return nil, nil, fmt.Errorf(
+			`arguments are not a JSON object: %w; pass {"ops": [{"tool": ..., "args": {...}}]}`,
+			err,
+		)
 	}
 	ops := make([]write.Op, len(raw.Ops))
 	for i, op := range raw.Ops {
@@ -321,12 +346,12 @@ func (h *handlers) batch(
 	if err != nil {
 		return nil, nil, err
 	}
-	return jsonResult(res)
+	return renderJSON(res)
 }
 
 // buildOp builds the op of a write tool from its name and raw arguments, for
 // the tool itself and for a batch op alike. Arguments that do not decode give
-// a FailedOp, which Apply and Batch report as that op's failure.
+// an op from NewFailedOp, which Apply and Batch report as that op's failure.
 func buildOp(tool string, args json.RawMessage) write.Op {
 	var (
 		op  write.Op
@@ -347,7 +372,7 @@ func buildOp(tool string, args json.RawMessage) write.Op {
 		err = fmt.Errorf("unknown tool %q; use %s", tool, batchTools)
 	}
 	if err != nil {
-		return write.FailedOp(tool, err)
+		return write.NewFailedOp(tool, err)
 	}
 	return op
 }

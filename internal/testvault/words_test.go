@@ -12,9 +12,9 @@ import (
 
 // TestNoDomainWords walks every .go file in the repository, tests included,
 // and fails on any whole-word, case-insensitive match of a word listed in
-// the forbidden word list (see ForbiddenWords).
+// the forbidden word list (see LoadForbiddenWords).
 func TestNoDomainWords(t *testing.T) {
-	re := testvault.ForbiddenWords(t)
+	re := testvault.LoadForbiddenWords(t)
 
 	root := filepath.Join("..", "..")
 	var checked int
@@ -41,7 +41,13 @@ func TestNoDomainWords(t *testing.T) {
 		sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 		for n := 1; sc.Scan(); n++ {
 			if m := re.FindString(sc.Text()); m != "" {
-				t.Errorf("%s:%d: forbidden word %q. Go code must stay domain-neutral; move example-specific names into testdata or config", filepath.ToSlash(p), n, m)
+				t.Errorf(
+					"%s:%d: forbidden word %q. Go code must stay domain-neutral; "+
+						"move example-specific names into testdata or config",
+					filepath.ToSlash(p),
+					n,
+					m,
+				)
 			}
 		}
 		return sc.Err()

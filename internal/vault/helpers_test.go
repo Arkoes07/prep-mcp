@@ -29,9 +29,9 @@ func mapValue(n *yaml.Node, key string) (string, bool) {
 
 func node(t testing.TB, js string) *yaml.Node {
 	t.Helper()
-	n, err := vault.JSONToNode(json.RawMessage(js))
+	n, err := vault.DecodeJSON(json.RawMessage(js))
 	if err != nil {
-		t.Fatalf("JSONToNode(%s): %v", js, err)
+		t.Fatalf("DecodeJSON(%s): %v", js, err)
 	}
 	return n
 }
