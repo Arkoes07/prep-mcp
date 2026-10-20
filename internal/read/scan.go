@@ -1,6 +1,7 @@
 package read
 
 import (
+	"cmp"
 	"fmt"
 	"io/fs"
 	"path"
@@ -10,6 +11,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/arkoes07/prep-mcp/internal/document"
 	"github.com/arkoes07/prep-mcp/internal/vault"
 )
 
@@ -121,18 +123,15 @@ func isMarkdownFile(d fs.DirEntry) bool {
 
 // parseDoc turns the file at p into a Doc. It returns a nil Doc for a file
 // without frontmatter or without a type, and problems for what it could not
-// use: broken frontmatter (no Doc) or an unparseable date (a Doc dated by
-// mtime). The date comes from the type's date field.
+// use: broken frontmatter (no Doc) or a date field that holds no date (a Doc
+// dated by mtime).
 func (r *Reader) parseDoc(p string, d fs.DirEntry, src []byte) (*Doc, []Problem) {
-	fm, err := vault.SplitFrontmatter(src)
+	// No vocabulary: of the rules, only the date is a Problem.
+	doc, err := document.Parse(src, r.cfg, nil)
 	if err != nil {
 		return nil, []Problem{{Path: p, Msg: err.Error()}}
 	}
-	if fm == nil {
-		return nil, nil
-	}
-	typ := vault.Text(fm.Map, vault.FieldType)
-	if typ == "" {
+	if doc == nil || doc.Type == "" {
 		return nil, nil
 	}
 	info, err := d.Info()
@@ -143,39 +142,39 @@ func (r *Reader) parseDoc(p string, d fs.DirEntry, src []byte) (*Doc, []Problem)
 		}}
 	}
 
-	name := d.Name()
-	doc := &Doc{
+	name, fm := d.Name(), doc.Frontmatter
+	out := &Doc{
 		Path:          p,
-		Type:          typ,
-		Title:         strings.TrimSuffix(name, path.Ext(name)),
+		Type:          doc.Type,
+		Title:         cmp.Or(doc.Title, strings.TrimSuffix(name, path.Ext(name))),
 		Frontmatter:   fm.Map,
 		Body:          src[fm.BodyOffset:],
 		src:           src,
 		BodyLine:      fm.BodyLine,
-		Tags:          vault.Values(fm.Map, vault.FieldTags),
-		Date:          info.ModTime(),
-		DateFromMtime: true,
+		Tags:          doc.Tags,
+		Date:          doc.Date,
+		DateFromMtime: doc.Date.IsZero(),
 	}
-	if t := vault.Text(fm.Map, vault.FieldTitle); t != "" {
-		doc.Title = t
-		doc.titleLine = vault.Field(fm.Map, vault.FieldTitle).Line + 1
+	if out.DateFromMtime {
+		out.Date = info.ModTime()
 	}
-	field := r.cfg.DateField(typ)
-	day, err := vault.Day(fm.Map, field)
-	if err != nil {
-		return doc, []Problem{{
-			Path: p,
-			Msg: fmt.Sprintf(
-				"line %d: %v; set it with update_frontmatter (using the file's modification time meanwhile)",
-				vault.Field(fm.Map, field).Line+1,
-				err,
-			),
-		}}
+	if doc.Title != "" {
+		out.titleLine = vault.Field(fm.Map, vault.FieldTitle).Line + 1
 	}
-	if !day.IsZero() {
-		doc.Date, doc.DateFromMtime = day, false
+	var problems []Problem
+	for _, f := range doc.Findings {
+		if f.Rule == document.RuleDate {
+			problems = append(problems, Problem{
+				Path: p,
+				Msg: fmt.Sprintf(
+					"line %d: %s; set it with update_frontmatter (using the file's modification time meanwhile)",
+					vault.Field(fm.Map, doc.DateField).Line+1,
+					f.Reason,
+				),
+			})
+		}
 	}
-	return doc, nil
+	return out, problems
 }
 
 // DateSource says where Date came from: "field" for the type's date field,

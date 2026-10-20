@@ -33,10 +33,10 @@ func (p *batchPlan) create(d Draft) (*file, []byte, []string, error) {
 	w := p.w
 	spec, ok := w.cfg.Types[d.Type]
 	if !ok {
-		return nil, nil, nil, errors.New(p.unknownType(d.Type))
+		return nil, nil, nil, fmt.Errorf("unknown type %q; %s", d.Type, p.useTypes())
 	}
 	day := w.now()
-	doc, err := newFrontmatter(d.Type, d.Frontmatter, day.Format(time.DateOnly))
+	fm, err := newFrontmatter(d.Type, d.Frontmatter, day.Format(time.DateOnly))
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -44,20 +44,15 @@ func (p *batchPlan) create(d Draft) (*file, []byte, []string, error) {
 	if body != "" && !strings.HasSuffix(body, "\n") {
 		body += "\n"
 	}
-	data := []byte("---\n" + encode(doc) + "---\n" + body)
+	data := []byte("---\n" + encode(fm) + "---\n" + body)
 	// Before the file name, which may need a field the rules find missing: one
 	// error then names every missing field.
-	warnings, err := p.check(createRules, nil, data)
+	doc, warnings, err := p.check(createRules, nil, data)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	name, err := renderFilename(
-		spec,
-		doc,
-		d.Slug,
-		day,
-	)
+	name, err := renderFilename(spec.Filename, doc, d.Slug, day)
 	if err != nil {
 		return nil, nil, nil, err
 	}

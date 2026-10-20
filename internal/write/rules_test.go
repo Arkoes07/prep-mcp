@@ -421,6 +421,52 @@ func TestTypeDateField(t *testing.T) {
 	}
 }
 
+// A type the config does not define is dated by date, as list_docs dates it,
+// so a write may not leave a non-date there either.
+func TestUnconfiguredTypeIsDatedByDate(t *testing.T) {
+	e := newEnv(t)
+	testvault.Write(t, e.root, week, "---\ntype: old\n---\n")
+
+	_, err := e.w.Apply(ctx, write.PatchOp(week, write.Patch{Set: node(t, `{"date":"soon"}`)}))
+	mustContain(t, err, `date "soon" is not a date; use YYYY-MM-DD`)
+}
+
+// An edit may not change the type, and what the new type would miss is
+// named too, as for any write.
+func TestEditThatChangesTheType(t *testing.T) {
+	e := newEnv(t)
+	_, err := e.w.Apply(ctx, write.EditOp(week, "type: week", "type: improvement"))
+	mustContain(t, err, `this edit changes the type "week" to "improvement"`,
+		"missing required fields for improvement: status, exit_criteria; keep them in the frontmatter")
+	if strings.Contains(err.Error(), "unknown type") {
+		t.Errorf("error %q also names the type rule", err)
+	}
+}
+
+// A file without a type is a plain file, so no rule checks its tags.
+func TestPlainFileTagsAreNotChecked(t *testing.T) {
+	e := newEnv(t)
+	testvault.Write(t, e.root, "notes/plain.md", "---\ntitle: T\n---\n")
+
+	res, err := e.w.Apply(ctx, write.PatchOp("notes/plain.md", write.Patch{AddTags: []string{"issue/buries-headlin"}}))
+	if err != nil {
+		t.Fatalf("add an unknown tag to a plain file: %v", err)
+	}
+	if len(res.Warnings) > 0 {
+		t.Errorf("warnings = %q, want none", res.Warnings)
+	}
+}
+
+// A plain file broke no rule, so giving it a type checks it like a new
+// document: a tag it already had is the write's doing.
+func TestTypingAPlainFileChecksItsTags(t *testing.T) {
+	e := newEnv(t)
+	testvault.Write(t, e.root, "notes/plain.md", "---\ntags: [issue/buries-headlin]\n---\n")
+
+	_, err := e.w.Apply(ctx, write.PatchOp("notes/plain.md", write.Patch{Set: node(t, `{"type":"week","week":"2026-W05"}`)}))
+	mustContain(t, err, `unknown tag "issue/buries-headlin"`, "Use a known tag")
+}
+
 // runOne runs op through Apply, or through Batch as a batch of one, and
 // returns the op's warnings.
 func runOne(t *testing.T, e *env, op write.Op, batched bool) ([]string, error) {

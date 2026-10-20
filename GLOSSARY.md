@@ -21,5 +21,5 @@ The tags the vault allows, read from the tags file.
 _Avoid_: tag list, taxonomy
 
 **Document rules**:
-What a document is expected to satisfy: its frontmatter parses, its type is configured, its required fields have values, its type's date field holds a date and its tags are in the vocabulary. A write may not break a document rule; one the document already broke is a warning, not a failure.
+What a document is expected to satisfy: its frontmatter parses, its type is configured, its required fields have values, its date field (the type's, or `date` for a type not configured) holds a date and its tags are in the vocabulary. A write may not break a document rule; one the document already broke is a warning, not a failure.
 _Avoid_: invariants, validation

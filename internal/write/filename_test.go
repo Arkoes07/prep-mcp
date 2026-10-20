@@ -5,9 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"gopkg.in/yaml.v3"
-
 	"github.com/arkoes07/prep-mcp/internal/config"
+	"github.com/arkoes07/prep-mcp/internal/document"
 	"github.com/arkoes07/prep-mcp/internal/write"
 )
 
@@ -70,13 +69,6 @@ func TestRenderFilename(t *testing.T) {
 			slug:    "x",
 			want:    "2026-01-12-x.md",
 		},
-		{
-			name:    "date_not_a_date",
-			pattern: "{date}-{slug}.md",
-			fm:      "date: next week",
-			slug:    "x",
-			wantErr: `date "next week" is not a date; use YYYY-MM-DD`,
-		},
 		{name: "week_upper", pattern: "{week}.md", fm: "week: 2026-W41", want: "2026-w41.md"},
 		{name: "week_lower", pattern: "{week}.md", fm: "week: 2026-w41", want: "2026-w41.md"},
 		{name: "week_missing", pattern: "{week}.md", fm: "a: 1", wantErr: "week is required to build the filename"},
@@ -114,25 +106,16 @@ func TestRenderFilename(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			var fm *yaml.Node
-			if tc.fm != "" {
-				var doc yaml.Node
-				if err := yaml.Unmarshal([]byte(tc.fm), &doc); err != nil {
-					t.Fatal(err)
-				}
-				fm = doc.Content[0]
+			cfg := &config.Config{Types: map[string]config.TypeSpec{"t": {DateField: cmp.Or(tc.dateField, "date")}}}
+			doc, err := document.Parse([]byte("---\ntype: t\n"+tc.fm+"\n---\n"), cfg, nil)
+			if err != nil {
+				t.Fatal(err)
 			}
 			day := tc.today
 			if day.IsZero() {
 				day = time.Date(2026, 1, 14, 9, 0, 0, 0, time.Local)
 			}
-			spec := config.TypeSpec{Filename: tc.pattern, DateField: cmp.Or(tc.dateField, "date")}
-			got, err := write.RenderFilename(
-				spec,
-				fm,
-				tc.slug,
-				day,
-			)
+			got, err := write.RenderFilename(tc.pattern, doc, tc.slug, day)
 			if tc.wantErr != "" {
 				mustContain(t, err, tc.wantErr)
 				return

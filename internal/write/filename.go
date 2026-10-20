@@ -8,9 +8,7 @@ import (
 	"time"
 	"unicode"
 
-	"gopkg.in/yaml.v3"
-
-	"github.com/arkoes07/prep-mcp/internal/config"
+	"github.com/arkoes07/prep-mcp/internal/document"
 	"github.com/arkoes07/prep-mcp/internal/vault"
 )
 
@@ -36,36 +34,26 @@ func slugify(s string) string {
 
 var placeholderRE = regexp.MustCompile(`\{([^{}]+)\}`)
 
-// renderFilename fills the filename pattern of type spec. {slug} comes from
-// the slug argument, else the title field; {date} is the day the type's date
-// field holds (YYYY-MM-DD), else today, and a date field that holds no date
-// fails; any other placeholder comes from the field of that name. Values
+// renderFilename fills the filename pattern for the document d. {slug} comes
+// from the slug argument, else d's title; {date} is d's date (YYYY-MM-DD),
+// else today; any other placeholder comes from the field of that name. Values
 // other than {date} are slugified and always lowercase. Only a pattern of
 // exactly "{slug}.md" lets a slug argument hold folders ("folder/name"); each
 // part is slugified alone, so the result stays below the type folder. Every
 // other value can never contain a path separator. On a case-sensitive file
 // system an existing uppercase file of the same name is not detected.
-func renderFilename(spec config.TypeSpec, fm *yaml.Node, slug string, today time.Time) (string, error) {
+func renderFilename(pattern string, d *document.Doc, slug string, today time.Time) (string, error) {
 	if strings.ContainsAny(slug, `/\`) {
-		return folderFilename(spec.Filename, slug)
+		return folderFilename(pattern, slug)
 	}
-	day, err := vault.Day(fm, spec.DateField)
-	if err != nil {
-		return "", err
-	}
+	day := d.Date
 	if day.IsZero() {
 		day = today
 	}
 	date := day.Format(time.DateOnly)
 	var firstErr error
-	out := placeholderRE.ReplaceAllStringFunc(spec.Filename, func(m string) string {
-		name := m[1 : len(m)-1]
-		val, err := placeholderValue(
-			name,
-			fm,
-			slug,
-			date,
-		)
+	out := placeholderRE.ReplaceAllStringFunc(pattern, func(m string) string {
+		val, err := placeholderValue(m[1:len(m)-1], d, slug, date)
 		if err != nil && firstErr == nil {
 			firstErr = err
 		}
@@ -77,9 +65,9 @@ func renderFilename(spec config.TypeSpec, fm *yaml.Node, slug string, today time
 	return out, nil
 }
 
-// placeholderValue is the value of one {name} placeholder; date is the
+// placeholderValue is the value of one {name} placeholder for d; date is the
 // already resolved {date}.
-func placeholderValue(name string, fm *yaml.Node, slug, date string) (string, error) {
+func placeholderValue(name string, d *document.Doc, slug, date string) (string, error) {
 	switch name {
 	case "slug":
 		if strings.TrimSpace(slug) != "" {
@@ -89,15 +77,14 @@ func placeholderValue(name string, fm *yaml.Node, slug, date string) (string, er
 			return "", fmt.Errorf("slug %q has no letters or digits to build a filename from; pass a different slug",
 				slug)
 		}
-		if title := vault.Text(fm, vault.FieldTitle); title != "" {
-			if s := slugify(title); s != "" {
-				return s, nil
-			}
+		if s := slugify(d.Title); s != "" {
+			return s, nil
 		}
 		return "", errors.New("no name for the file: pass slug or set title")
 	case "date":
 		return date, nil
 	}
+	fm := d.Frontmatter.Map
 	vals := vault.Values(fm, name)
 	switch {
 	case !vault.HasValue(fm, name):

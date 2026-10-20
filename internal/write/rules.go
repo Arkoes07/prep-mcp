@@ -7,17 +7,16 @@ import (
 	"slices"
 	"strings"
 
-	"gopkg.in/yaml.v3"
-
+	"github.com/arkoes07/prep-mcp/internal/document"
 	"github.com/arkoes07/prep-mcp/internal/vault"
 )
 
 // The document rules (GLOSSARY.md): the frontmatter parses, the type is
-// configured, the type's required fields have values, the type's date field
-// holds a date and the tags are in the vocabulary. The plan holds every op to
-// them once, against the file and the tags file as the earlier ops leave
-// them: an op fails only on a rule it breaks, and a rule the file already
-// broke is a warning.
+// configured, the type's required fields have values, the date field holds a
+// date and the tags are in the vocabulary. The plan holds every op to them
+// once, against the file and the tags file as the earlier ops leave them: an
+// op fails only on a rule it breaks, and a rule the file already broke is a
+// warning.
 //
 // Holding every result to every rule would block all writes, appends
 // included, to a file a human left without a required field or with an old
@@ -56,147 +55,134 @@ var (
 	}
 )
 
-// docState is what the rules see in one version of a file.
-type docState struct {
-	broken string     // why the frontmatter does not parse; "" if it does
-	fm     *yaml.Node // the frontmatter mapping; nil without frontmatter
-	typ    string     // "" for a plain file
-	tags   []string
-}
-
-func stateOf(src []byte) docState {
-	fm, err := vault.SplitFrontmatter(src)
-	if err != nil {
-		// The reason alone: the parser's advice to fix the file does not fit
-		// an op that broke it, nor a write that already succeeded.
-		var fe *vault.FrontmatterError
-		if errors.As(err, &fe) {
-			return docState{broken: fe.Reason}
-		}
-		return docState{broken: err.Error()}
-	}
-	if fm == nil {
-		return docState{}
-	}
-	return docState{
-		fm:   fm.Map,
-		typ:  vault.Text(fm.Map, vault.FieldType),
-		tags: vault.Values(fm.Map, vault.FieldTags),
-	}
-}
-
-// verdict is what the rules find in one result: an error for each rule the
-// op breaks, a warning for each rule the file already broke.
-type verdict struct {
-	errs     []error
-	warnings []string
-}
-
 // check holds after, an op's result, to the document rules against before,
-// the file as the earlier ops leave it (nil for a new file).
-func (p *batchPlan) check(r opRules, before, after []byte) ([]string, error) {
-	was, now := stateOf(before), stateOf(after)
+// the file as the earlier ops leave it (nil for a new file). A finding the
+// result shares with before is a warning; any other is the op's doing, and
+// an error. It returns the result as a document, empty for a file without
+// frontmatter.
+func (p *batchPlan) check(r opRules, before, after []byte) (*document.Doc, []string, error) {
+	voc, vocErr := p.vocabulary()
+	was, wasErr := p.parse(before, voc)
+	now, nowErr := p.parse(after, voc)
 	switch {
-	case now.broken != "" && was.broken != "":
-		return []string{now.broken + "; fix the frontmatter with edit_text"}, nil
-	case now.broken != "":
-		return nil, fmt.Errorf("this write breaks the frontmatter: %s; %s", now.broken, r.fixParse)
-	case was.broken != "":
+	case nowErr != nil && wasErr != nil:
+		return nil, []string{reason(nowErr) + "; fix the frontmatter with edit_text"}, nil
+	case nowErr != nil:
+		return nil, nil, fmt.Errorf("this write breaks the frontmatter: %s; %s", reason(nowErr), r.fixParse)
+	case wasErr != nil:
 		// Nothing to compare against: check the result as if the file had been
 		// so all along, so what the rules find is a warning and a write can
 		// repair it.
 		was = now
 	}
 	if r.parseOnly {
-		return nil, nil
+		return now, nil, nil
 	}
-	var v verdict
-	p.checkType(&v, r, was, now)
-	p.checkRequired(&v, r, was, now)
-	p.checkDate(&v, was, now)
-	p.checkTags(&v, was, now)
-	if len(v.errs) > 0 {
-		return nil, errors.Join(v.errs...)
-	}
-	return v.warnings, nil
-}
-
-// checkType holds the result to "the type is configured". A file without a
-// type before and after is a plain file, which the rule leaves alone.
-func (p *batchPlan) checkType(v *verdict, r opRules, was, now docState) {
-	_, known := p.w.cfg.Types[now.typ]
+	var errs []error
 	switch {
-	case now.typ == was.typ:
-		if now.typ != "" && !known {
-			v.warnings = append(v.warnings, p.unknownType(now.typ)+"; set it with update_frontmatter")
-		}
-	case r.keepType:
-		v.errs = append(v.errs, fmt.Errorf("this edit changes the type %q to %q; "+
-			"keep the frontmatter's type line as it is", was.typ, now.typ))
-	case now.typ == "":
-		v.errs = append(v.errs, fmt.Errorf("this write removes the type %q, but every document needs one: "+
-			"keep it, or set it to one of the configured types: %s", was.typ, p.w.cfg.TypeList()))
-	case !known:
-		v.errs = append(v.errs, errors.New(p.unknownType(now.typ)))
+	case now.Type != was.Type && r.keepType:
+		errs = append(errs, fmt.Errorf("this edit changes the type %q to %q; "+
+			"keep the frontmatter's type line as it is", was.Type, now.Type))
+	case now.Type == "" && was.Type != "":
+		errs = append(errs, fmt.Errorf("this write removes the type %q, but every document needs one: "+
+			"keep it, or set it to one of the configured types: %s", was.Type, p.w.cfg.TypeList()))
 	}
-}
 
-// unknownType is the type rule's text for a type the config does not define.
-func (p *batchPlan) unknownType(typ string) string {
-	return fmt.Sprintf("unknown type %q; use one of the configured types: %s", typ, p.w.cfg.TypeList())
-}
-
-// checkRequired holds the result to "the type's required fields have
-// values". A changed type is checked like a new document: every field it
-// misses is the op's doing.
-func (p *batchPlan) checkRequired(v *verdict, r opRules, was, now docState) {
-	spec, ok := p.w.cfg.Types[now.typ]
-	if !ok {
-		return
-	}
-	var already, broke []string
-	if was.typ == now.typ {
-		already = missingFields(spec.Required, was.fm)
-	}
-	missing := missingFields(spec.Required, now.fm)
-	for _, f := range missing {
-		if !slices.Contains(already, f) {
+	var broke, already []document.Finding
+	for _, f := range now.Findings {
+		switch {
+		case f.Rule == document.RuleType && len(errs) > 0:
+			// The type error says what to do about the type.
+		case slices.ContainsFunc(was.Findings, f.Same):
+			already = append(already, f)
+		default:
 			broke = append(broke, f)
 		}
 	}
-	if len(broke) > 0 {
-		v.errs = append(v.errs, fmt.Errorf(
-			"missing required fields for %s: %s; %s",
-			now.typ,
-			strings.Join(broke, ", "),
-			r.fixMissing,
-		))
-		return
+	for _, msg := range p.messages(broke, now.Type, true, r.fixMissing) {
+		errs = append(errs, errors.New(msg))
 	}
-	if len(missing) > 0 {
-		v.warnings = append(v.warnings, fmt.Sprintf("missing required fields for %s: %s; "+
-			"give them values with update_frontmatter", now.typ, strings.Join(missing, ", ")))
+	warnings := p.messages(already, now.Type, false, "give them values with update_frontmatter")
+	// A plain file has no rules, so the tags file has nothing to vouch for.
+	if vocErr != nil && now.Type != "" && len(now.Tags) > 0 {
+		if slices.ContainsFunc(now.Tags, func(t string) bool { return !slices.Contains(was.Tags, t) }) {
+			errs = append(errs, vocErr)
+		} else {
+			// It cannot vouch for an added tag, but it does not block a write that adds none.
+			warnings = append(warnings, vocErr.Error())
+		}
 	}
+	if len(errs) > 0 {
+		return nil, nil, errors.Join(errs...)
+	}
+	return now, warnings, nil
 }
 
-// checkDate holds the result to "the type's date field holds a date". A
-// changed type is checked like a new document.
-func (p *batchPlan) checkDate(v *verdict, was, now docState) {
-	spec, ok := p.w.cfg.Types[now.typ]
-	if !ok {
-		return
+// parse reads src as a document, an empty one for a file without frontmatter.
+func (p *batchPlan) parse(src []byte, voc *vault.Vocabulary) (*document.Doc, error) {
+	d, err := document.Parse(src, p.w.cfg, voc)
+	if d == nil && err == nil {
+		return &document.Doc{}, nil
 	}
-	field := spec.DateField
-	_, err := vault.Day(now.fm, field)
-	if err == nil {
-		return
+	return d, err
+}
+
+// reason is why frontmatter does not parse, alone: the parser's advice to fix
+// the file does not fit an op that broke it, nor a write that already succeeded.
+func reason(err error) string {
+	var fe *vault.FrontmatterError
+	if errors.As(err, &fe) {
+		return fe.Reason
 	}
-	unchanged := was.typ == now.typ && slices.Equal(vault.Values(was.fm, field), vault.Values(now.fm, field))
-	if unchanged {
-		v.warnings = append(v.warnings, err.Error()+"; set it with update_frontmatter")
-		return
+	return err.Error()
+}
+
+// messages words findings of a document of type typ, which the op broke or
+// the file already broke: one message each, but one for every missing
+// required field, ending in fixMissing.
+func (p *batchPlan) messages(fs []document.Finding, typ string, broke bool, fixMissing string) []string {
+	var out, missing []string
+	flush := func() {
+		if len(missing) > 0 {
+			out = append(out, fmt.Sprintf("missing required fields for %s: %s; %s",
+				typ, strings.Join(missing, ", "), fixMissing))
+			missing = nil
+		}
 	}
-	v.errs = append(v.errs, err)
+	for _, f := range fs {
+		if f.Rule == document.RuleRequired {
+			missing = append(missing, f.Key.Field)
+			continue
+		}
+		flush()
+		out = append(out, f.Reason+p.nextStep(f.Rule, broke))
+	}
+	flush()
+	return out
+}
+
+// nextStep is what to do after a finding of rule, which the op broke or the
+// file already broke.
+func (p *batchPlan) nextStep(rule document.Rule, broke bool) string {
+	tagsFile := p.w.cfg.TagsFile
+	switch {
+	case rule == document.RuleType && broke:
+		return "; " + p.useTypes()
+	case rule == document.RuleType:
+		return "; " + p.useTypes() + "; set it with update_frontmatter"
+	case rule == document.RuleTag && broke:
+		return ". Use a known tag (list_tags shows them all), or add it to " + tagsFile + " first"
+	case rule == document.RuleTag:
+		return ". Replace it with a known tag, or add it to " + tagsFile
+	case broke:
+		return ""
+	}
+	return "; set it with update_frontmatter"
+}
+
+// useTypes is what to do about a type the config does not define.
+func (p *batchPlan) useTypes() string {
+	return "use one of the configured types: " + p.w.cfg.TypeList()
 }
 
 // vocabulary reads the tags file as the earlier ops leave it, so a batch can
@@ -206,48 +192,4 @@ func (p *batchPlan) vocabulary() (*vault.Vocabulary, error) {
 		return vault.ParseVocabulary(f.cur), nil
 	}
 	return p.w.v.Vocabulary(p.w.cfg.TagsFile)
-}
-
-// checkTags holds the result to "the tags are in the vocabulary", naming the
-// closest known tag. Without a vocabulary there is nothing to check against.
-func (p *batchPlan) checkTags(v *verdict, was, now docState) {
-	if len(now.tags) == 0 {
-		return
-	}
-	w := p.w
-	added := slices.ContainsFunc(now.tags, func(t string) bool { return !slices.Contains(was.tags, t) })
-	voc, err := p.vocabulary()
-	switch {
-	case err != nil && added:
-		v.errs = append(v.errs, err)
-		return
-	case err != nil:
-		// It cannot vouch for an added tag, but it does not block a write that adds none.
-		v.warnings = append(v.warnings, err.Error())
-		return
-	case len(voc.Tags()) == 0:
-		return
-	}
-	for _, t := range now.tags {
-		if voc.Known(t) {
-			continue
-		}
-		found := fmt.Sprintf("unknown tag %q; closest known tag: %q", t, voc.Closest(t))
-		if slices.Contains(was.tags, t) {
-			v.warnings = append(v.warnings, found+". Replace it with a known tag, or add it to "+w.cfg.TagsFile)
-			continue
-		}
-		v.errs = append(v.errs, fmt.Errorf("%s. Use a known tag (list_tags shows them all), or add it to %s first",
-			found, w.cfg.TagsFile))
-	}
-}
-
-func missingFields(required []string, m *yaml.Node) []string {
-	var out []string
-	for _, r := range required {
-		if !vault.HasValue(m, r) {
-			out = append(out, r)
-		}
-	}
-	return out
 }
