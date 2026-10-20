@@ -15,7 +15,7 @@ Not in scope: a UI (Obsidian is the reading and editing surface), a database or 
 
 ## Install
 
-You need Go 1.25 or newer, and git if you want a commit per write.
+You need Go 1.26.9 or newer, and git if you want a commit per write. An older `go` (1.21 or later) fetches it on its own unless `GOTOOLCHAIN=local` is set.
 
 ```bash
 git clone https://github.com/arkoes07/prep-mcp.git && cd prep-mcp
@@ -138,6 +138,7 @@ Start with [DESIGN.md](DESIGN.md) for how the packages fit together.
 go test ./...                                       # all tests; the ones that touch files use a temp copy of examples/vault
 go test -race ./...
 go vet ./... && gofmt -l .
+go run golang.org/x/vuln/cmd/govulncheck@latest ./...  # reachable vulnerabilities, as CI checks
 go test ./internal/read -run TestContextGolden -update   # rewrite the golden files after an intended format change
 go test -bench Scan -run '^$' ./internal/read       # scan cost: 2,000 generated files, and examples/vault
 go build -ldflags "-X main.version=v0.1.0" ./cmd/prep-mcp

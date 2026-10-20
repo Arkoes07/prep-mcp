@@ -1,6 +1,8 @@
 module github.com/arkoes07/prep-mcp
 
-go 1.25.0
+// A patch-level floor, not just a language version: older toolchains have reachable
+// standard-library vulnerabilities, among them GO-2026-4970, an os.Root escape.
+go 1.26.9
 
 require (
 	github.com/modelcontextprotocol/go-sdk v1.8.0
