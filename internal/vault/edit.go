@@ -21,6 +21,7 @@ type Edit struct {
 	fm    *Frontmatter
 	lines []string            // the block's lines, with their line endings
 	spans map[string]span     // the block's keys
+	err   error               // why the block cannot be edited line by line; Apply returns it
 	edits map[string]lineEdit // the keys set or removed
 	added []string            // the keys set that are new, in order
 }
@@ -33,8 +34,13 @@ type lineEdit struct {
 
 // Edit starts an edit of fm. Neither it nor Apply changes fm or its nodes.
 func (fm *Frontmatter) Edit() *Edit {
-	lines := slices.Collect(strings.Lines(string(fm.src[fm.start:fm.end])))
-	return &Edit{fm: fm, lines: lines, spans: keySpans(fm.Map, lines), edits: map[string]lineEdit{}}
+	text := string(fm.src[fm.start:fm.end])
+	lines := slices.Collect(strings.Lines(text))
+	e := &Edit{fm: fm, lines: lines, err: checkLineByLine(fm.Map, text, len(lines)), edits: map[string]lineEdit{}}
+	if e.err == nil {
+		e.spans = keySpans(fm.Map, lines)
+	}
+	return e
 }
 
 // Set gives key the value val: in place, keeping its line comment, when the
@@ -49,7 +55,9 @@ func (e *Edit) Set(key string, val *yaml.Node) {
 
 // Unset removes key, if the block has it.
 func (e *Edit) Unset(key string) {
-	if _, ok := e.spans[key]; ok {
+	// The map, not spans: a block Apply refuses has no spans, and removing a
+	// key it has is still a change Apply must refuse, not a no-op.
+	if Field(e.fm.Map, key) != nil {
 		e.edits[key] = lineEdit{}
 	}
 }
@@ -68,11 +76,15 @@ func (e *Edit) SetTags(tags []string) {
 func (e *Edit) Changed() bool { return len(e.edits) > 0 }
 
 // Apply makes the edit and returns the new file and its frontmatter, re-read
-// and verified. Without a change it returns the file and fm as they are. Its
-// error says what did not re-read; the caller says what to do about it.
+// and verified. Without a change it returns the file and fm as they are. A
+// block it cannot edit line by line is a *FrontmatterError; any other error
+// says what did not re-read, and the caller says what to do about it.
 func (e *Edit) Apply() ([]byte, *Frontmatter, error) {
 	if !e.Changed() {
 		return e.fm.src, e.fm, nil
+	}
+	if e.err != nil {
+		return nil, nil, e.err
 	}
 	fm := e.fm
 	eol := "\n"
@@ -191,6 +203,34 @@ func (e *Edit) verify(out []byte) (*Frontmatter, error) {
 type span struct {
 	key, val *yaml.Node
 	from, to int
+}
+
+// checkLineByLine returns errNotLineByLine unless Edit can splice text, the
+// block of m with that many lines. Splicing needs each key to start a line of
+// its own, numbered as yaml.v3 numbers lines: not so in a {flow} mapping, nor
+// where yaml.v3 breaks a line that strings.Lines does not, at a lone CR, NEL,
+// LS or PS. The key lines are checked too, so that a case this misses fails
+// the edit instead of looping or panicking in rebuild.
+func checkLineByLine(m *yaml.Node, text string, lines int) error {
+	if m.Style&yaml.FlowStyle != 0 || strings.Count(text, "\r") != strings.Count(text, "\r\n") ||
+		strings.ContainsAny(text, "\u0085\u2028\u2029") {
+		return errNotLineByLine
+	}
+	prev := 0
+	for k := range Pairs(m) {
+		if k.Line <= prev || k.Line > lines {
+			return errNotLineByLine
+		}
+		prev = k.Line
+	}
+	return nil
+}
+
+var errNotLineByLine = &FrontmatterError{
+	Reason: "frontmatter cannot be edited key by key: it is a {flow} mapping, " +
+		"or it holds a line break other than LF or CRLF (a lone CR, NEL, LS or PS)",
+	Fix: "with replace_doc, rewrite it as one key: value per line, " +
+		`and write any such break inside double quotes as \r, \N, \L or \P, then retry`,
 }
 
 func keySpans(m *yaml.Node, lines []string) map[string]span {

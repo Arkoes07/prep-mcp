@@ -2,8 +2,8 @@ package read
 
 import (
 	"cmp"
+	"fmt"
 	"slices"
-	"strings"
 )
 
 // noValue stands for a missing or empty field in a Group.
@@ -31,8 +31,9 @@ func (r *Reader) Group(f Filter, fields []string) ([]Group, []Problem, error) {
 			continue
 		}
 		for _, values := range combinations(d, fields) {
-			// Frontmatter text cannot hold a NUL, so the joined values are a unique key.
-			key := strings.Join(values, "\x00")
+			// A value can hold any character, a NUL too ("\0" in YAML), so no
+			// separator is safe. Quoting each value is: no two combinations share a key.
+			key := fmt.Sprintf("%q", values)
 			if g, ok := byKey[key]; ok {
 				g.Count++
 				continue

@@ -66,7 +66,11 @@ func applyPatch(before parsed, p Patch, today string, stamp bool) ([]byte, *vaul
 		ed.Set(vault.FieldUpdated, vault.StrNode(today))
 	}
 	out, after, err := ed.Apply()
-	if err != nil {
+	var fe *vault.FrontmatterError
+	switch {
+	case errors.As(err, &fe):
+		return nil, nil, nil, err // the file's layout, which its Fix says how to change
+	case err != nil:
 		return nil, nil, nil, fmt.Errorf("internal error: %w; nothing was written. "+
 			"Report this as a bug and use replace_doc instead", err)
 	}

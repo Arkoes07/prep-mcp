@@ -1,6 +1,7 @@
 package vault_test
 
 import (
+	"path"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -90,6 +91,35 @@ func TestResolve(t *testing.T) {
 			})
 		}
 	}
+}
+
+// For any input, Resolve fails or returns a relative path with no dot-part,
+// ".." among them, in both modes.
+func FuzzResolve(f *testing.F) {
+	for _, p := range []string{
+		"weeks/2026-w03.md", "./weeks/../weeks/2026-w03.md", "../out.md", "weeks/../../x.md", "/etc/passwd",
+		"", "weeks/2026-w03.md/", `a\b.md`, "a\x00.md", ".git/x.md", "weeks/.hidden.md", "x/../.md", "...md",
+		"a//b.md", "a/./b.md", "newdir/sub/x.md", "templates/week.md",
+	} {
+		f.Add(p)
+	}
+	_, v := copyOpen(f)
+	f.Fuzz(func(t *testing.T, p string) {
+		for _, a := range []vault.Access{vault.AccessRead, vault.AccessWrite} {
+			got, err := v.Resolve(p, a)
+			if err != nil {
+				continue
+			}
+			if path.IsAbs(got) || filepath.IsAbs(got) {
+				t.Fatalf("Resolve(%q, %v) = %q, an absolute path", p, a, got)
+			}
+			for part := range strings.SplitSeq(got, "/") {
+				if strings.HasPrefix(part, ".") {
+					t.Fatalf("Resolve(%q, %v) = %q, which has the dot-part %q", p, a, got, part)
+				}
+			}
+		}
+	})
 }
 
 func TestInTemplates(t *testing.T) {

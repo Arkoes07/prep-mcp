@@ -1,9 +1,18 @@
 package vault_test
 
 import (
+	"bytes"
+	"encoding/json"
+	"errors"
+	"os"
+	"path/filepath"
 	"regexp"
+	"slices"
 	"testing"
 
+	"gopkg.in/yaml.v3"
+
+	"github.com/arkoes07/prep-mcp/internal/testvault"
 	"github.com/arkoes07/prep-mcp/internal/vault"
 )
 
@@ -47,6 +56,11 @@ func TestEdit(t *testing.T) {
 		{name: "ambiguous_string_word", src: doc("a: 1\n", ""), set: `{"s":"yes"}`, want: doc("a: 1\ns: \"yes\"\n", "")},
 		{name: "ambiguous_string_number", src: doc("a: 1\n", ""), set: `{"s":"123"}`, want: doc("a: 1\ns: \"123\"\n", "")},
 		{name: "wikilink", src: doc("a: 1\n", ""), set: `{"s":"[[x]]"}`, want: doc("a: 1\ns: '[[x]]'\n", "")},
+		// Escaped, as Edit cannot change a block holding them raw; a key with a break is an explicit "? key".
+		{
+			name: "line_and_paragraph_separators", src: doc("a: 1\n", ""), set: `{"s\u2029":"x\u2028y"}`,
+			want: doc("a: 1\n? \"s\\P\"\n: \"x\\Ly\"\n", ""),
+		},
 
 		{name: "tags_flow", src: doc("tags: [a, b]\n", "x\n"), tags: []string{"a", "b", "c"}, want: doc("tags: [a, b, c]\n", "x\n")},
 		{
@@ -154,6 +168,134 @@ func TestEditVerifies(t *testing.T) {
 	mustContain(t, err, "the edited frontmatter did not re-read as intended")
 	if out != nil || re != nil {
 		t.Errorf("Apply returned %q and %v with its error, want nothing", out, re)
+	}
+}
+
+// For any frontmatter, key and JSON value, Set and Apply fail or give a file
+// that re-reads with the key set to the value and the rest unchanged: the
+// other keys in order, the body, and no line ending the file did not use.
+func FuzzEditSet(f *testing.F) {
+	f.Add(doc("a: 1\nb: x  # c\nc: 3\n", "body\n"), "b", `"y"`)
+	f.Add(doc("kind: x          # a | b\ndate:\ntags: []\n", "x\n"), "date", `"2026-01-20"`)
+	f.Add(doc("# top\na: 1\n\n# about b\nb: 2\n", "x\n"), "a", `5`)
+	f.Add(doc("metrics:\n  x: 1\n  y: 2\nz: 1\n", ""), "metrics", `{"p":[1,"q",{"r":null}]}`)
+	f.Add(doc("s: |\n  one\n  two\n# after\nt: 1\n", "x"), "s", `"yes"`)
+	f.Add(doc("tags:\n  - a\n  - b\n", "---\nbody"), "tags", `["c"]`)
+	f.Add(doc("m: {b: 2}\n", "x\n"), "m", `{"b":1}`)
+	f.Add(doc("a: &x 1\nb: *x\n", ""), "a", `2`)
+	f.Add(doc("a: 1\n", ""), "key: with colon", `true`)
+	f.Add("---\r\na: 1\r\nb: 2\r\n---\r\nbody\r\n", "n", `"two\nlines"`)
+	f.Add("\xef\xbb\xbf---\ntype: x\n---\nb\n", "type", `null`)
+	f.Add("---\n---\n", "a", `[]`)
+	f.Add("---\n{a: 1, b: 2}\n---\n", "a", `5`)
+	f.Add("---\na: 1\n\r\r\r\rb: 2\n---\n", "a", `5`)
+	f.Add("---\na: 1\u2028\u2028\u2028b: 2\n---\n", "b", `5`)
+	f.Add("---\n0:\n 0:\n #\n---", "1", `""`) // yaml.v3 hangs the # on another node, but no value changes
+
+	templates, err := filepath.Glob(filepath.Join(testvault.Copy(f), "templates", "*.md"))
+	if err != nil {
+		f.Fatal(err)
+	}
+	for _, p := range templates {
+		b, err := os.ReadFile(p)
+		if err != nil {
+			f.Fatal(err)
+		}
+		f.Add(string(b), "status", `"open"`)
+	}
+
+	f.Fuzz(func(t *testing.T, src, key, value string) {
+		fm, err := vault.SplitFrontmatter([]byte(src))
+		if fm == nil || err != nil {
+			return
+		}
+
+		// The key and value arrive as update_frontmatter gets them: as JSON,
+		// which holds only valid UTF-8.
+		quoted, _ := json.Marshal(key)
+		set, err := vault.JSONToNode(json.RawMessage("{" + string(quoted) + ":" + value + "}"))
+		if err != nil {
+			return
+		}
+		key = set.Content[0].Value
+		val := set.Content[1]
+
+		ed := fm.Edit()
+		ed.Set(key, val)
+		out, _, err := ed.Apply()
+		if err != nil {
+			return
+		}
+
+		re, err := vault.SplitFrontmatter(out)
+		if re == nil || err != nil {
+			t.Fatalf("the result does not re-read (%v):\n%q", err, out)
+		}
+		if !vault.Equal(vault.Field(re.Map, key), val) {
+			t.Errorf("%q does not re-read as %q:\n%q", key, vault.Encode(val), out)
+		}
+		if old, now := listKeysExcept(fm.Map, key), listKeysExcept(re.Map, key); !slices.Equal(old, now) {
+			t.Errorf("other keys changed:\n got  %q\n want %q", now, old)
+		}
+		for k, v := range vault.Pairs(fm.Map) {
+			if k.Value != key && !vault.Equal(v, vault.Field(re.Map, k.Value)) {
+				t.Errorf("%q changed:\n%q", k.Value, out)
+			}
+		}
+		if !bytes.Equal(re.Body(), fm.Body()) {
+			t.Errorf("body changed:\n%q\nwant\n%q", re.Body(), fm.Body())
+		}
+		lf, crlf := countEndings([]byte(src))
+		outLF, outCRLF := countEndings(out)
+		if lf == 0 && outLF > 0 || crlf == 0 && outCRLF > 0 {
+			t.Errorf("a line ending the file did not use was written:\n%q", out)
+		}
+	})
+}
+
+// listKeysExcept returns the top-level keys of m but skip, in order.
+func listKeysExcept(m *yaml.Node, skip string) []string {
+	var out []string
+	for k := range vault.Pairs(m) {
+		if k.Value != skip {
+			out = append(out, k.Value)
+		}
+	}
+	return out
+}
+
+// countEndings counts the lines of b that end in LF alone and those that end in CRLF.
+func countEndings(b []byte) (lf, crlf int) {
+	crlf = bytes.Count(b, []byte("\r\n"))
+	return bytes.Count(b, []byte("\n")) - crlf, crlf
+}
+
+// Frontmatter that is not one key per line cannot be edited line by line, and
+// the error says how to make it so.
+func TestEditNeedsAKeyPerLine(t *testing.T) {
+	for name, src := range map[string]string{
+		"flow_mapping":       "---\n{a: 1, b: 2}\n---\n",
+		"flow_mapping_lines": "---\n{a: 1,\n b: 2}\n---\n",
+		"empty_flow_mapping": "---\n{}\n---\n",
+		"lone_cr":            "---\na: 1\rb: 2\n---\n",
+		"nel":                "---\na: \"x\u0085y\"\nb: 2\n---\n",
+		"ls":                 "---\na: 1 # x\u2028\nb: 2\n---\n",
+		"ps":                 "---\na: 1\u2029\nb: 2\n---\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			fm, err := vault.SplitFrontmatter([]byte(src))
+			if fm == nil || err != nil {
+				t.Fatalf("test source has no valid frontmatter: %v", err)
+			}
+			ed := fm.Edit()
+			ed.Set("b", node(t, `{"v":3}`).Content[1])
+			_, _, err = ed.Apply()
+			var fe *vault.FrontmatterError
+			if !errors.As(err, &fe) {
+				t.Fatalf("Apply error = %v, want a *vault.FrontmatterError", err)
+			}
+			mustContain(t, err, "cannot be edited key by key", "replace_doc")
+		})
 	}
 }
 

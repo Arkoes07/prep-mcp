@@ -76,6 +76,25 @@ func parseDay(t *testing.T, s string) *time.Time {
 	return &d
 }
 
+// YAML "\0" reads back as a NUL, so values can hold one, and two combinations
+// that differ only in where it sits are still two groups.
+func TestGroupKeepsNULCombinationsApart(t *testing.T) {
+	root, r := copyOpen(t)
+	testvault.Write(t, root, "notes/one.md", "---\ntype: probe\na: \"x\\0\"\nb: y\n---\n")
+	testvault.Write(t, root, "notes/two.md", "---\ntype: probe\na: x\nb: \"\\0y\"\n---\n")
+
+	got, _, err := r.Group(read.Filter{Type: "probe"}, []string{"a", "b"})
+	if err != nil {
+		t.Fatalf("Group: %v", err)
+	}
+	want := []read.Group{{Values: []string{"x", "\x00y"}, Count: 1}, {Values: []string{"x\x00", "y"}, Count: 1}}
+	if !slices.EqualFunc(got, want, func(a, b read.Group) bool {
+		return a.Count == b.Count && slices.Equal(a.Values, b.Values)
+	}) {
+		t.Errorf("groups:\n got  %#v\n want %#v", got, want)
+	}
+}
+
 func TestGroupReportsProblems(t *testing.T) {
 	root, r := copyOpen(t)
 	testvault.Write(t, root, "notes/broken.md", "---\ntype: [x\n---\n")

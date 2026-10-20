@@ -46,10 +46,11 @@ func (fm *Frontmatter) Line(key string) int {
 
 var bom = []byte{0xEF, 0xBB, 0xBF}
 
-// FrontmatterError is frontmatter that does not parse: what is wrong, and how
-// to fix it in the file. A caller with better advice uses Reason alone.
+// FrontmatterError is frontmatter that does not parse, or that Edit cannot
+// change: what is wrong, and how to fix it in the file. A caller with better
+// advice uses Reason alone.
 type FrontmatterError struct {
-	Reason string // names the line in the FILE, not in the block
+	Reason string // a line it names is a line of the FILE, not of the block
 	Fix    string
 }
 

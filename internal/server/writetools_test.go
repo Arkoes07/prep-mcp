@@ -319,6 +319,20 @@ func TestBatchToolErrors(t *testing.T) {
 			},
 		},
 		{
+			// The schema check that guards create_doc itself does not reach batch args.
+			name: "create_without_frontmatter",
+			args: map[string]any{"ops": []any{
+				batchOp("create_doc", map[string]any{"type": "week"}),
+				batchOp("create_doc", map[string]any{"type": "week", "frontmatter": nil}),
+			}},
+			want: []string{
+				"2 of 2 ops failed",
+				"op 1 (create_doc): frontmatter is required; pass an object holding the type's required fields, " +
+					"which create_doc's description lists, or {} for a type without any",
+				"op 2 (create_doc): frontmatter is required",
+			},
+		},
+		{
 			name: "empty",
 			args: map[string]any{"ops": []any{}},
 			want: []string{"pass at least one op"},

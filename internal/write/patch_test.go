@@ -2,6 +2,7 @@ package write_test
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/arkoes07/prep-mcp/internal/write"
@@ -87,5 +88,15 @@ func TestApplyPatch(t *testing.T) {
 				t.Errorf("result:\n%q\nwant:\n%q", got, want)
 			}
 		})
+	}
+}
+
+// Frontmatter that cannot be edited line by line is the file's to fix, not a bug.
+func TestApplyPatchKeysSharingALine(t *testing.T) {
+	src := doc("{a: 1, b: 2}\n", "x\n")
+	_, _, err := write.ApplyPatch([]byte(src), write.Patch{Set: node(t, `{"a":2}`)}, today, true)
+	mustContain(t, err, "cannot be edited key by key", "replace_doc")
+	if strings.Contains(err.Error(), "internal error") {
+		t.Errorf("error %q calls the file's layout an internal error", err)
 	}
 }

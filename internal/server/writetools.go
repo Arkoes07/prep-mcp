@@ -201,6 +201,10 @@ func decodeCreate(args json.RawMessage) (write.Op, error) {
 	if err != nil {
 		return write.Op{}, err
 	}
+	if raw == nil {
+		return write.Op{}, errors.New("frontmatter is required; pass an object holding the type's required fields, " +
+			"which " + write.ToolCreate + "'s description lists, or {} for a type without any")
+	}
 	fm, err := vault.JSONToNode(raw)
 	if err != nil {
 		return write.Op{}, fmt.Errorf("frontmatter %w", err)

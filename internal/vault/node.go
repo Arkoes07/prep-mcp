@@ -69,10 +69,15 @@ func isPlainDate(s string) bool {
 }
 
 // needsQuotes reports whether s is one of the YAML 1.1 words (yes, no, on,
-// off) that other tools still read as booleans. The encoder already quotes any
-// other string that would not read back as itself, such as "", "12", "true"
-// or "[a]", but it writes these four plain.
+// off) that other tools still read as booleans, or holds an LS or PS. The
+// encoder already quotes any other string that would not read back as itself,
+// such as "", "12", "true" or "[a]", but it writes these four plain, and an LS
+// or PS raw in single quotes, where yaml.v3 reads it as a line break and Edit
+// then refuses the block. Double quotes escape them as \L and \P.
 func needsQuotes(s string) bool {
+	if strings.ContainsAny(s, "  ") {
+		return true
+	}
 	switch strings.ToLower(s) {
 	case "yes", "no", "on", "off":
 		return true
