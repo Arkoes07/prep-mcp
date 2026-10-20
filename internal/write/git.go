@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -262,6 +263,12 @@ func (r runner) run(ctx context.Context, args ...string) (string, error) {
 	stop := killGroupOnCancel(cmd)
 	defer stop()
 	err := cmd.Run()
+	// Run returns ErrWaitDelay only when git itself exited 0 and a hook's
+	// background child still held the pipes open past WaitDelay: git did its
+	// work, so that is success. A timeout or a non-zero exit returns its own error.
+	if errors.Is(err, exec.ErrWaitDelay) {
+		err = nil
+	}
 	return out.String(), err
 }
 

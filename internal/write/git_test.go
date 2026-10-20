@@ -506,6 +506,20 @@ func TestGitHookHangs(t *testing.T) {
 	wantWarning(t, res, "git timed out")
 }
 
+// A hook that leaves a background process holding git's output open, and exits
+// 0, does not cost the commit: git made it, so the result reports it.
+func TestGitHookLeavesBackgroundProcess(t *testing.T) {
+	e := newGitEnv(t, gitTimeout)
+	initRepo(t, e.root)
+	writeHook(t, e.root, "sleep 30 &\nexit 0")
+	before := commitCount(t, e.root)
+
+	res := createNote(t, e)
+
+	wantNoWarnings(t, res)
+	wantCommitted(t, e, res, before, "create_doc: learning/ddia-ch5.md", "learning/ddia-ch5.md")
+}
+
 // A stale or concurrent git lock is the human's to clear. Report it by its
 // path and say whether the write was staged; keep the write; leave the lock.
 // index.lock stops git add, so nothing is staged; HEAD.lock stops only the
