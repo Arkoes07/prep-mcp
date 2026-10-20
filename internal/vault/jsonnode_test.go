@@ -1,4 +1,4 @@
-package write_test
+package vault_test
 
 import (
 	"encoding/json"
@@ -8,7 +8,6 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/arkoes07/prep-mcp/internal/vault"
-	"github.com/arkoes07/prep-mcp/internal/write"
 )
 
 func TestJSONToNode(t *testing.T) {
@@ -58,7 +57,7 @@ func TestJSONToNode(t *testing.T) {
 		{"array", `[1]`}, {"string", `"x"`}, {"number", `1`},
 	} {
 		t.Run("not_an_object_"+tc.name, func(t *testing.T) {
-			_, err := write.JSONToNode(json.RawMessage(tc.in))
+			_, err := vault.JSONToNode(json.RawMessage(tc.in))
 			mustContain(t, err, "object")
 		})
 	}

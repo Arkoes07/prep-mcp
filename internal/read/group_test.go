@@ -8,7 +8,6 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/arkoes07/prep-mcp/internal/config"
 	"github.com/arkoes07/prep-mcp/internal/read"
 	"github.com/arkoes07/prep-mcp/internal/testvault"
 	"github.com/arkoes07/prep-mcp/internal/vault"
@@ -21,14 +20,14 @@ func TestGroup(t *testing.T) {
 	}
 	var f struct {
 		Cases []struct {
-			Name    string            `yaml:"name"`
-			Type    string            `yaml:"type"`
-			Tags    []string          `yaml:"tags"`
-			Where   config.Conditions `yaml:"where"`
-			Until   string            `yaml:"until"`
-			Since   string            `yaml:"since"`
-			GroupBy []string          `yaml:"group_by"`
-			Want    []read.Group      `yaml:"want"`
+			Name    string       `yaml:"name"`
+			Type    string       `yaml:"type"`
+			Tags    []string     `yaml:"tags"`
+			Where   vault.Where  `yaml:"where"`
+			Until   string       `yaml:"until"`
+			Since   string       `yaml:"since"`
+			GroupBy []string     `yaml:"group_by"`
+			Want    []read.Group `yaml:"want"`
 		} `yaml:"cases"`
 	}
 	if err := yaml.Unmarshal(b, &f); err != nil {

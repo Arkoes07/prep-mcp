@@ -464,8 +464,21 @@ context:
   open_items:
     - {type: note, where: {status: {a: b}}}
 `,
-			wantErr: []string{"line 6: the where value of status must be one scalar or a list of scalars; " +
-				"write it as status: open or status: [open, closed]"},
+			wantErr: []string{`line 6: where.status: use one value or a list of values, such as "open" or ["open", "closed"]`},
+		},
+		{
+			name: "where_nested_value_block",
+			yaml: `
+types:
+  note: {folder: notes, filename: "{slug}.md"}
+context:
+  open_items:
+    - type: note
+      where:
+        status: open
+        kind: {a: b}
+`,
+			wantErr: []string{`line 9: where.kind: use one value`},
 		},
 		{
 			name: "query_tags",

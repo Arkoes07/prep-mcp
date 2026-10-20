@@ -24,13 +24,13 @@ const (
 
 // Filter selects and orders documents. Every set field must match (AND).
 type Filter struct {
-	Type         string              // exact type name
-	Tags         []string            // all must match; a trailing "/" is a prefix
-	AnyTags      []string            // at least one must match
-	Where        map[string][]string // frontmatter equality; a list means any of
-	Since, Until *time.Time          // inclusive, compared as calendar dates
-	Sort         string              // date_desc (default), date_asc, title
-	Limit        int                 // 0 means DefaultListLimit; capped at MaxListLimit
+	Type         string      // exact type name
+	Tags         []string    // all must match; a trailing "/" is a prefix
+	AnyTags      []string    // at least one must match
+	Where        vault.Where // frontmatter equality; a list means any of
+	Since, Until *time.Time  // inclusive, compared as calendar dates
+	Sort         string      // date_desc (default), date_asc, title
+	Limit        int         // 0 means DefaultListLimit; capped at MaxListLimit
 }
 
 // Apply filters, sorts and limits docs. It does not touch the input slice.
@@ -89,11 +89,8 @@ func matches(d *Doc, f Filter) bool {
 	if len(f.AnyTags) > 0 && !slices.ContainsFunc(f.AnyTags, hasTag) {
 		return false
 	}
-	for key, want := range f.Where {
-		vals := vault.Values(d.Frontmatter, key)
-		if !slices.ContainsFunc(vals, func(v string) bool { return slices.Contains(want, v) }) {
-			return false
-		}
+	if !f.Where.Match(d.Frontmatter) {
+		return false
 	}
 	day := dayOf(d.Date)
 	if f.Since != nil && day.Before(dayOf(*f.Since)) {

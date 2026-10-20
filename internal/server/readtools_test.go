@@ -176,7 +176,7 @@ func TestReadErrorsAreToolResultsWithHints(t *testing.T) {
 			"where_nested",
 			"list_docs",
 			map[string]any{"where": map[string]any{"status": map[string]any{"a": "b"}}},
-			"where.status: use a string, number, boolean or a list of them",
+			`where.status: use one value or a list of values, such as "open" or ["open", "closed"]`,
 		},
 		{"empty_query", "search_text", map[string]any{"query": ""}, "pass the text to search for"},
 	}

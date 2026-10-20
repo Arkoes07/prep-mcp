@@ -113,7 +113,7 @@ func leftovers(t testing.TB, root string) []string {
 // server hands frontmatter to the writer.
 func node(t testing.TB, js string) *yaml.Node {
 	t.Helper()
-	n, err := write.JSONToNode(json.RawMessage(js))
+	n, err := vault.JSONToNode(json.RawMessage(js))
 	if err != nil {
 		t.Fatalf("JSONToNode(%s): %v", js, err)
 	}

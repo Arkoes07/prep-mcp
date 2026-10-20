@@ -1,4 +1,4 @@
-package write
+package vault
 
 import (
 	"bytes"
@@ -57,7 +57,7 @@ func decodeObject(dec *json.Decoder) (*yaml.Node, error) {
 		if err != nil {
 			return nil, err
 		}
-		m.Content = append(m.Content, keyNode(key), v)
+		m.Content = append(m.Content, KeyNode(key), v)
 	}
 	if _, err := dec.Token(); err != nil { // the closing brace
 		return nil, invalidJSON(err)
@@ -80,7 +80,7 @@ func decodeValue(dec *json.Decoder) (*yaml.Node, error) {
 		}
 		return decodeArray(dec)
 	case string:
-		return strNode(t), nil
+		return StrNode(t), nil
 	case json.Number:
 		tag := "!!float"
 		if _, err := strconv.ParseInt(string(t), 10, 64); err == nil {

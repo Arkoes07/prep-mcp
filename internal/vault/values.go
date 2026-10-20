@@ -20,10 +20,9 @@ const (
 
 // What a frontmatter field's values are, whether it has a value, and the day
 // a date field holds, is decided here; reads, writes and the where conditions
-// of the server and the config all ask these functions rather than look at
-// the nodes. A value is text, trimmed, with null as "". An alias reads as
-// what it points to. tags are the normalised tags, in whatever form they are
-// written.
+// (Where) all ask these functions rather than look at the nodes. A value is
+// text, trimmed, with null as "". An alias reads as what it points to. tags
+// are the normalised tags, in whatever form they are written.
 
 // Values returns the values of field key of the mapping m: one for a scalar,
 // one per scalar item of a list, and none for a missing field, [] or a nested
@@ -109,17 +108,6 @@ func ParseDate(s string) (time.Time, error) {
 		return time.Time{}, fmt.Errorf("%q is not a date; use YYYY-MM-DD", s)
 	}
 	return t, nil
-}
-
-// IsScalarOrList reports whether n is a scalar or a list of scalars, aliases
-// followed: the shapes of the values a filter compares a field with.
-func IsScalarOrList(n *yaml.Node) bool {
-	n = deref(n)
-	items := []*yaml.Node{n}
-	if n.Kind == yaml.SequenceNode {
-		items = n.Content
-	}
-	return !slices.ContainsFunc(items, func(c *yaml.Node) bool { return deref(c).Kind != yaml.ScalarNode })
 }
 
 // scalarTexts returns the text of each scalar among nodes, skipping the rest.

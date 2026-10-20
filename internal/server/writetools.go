@@ -11,6 +11,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/arkoes07/prep-mcp/internal/config"
+	"github.com/arkoes07/prep-mcp/internal/vault"
 	"github.com/arkoes07/prep-mcp/internal/write"
 )
 
@@ -200,7 +201,7 @@ func decodeCreate(args json.RawMessage) (write.Op, error) {
 	if err != nil {
 		return write.Op{}, err
 	}
-	fm, err := write.JSONToNode(raw)
+	fm, err := vault.JSONToNode(raw)
 	if err != nil {
 		return write.Op{}, fmt.Errorf("frontmatter %w", err)
 	}
@@ -242,7 +243,7 @@ func decodePatch(args json.RawMessage) (write.Op, error) {
 		return write.Op{}, err
 	}
 	if raw != nil {
-		if patch.Set, err = write.JSONToNode(raw); err != nil {
+		if patch.Set, err = vault.JSONToNode(raw); err != nil {
 			return write.Op{}, fmt.Errorf("set %w", err)
 		}
 	}

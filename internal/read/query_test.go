@@ -10,25 +10,24 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/arkoes07/prep-mcp/internal/config"
 	"github.com/arkoes07/prep-mcp/internal/read"
 	"github.com/arkoes07/prep-mcp/internal/testvault"
 	"github.com/arkoes07/prep-mcp/internal/vault"
 )
 
 type listCase struct {
-	Name     string            `yaml:"name"`
-	Type     string            `yaml:"type"`
-	Tags     []string          `yaml:"tags"`
-	AnyTags  []string          `yaml:"any_tags"`
-	Where    config.Conditions `yaml:"where"`
-	Since    string            `yaml:"since"`
-	Until    string            `yaml:"until"`
-	Sort     string            `yaml:"sort"`
-	Limit    int               `yaml:"limit"`
-	Want     []string          `yaml:"want"`
-	Err      []string          `yaml:"err"`
-	ParseErr bool              `yaml:"parse_err"`
+	Name     string      `yaml:"name"`
+	Type     string      `yaml:"type"`
+	Tags     []string    `yaml:"tags"`
+	AnyTags  []string    `yaml:"any_tags"`
+	Where    vault.Where `yaml:"where"`
+	Since    string      `yaml:"since"`
+	Until    string      `yaml:"until"`
+	Sort     string      `yaml:"sort"`
+	Limit    int         `yaml:"limit"`
+	Want     []string    `yaml:"want"`
+	Err      []string    `yaml:"err"`
+	ParseErr bool        `yaml:"parse_err"`
 }
 
 func TestList(t *testing.T) {

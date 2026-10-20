@@ -12,7 +12,6 @@ import (
 	"github.com/arkoes07/prep-mcp/internal/config"
 	"github.com/arkoes07/prep-mcp/internal/read"
 	"github.com/arkoes07/prep-mcp/internal/vault"
-	"github.com/arkoes07/prep-mcp/internal/write"
 )
 
 func registerReadTools(s *mcp.Server, h *handlers) {
@@ -241,26 +240,19 @@ func (in listDocsIn) filter(args json.RawMessage) (read.Filter, error) {
 
 // whereOf reads the where argument as frontmatter, so its values are read the
 // way the documents' fields are. It is empty when the call has no where.
-func whereOf(args json.RawMessage) (map[string][]string, error) {
+func whereOf(args json.RawMessage) (vault.Where, error) {
 	raw, err := rawArg(args, "where")
 	if err != nil {
 		return nil, err
 	}
-	where := map[string][]string{}
 	if raw == nil {
-		return where, nil
+		return vault.Where{}, nil
 	}
-	m, err := write.JSONToNode(raw)
+	m, err := vault.JSONToNode(raw)
 	if err != nil {
 		return nil, fmt.Errorf("where: %w", err)
 	}
-	for k, val := range vault.Pairs(m) {
-		if !vault.IsScalarOrList(val) {
-			return nil, fmt.Errorf("where.%s: use a string, number, boolean or a list of them", k.Value)
-		}
-		where[k.Value] = vault.Values(m, k.Value)
-	}
-	return where, nil
+	return vault.ParseWhere(m)
 }
 
 type readDocIn struct {

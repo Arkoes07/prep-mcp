@@ -44,7 +44,7 @@ func (p *batchPlan) create(d Draft) (*file, []byte, []string, error) {
 	if body != "" && !strings.HasSuffix(body, "\n") {
 		body += "\n"
 	}
-	data := []byte("---\n" + encode(fm) + "---\n" + body)
+	data := []byte("---\n" + vault.Encode(fm) + "---\n" + body)
 	// Before the file name, which may need a field the rules find missing: one
 	// error then names every missing field.
 	doc, warnings, err := p.check(createRules, nil, data)
@@ -77,7 +77,7 @@ func newFrontmatter(typ string, fm *yaml.Node, today string) (*yaml.Node, error)
 	if fm != nil && fm.Kind != yaml.MappingNode {
 		return nil, errors.New("frontmatter must be an object of key: value pairs")
 	}
-	doc := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map", Content: []*yaml.Node{keyNode(vault.FieldType), strNode(typ)}}
+	doc := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map", Content: []*yaml.Node{vault.KeyNode(vault.FieldType), vault.StrNode(typ)}}
 	hasCreated := false
 	for key, val := range vault.Pairs(fm) {
 		switch key.Value {
@@ -90,12 +90,12 @@ func newFrontmatter(typ string, fm *yaml.Node, today string) (*yaml.Node, error)
 		case vault.FieldCreated:
 			hasCreated = true
 		case vault.FieldTags:
-			val = tagsNode(vault.Values(fm, vault.FieldTags))
+			val = vault.TagsNode(vault.Values(fm, vault.FieldTags))
 		}
 		doc.Content = append(doc.Content, key, val)
 	}
 	if !hasCreated {
-		doc.Content = append(doc.Content, keyNode(vault.FieldCreated), strNode(today))
+		doc.Content = append(doc.Content, vault.KeyNode(vault.FieldCreated), vault.StrNode(today))
 	}
 	return doc, nil
 }

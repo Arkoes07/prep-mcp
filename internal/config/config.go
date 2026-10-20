@@ -60,35 +60,11 @@ type ContextSpec struct {
 
 // Query is one configured get_context query. Limit is never 0 after Parse.
 type Query struct {
-	Type    string     `yaml:"type"`
-	Where   Conditions `yaml:"where"`
-	Tags    []string   `yaml:"tags"`
-	AnyTags []string   `yaml:"any_tags"`
-	Limit   int        `yaml:"limit"`
-}
-
-// Conditions maps a frontmatter field to the values it may equal. In YAML
-// each value is one scalar or a list of them, read as a field's values are
-// (vault.Values), so tags compare normalised.
-type Conditions map[string][]string
-
-var _ yaml.Unmarshaler = (*Conditions)(nil)
-
-func (c *Conditions) UnmarshalYAML(n *yaml.Node) error {
-	// Decoding into a map first rejects a non-mapping and duplicate keys.
-	var raw map[string]yaml.Node
-	if err := n.Decode(&raw); err != nil {
-		return err
-	}
-	*c = make(Conditions, len(raw))
-	for k, v := range raw {
-		if !vault.IsScalarOrList(&v) {
-			return fmt.Errorf("line %d: the where value of %s must be one scalar or a list of scalars; "+
-				"write it as %s: open or %s: [open, closed]", v.Line, k, k, k)
-		}
-		(*c)[k] = vault.Values(n, k)
-	}
-	return nil
+	Type    string      `yaml:"type"`
+	Where   vault.Where `yaml:"where"`
+	Tags    []string    `yaml:"tags"`
+	AnyTags []string    `yaml:"any_tags"`
+	Limit   int         `yaml:"limit"`
 }
 
 // Parse reads a config, applies defaults and validates it. Unknown keys are

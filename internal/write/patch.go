@@ -206,7 +206,7 @@ func (pl *patchPlan) stampUpdated(today string) {
 	if slices.Contains(pl.setKeys, vault.FieldUpdated) || slices.Contains(pl.patch.Unset, vault.FieldUpdated) {
 		return
 	}
-	day := strNode(today)
+	day := vault.StrNode(today)
 	if s, ok := pl.spans[vault.FieldUpdated]; !ok || !nodeEqual(s.val, day) {
 		pl.put(vault.FieldUpdated, renderKey(vault.FieldUpdated, day, pl.commentOf(vault.FieldUpdated)))
 	}
@@ -290,8 +290,8 @@ func keySpans(m *yaml.Node, lines []string) map[string]span {
 
 // renderKey encodes one "key: value" pair as YAML lines, keeping the old line comment.
 func renderKey(k string, v *yaml.Node, comment string) []string {
-	pair := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map", Content: []*yaml.Node{keyNode(k), v}}
-	lines := strings.Split(strings.TrimSuffix(encode(pair), "\n"), "\n")
+	pair := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map", Content: []*yaml.Node{vault.KeyNode(k), v}}
+	lines := strings.Split(strings.TrimSuffix(vault.Encode(pair), "\n"), "\n")
 	if comment != "" {
 		lines[0] += " " + comment
 	}
@@ -310,40 +310,11 @@ func renderTags(existing *yaml.Node, tags []string, comment string) []string {
 		}
 		out := []string{head}
 		for _, t := range tags {
-			out = append(out, indent+"- "+strings.TrimSuffix(encode(strNode(t)), "\n"))
+			out = append(out, indent+"- "+strings.TrimSuffix(vault.Encode(vault.StrNode(t)), "\n"))
 		}
 		return out
 	}
-	return renderKey(vault.FieldTags, tagsNode(tags), comment)
-}
-
-// tagsNode is a flow list of tags, the form create_doc and patches write.
-func tagsNode(tags []string) *yaml.Node {
-	seq := &yaml.Node{
-		Kind:    yaml.SequenceNode,
-		Tag:     "!!seq",
-		Style:   yaml.FlowStyle,
-		Content: make([]*yaml.Node, 0, len(tags)),
-	}
-	for _, t := range tags {
-		seq.Content = append(seq.Content, strNode(t))
-	}
-	return seq
-}
-
-func encode(n *yaml.Node) string {
-	var b bytes.Buffer
-	enc := yaml.NewEncoder(&b)
-	enc.SetIndent(2)
-	// Encoding fails only for an invalid node tree, and every tree here is
-	// built by this package: that is a bug, which guard turns into an error result.
-	if err := enc.Encode(n); err != nil {
-		panic(fmt.Sprintf("yaml encode: %v", err))
-	}
-	if err := enc.Close(); err != nil {
-		panic(fmt.Sprintf("yaml encode: %v", err))
-	}
-	return b.String()
+	return renderKey(vault.FieldTags, vault.TagsNode(tags), comment)
 }
 
 // nodeEqual compares what two nodes say, not how they are written.
