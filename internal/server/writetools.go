@@ -164,8 +164,10 @@ func writeTool[In any](h *handlers, tool string) mcp.ToolHandlerFor[In, any] {
 }
 
 // rawArg returns the object-valued argument key as the call's raw JSON has
-// it, because decoding it into a Go map would lose the order of its keys. It
-// is nil when the key is missing or null.
+// it, because decoding it into a Go map would lose the order of its keys. A
+// client may have sorted the keys before sending; then they are written
+// sorted. Nothing reads them by position, so only a person viewing the file
+// sees the order. It is nil when the key is missing or null.
 func rawArg(args json.RawMessage, key string) (json.RawMessage, error) {
 	var all map[string]json.RawMessage
 	if len(args) > 0 {
