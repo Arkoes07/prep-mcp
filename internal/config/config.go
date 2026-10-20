@@ -1,4 +1,5 @@
-// Package config loads and validates prep.config.yaml.
+// Package config loads and validates prep.config.yaml, and renders file names
+// from each type's filename pattern.
 package config
 
 import (
@@ -39,7 +40,7 @@ type Config struct {
 
 type TypeSpec struct {
 	Folder   string   `yaml:"folder"`
-	Filename string   `yaml:"filename"`
+	Filename Filename `yaml:"filename"`
 	Required []string `yaml:"required"`
 	// DateField is the frontmatter field that dates documents of this type:
 	// since/until, date sorting and {date} in the filename use it. Never
@@ -103,8 +104,11 @@ func Parse(data []byte) (*Config, error) {
 	}
 
 	c.Author = cmp.Or(c.Author, DefaultAuthor)
-	for name, t := range c.Types {
+	var errs []error
+	for _, name := range c.TypeNames() {
+		t := c.Types[name]
 		t.DateField = cmp.Or(t.DateField, DefaultDateField)
+		errs = append(errs, t.Filename.parse(name, t.Required, t.DateField)...)
 		c.Types[name] = t
 	}
 	for _, qs := range [][]Query{c.Context.OpenItems, c.Context.Recent} {
@@ -112,7 +116,7 @@ func Parse(data []byte) (*Config, error) {
 			qs[i].Limit = cmp.Or(qs[i].Limit, DefaultQueryLimit)
 		}
 	}
-	if err := c.Validate(); err != nil {
+	if err := errors.Join(append(errs, c.Validate())...); err != nil {
 		return nil, err
 	}
 	return c, nil
@@ -134,7 +138,8 @@ func Load(path string) (*Config, error) {
 
 var authorRE = regexp.MustCompile(`^(.+?)\s*<([^<>\s]+@[^<>\s]+)>$`)
 
-// Validate reports every problem in the config, joined into one error.
+// Validate reports every problem in the config, joined into one error, but
+// those in filename patterns: Parse reports them as it parses the patterns.
 func (c *Config) Validate() error {
 	var errs []error
 	if _, _, ok := ParseAuthor(c.Author); c.Author != "" && !ok {
@@ -203,11 +208,6 @@ func (c *Config) typeErrors() []error {
 			errs = append(errs, fmt.Errorf("type %s: folder is required (for example folder: notes)", name))
 		} else if err := checkFolder(t.Folder); err != nil {
 			errs = append(errs, fmt.Errorf("type %s: folder %q: %w", name, t.Folder, err))
-		}
-		if t.Filename == "" {
-			errs = append(errs, fmt.Errorf(`type %s: filename is required (for example filename: "{slug}.md")`, name))
-		} else {
-			errs = append(errs, checkFilename(name, t)...)
 		}
 	}
 	return errs
@@ -294,36 +294,6 @@ func checkFolder(p string) error {
 		return errors.New("templates/ holds templates, not documents; choose another folder")
 	}
 	return nil
-}
-
-var placeholderRE = regexp.MustCompile(`\{[^{}]*\}`)
-
-func checkFilename(name string, t TypeSpec) []error {
-	var errs []error
-	add := func(format string, args ...any) {
-		errs = append(errs, fmt.Errorf("type %s: filename %q: "+format, append([]any{name, t.Filename}, args...)...))
-	}
-	if strings.ContainsAny(t.Filename, "/\\") {
-		add(`must not contain "/"; the folder setting holds directories`)
-	}
-	if !strings.HasSuffix(strings.ToLower(t.Filename), ".md") {
-		add("must end in .md")
-	}
-	rest := placeholderRE.ReplaceAllString(t.Filename, "")
-	if strings.ContainsAny(rest, "{}") {
-		add("has an unbalanced { or }; write placeholders like {slug}")
-	}
-	for _, m := range placeholderRE.FindAllString(t.Filename, -1) {
-		field := m[1 : len(m)-1]
-		switch {
-		case field == "":
-			add("has an empty {} placeholder")
-		case field == "slug" || field == "date":
-		case !slices.Contains(t.Required, field):
-			add("uses {%s}, so add %s to required", field, field)
-		}
-	}
-	return errs
 }
 
 // TypeList is the configured type names, sorted and comma-separated, or a

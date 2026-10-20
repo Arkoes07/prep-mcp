@@ -5,8 +5,6 @@ package write
 func (w *Writer) SetBeforeRename(f func(tmp string) error) { w.beforeRename = f }
 
 var (
-	ApplyPatch     = applyPatch
-	InsertSection  = insertSection
-	RenderFilename = renderFilename
-	Slugify        = slugify
+	ApplyPatch    = applyPatch
+	InsertSection = insertSection
 )

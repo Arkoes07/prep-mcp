@@ -13,7 +13,7 @@ server           the MCP tools: decodes arguments, renders results; glue only
            │
 document         a file read as a document: type, title, tags, date, and the rules it breaks
 vault            confined file access (os.Root), frontmatter and tags
-config           prep.config.yaml: types, fields shown, get_context queries
+config           prep.config.yaml: types and their filename patterns, fields shown, get_context queries
 ```
 
 **A read** scans every typed document (`Reader.Scan`), filters, searches or groups them, and `server` renders the answer as text or JSON.

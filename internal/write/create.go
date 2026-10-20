@@ -52,7 +52,7 @@ func (p *batchPlan) create(d Draft) (*file, []byte, []string, error) {
 		return nil, nil, nil, err
 	}
 
-	name, err := renderFilename(spec.Filename, doc, d.Slug, day)
+	name, err := spec.Filename.Render(doc.Frontmatter.Map, d.Slug, day)
 	if err != nil {
 		return nil, nil, nil, err
 	}

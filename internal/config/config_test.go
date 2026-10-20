@@ -49,7 +49,7 @@ types:
 					t.Errorf("TagsFile = %q, want empty", c.TagsFile)
 				}
 				ts, ok := c.Types["note"]
-				if !ok || ts.Folder != "notes" || ts.Filename != "{slug}.md" || len(ts.Required) != 0 {
+				if !ok || ts.Folder != "notes" || ts.Filename.String() != "{slug}.md" || len(ts.Required) != 0 {
 					t.Errorf("Type(note) = %+v, %v", ts, ok)
 				}
 				if ts.DateField != "date" || c.DateField("note") != "date" {
@@ -648,7 +648,7 @@ func TestLoadExample(t *testing.T) {
 	if !ok {
 		t.Fatal("example config has no week type")
 	}
-	if wk.Filename != "{week}.md" || wk.Folder != "weeks" || !slices.Equal(wk.Required, []string{"week"}) {
+	if wk.Filename.String() != "{week}.md" || wk.Folder != "weeks" || !slices.Equal(wk.Required, []string{"week"}) {
 		t.Errorf("week type = %+v", wk)
 	}
 	if lt, ok := c.Types["learning"]; !ok || !slices.Equal(lt.Required, []string{"title", "track"}) {

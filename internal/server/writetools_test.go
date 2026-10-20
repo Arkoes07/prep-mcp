@@ -41,7 +41,24 @@ func TestCreateDocDescriptionComesFromConfig(t *testing.T) {
 		}
 	}
 
-	root := t.TempDir() // a vault whose config file is empty
+	// A pattern with {date} names the type's date field when it isn't date.
+	root := t.TempDir()
+	testvault.Write(t, root, "prep.config.yaml", "types:\n"+
+		"  book: {folder: books, filename: \"{date}-{slug}.md\", date_field: finished}\n"+
+		"  log: {folder: logs, filename: \"{date}-{slug}.md\"}\n"+
+		"  memo: {folder: memos, filename: \"{slug}.md\", date_field: finished}\n")
+	desc = toolDescription(t, connectAt(t, root), "create_doc")
+	for _, want := range []string{
+		"- book: books/{date}-{slug}.md ({date}: finished); required: none",
+		"- log: logs/{date}-{slug}.md; required: none",
+		"- memo: memos/{slug}.md; required: none",
+	} {
+		if !strings.Contains(desc, want) {
+			t.Errorf("create_doc description lacks %q:\n%s", want, desc)
+		}
+	}
+
+	root = t.TempDir() // a vault whose config file is empty
 	testvault.Write(t, root, "prep.config.yaml", "")
 	cs = connectAt(t, root)
 	res, err = cs.ListTools(context.Background(), nil)

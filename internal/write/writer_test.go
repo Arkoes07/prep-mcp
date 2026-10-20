@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/arkoes07/prep-mcp/internal/config"
 	"github.com/arkoes07/prep-mcp/internal/testvault"
 	"github.com/arkoes07/prep-mcp/internal/vault"
 	"github.com/arkoes07/prep-mcp/internal/write"
@@ -78,8 +79,12 @@ func TestWriterCreate(t *testing.T) {
 		{
 			name: "date_timestamp", typ: "learning", fm: `{"title":"T","track":"k","date":"2026-01-12T09:00"}`,
 			setup: func(e *env) {
+				c, err := config.Parse([]byte(`types: {dated: {folder: f, filename: "{date}-{slug}.md"}}`))
+				if err != nil {
+					panic(err)
+				}
 				spec := e.cfg.Types["learning"]
-				spec.Filename = "{date}-{slug}.md"
+				spec.Filename = c.Types["dated"].Filename
 				e.cfg.Types["learning"] = spec
 			},
 			wantPath:  "learning/2026-01-12-t.md",
