@@ -333,7 +333,7 @@ func (p *batchPlan) modify(
 		// would carry into every file Obsidian makes from it.
 		r.parseOnly = true
 	}
-	found, err := p.w.check(r, f.cur, next)
+	found, err := p.check(r, f.cur, next)
 	if err != nil {
 		return nil, nil, nil, err
 	}

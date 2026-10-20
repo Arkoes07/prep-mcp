@@ -3,6 +3,7 @@ package write
 import (
 	"errors"
 	"fmt"
+	"path"
 	"slices"
 	"strings"
 
@@ -14,8 +15,9 @@ import (
 // The document rules (GLOSSARY.md): the frontmatter parses, the type is
 // configured, the type's required fields have values, the type's date field
 // holds a date and the tags are in the vocabulary. The plan holds every op to
-// them once, against the file as the earlier ops leave it: an op fails only
-// on a rule it breaks, and a rule the file already broke is a warning.
+// them once, against the file and the tags file as the earlier ops leave
+// them: an op fails only on a rule it breaks, and a rule the file already
+// broke is a warning.
 //
 // Holding every result to every rule would block all writes, appends
 // included, to a file a human left without a required field or with an old
@@ -92,7 +94,8 @@ type verdict struct {
 
 // check holds after, an op's result, to the document rules against before,
 // the file as the earlier ops leave it (nil for a new file).
-func (w *Writer) check(r opRules, before, after []byte) ([]string, error) {
+func (p *batchPlan) check(r opRules, before, after []byte) ([]string, error) {
+	w := p.w
 	was, now := stateOf(before), stateOf(after)
 	switch {
 	case now.broken != "" && was.broken != "":
@@ -112,7 +115,7 @@ func (w *Writer) check(r opRules, before, after []byte) ([]string, error) {
 	w.checkType(&v, r, was, now)
 	w.checkRequired(&v, r, was, now)
 	w.checkDate(&v, was, now)
-	w.checkTags(&v, was, now)
+	p.checkTags(&v, was, now)
 	if len(v.errs) > 0 {
 		return nil, errors.Join(v.errs...)
 	}
@@ -197,14 +200,24 @@ func (w *Writer) checkDate(v *verdict, was, now docState) {
 	v.errs = append(v.errs, err)
 }
 
+// vocabulary reads the tags file as the earlier ops leave it, so a batch can
+// add a tag and then use it.
+func (p *batchPlan) vocabulary() (*vault.Vocabulary, error) {
+	if f := p.byPath[path.Clean(p.w.cfg.TagsFile)]; f != nil && f.exists {
+		return vault.ParseVocabulary(f.cur), nil
+	}
+	return p.w.v.Vocabulary(p.w.cfg.TagsFile)
+}
+
 // checkTags holds the result to "the tags are in the vocabulary", naming the
 // closest known tag. Without a vocabulary there is nothing to check against.
-func (w *Writer) checkTags(v *verdict, was, now docState) {
+func (p *batchPlan) checkTags(v *verdict, was, now docState) {
 	if len(now.tags) == 0 {
 		return
 	}
+	w := p.w
 	added := slices.ContainsFunc(now.tags, func(t string) bool { return !slices.Contains(was.tags, t) })
-	voc, err := w.v.Vocabulary(w.cfg.TagsFile)
+	voc, err := p.vocabulary()
 	switch {
 	case err != nil && added:
 		v.errs = append(v.errs, err)

@@ -213,6 +213,36 @@ func TestBatchSamePathInOrder(t *testing.T) {
 	})
 }
 
+// The tag rule reads the tags file as the earlier ops leave it.
+func TestBatchVocabularyInOrder(t *testing.T) {
+	addTag := write.EditOp("tags.md", "`meta/plan`", "`meta/plan` `skill/new`")
+	useTag := write.PatchOp(headline, write.Patch{AddTags: []string{"skill/new"}})
+
+	t.Run("tag_added_then_used", func(t *testing.T) {
+		e := newEnv(t)
+
+		if _, err := e.w.Batch(ctx, []write.Op{addTag, useTag}, ""); err != nil {
+			t.Fatal(err)
+		}
+
+		for _, rel := range []string{"tags.md", headline} {
+			if got := e.read(t, rel); !strings.Contains(got, "skill/new") {
+				t.Errorf("%s lacks skill/new:\n%s", rel, got)
+			}
+		}
+	})
+
+	t.Run("tag_used_then_added", func(t *testing.T) {
+		e := newEnv(t)
+		before := snapshot(t, e.root)
+
+		_, err := e.w.Batch(ctx, []write.Op{useTag, addTag}, "")
+
+		mustContain(t, err, "1 of 2 ops failed", "op 1 (update_frontmatter "+headline+"): unknown tag \"skill/new\"")
+		sameSnapshot(t, before, snapshot(t, e.root))
+	})
+}
+
 func TestBatchLimits(t *testing.T) {
 	e := newEnv(t)
 	tooMany := make([]write.Op, write.MaxBatchOps+1)
