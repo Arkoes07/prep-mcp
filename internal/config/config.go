@@ -356,8 +356,7 @@ func (c *Config) ShowFields(typ string) []string {
 }
 
 // ParseAuthor splits "Name <email>" into its parts. ok is false when a does
-// not have that form. It is the one definition of a valid author, used by
-// Validate and by the git commit step.
+// not have that form. It is the one definition of a valid author.
 func ParseAuthor(a string) (name, email string, ok bool) {
 	m := authorRE.FindStringSubmatch(strings.TrimSpace(a))
 	if m == nil {

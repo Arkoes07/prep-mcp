@@ -82,7 +82,7 @@ func run(ctx context.Context, args []string, getenv func(string) string, stderr 
 	w := write.New(
 		v,
 		cfg,
-		&write.Git{Author: cfg.Author},
+		newGit(cfg, v.Dir()),
 		time.Now,
 	)
 	srv := server.New(
@@ -96,6 +96,16 @@ func run(ctx context.Context, args []string, getenv func(string) string, stderr 
 		return err
 	}
 	return nil
+}
+
+// newGit is the Git that commits each write in dir, or nil when commits are
+// off: the one place that decides whether writes are committed.
+func newGit(cfg *config.Config, dir string) *write.Git {
+	if !cfg.CommitOnWrite {
+		return nil
+	}
+	name, email, _ := config.ParseAuthor(cfg.Author) // the config was validated, author included
+	return &write.Git{Dir: dir, Name: name, Email: email}
 }
 
 // vaultRoot picks the vault directory: --root, else PREP_ROOT, else the

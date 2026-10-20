@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"io/fs"
 	"maps"
-	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -62,30 +60,10 @@ func (r *Reader) Context(day time.Time) (string, error) {
 	since := day.AddDate(0, 0, -ContextTagDays)
 	sections = append(sections, "==== Tags ====\n"+tagLine(tagStats(docs, nil, "", &since), since)+"\n")
 
-	problems = append(problems, r.gitLockProblems()...)
 	if len(problems) > 0 {
 		sections = append(sections, problemsSection(problems))
 	}
 	return strings.Join(sections, "\n"), nil
-}
-
-const gitLockMsg = "git's lock file is there, so AI writes are saved but not committed. " +
-	"Another git process may be running, or one crashed and left it behind. " +
-	"Once no git process is running in the vault, delete it; prep-mcp never deletes it"
-
-// gitLockProblems lists the git lock files in the vault's .git folder that
-// would stop every AI commit. It only looks, and only when commits are on.
-func (r *Reader) gitLockProblems() []Problem {
-	if !r.cfg.CommitOnWrite {
-		return nil
-	}
-	var problems []Problem
-	for _, name := range []string{".git/HEAD.lock", ".git/index.lock"} {
-		if _, err := os.Lstat(filepath.Join(r.v.Dir(), name)); err == nil {
-			problems = append(problems, Problem{Path: name, Msg: gitLockMsg})
-		}
-	}
-	return problems
 }
 
 // rulesSection renders the working rules file, or "" when there is none.

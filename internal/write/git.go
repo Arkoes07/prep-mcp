@@ -12,16 +12,15 @@ import (
 	"regexp"
 	"strings"
 	"time"
-
-	"github.com/arkoes07/prep-mcp/internal/config"
 )
 
-// Git commits written files, so every AI change can be reviewed
-// (git log --author) and reverted. It shells out to the git binary and never
-// pushes.
+// Git commits written files in the vault folder Dir, as Name <Email>, so
+// every AI change can be reviewed (git log --author) and reverted. It shells
+// out to the git binary and never pushes.
 type Git struct {
-	Bin, Author string
-	Timeout     time.Duration // for the whole commit, not per git command; zero means 10 s
+	Dir, Name, Email string
+	Bin              string        // default: git on the PATH
+	Timeout          time.Duration // for the whole commit, not per git command; zero means 10 s
 }
 
 // lockRE finds the lock file git names when another git process holds it, or
@@ -37,15 +36,15 @@ const (
 	maxPathsInWarn    = 5
 )
 
-// Commit commits paths (slash-separated, relative to dir) with message msg. It
-// only commits when dir is the root of its git repository, and only those
+// Commit commits paths (slash-separated, relative to Dir) with message msg. It
+// only commits when Dir is the root of its git repository, and only those
 // paths, so staged work by a human is left alone. It never fails a write:
 // every problem comes back as warning, and then hash is empty.
 //
 // Root only, because a vault inside a bigger repository, like examples/vault
 // in this one, must never receive AI commits. A commit covers whole files, so
 // a human's uncommitted edit to a written file goes into the AI's commit.
-func (g *Git) Commit(ctx context.Context, dir string, paths []string, msg string) (hash, warning string) {
+func (g *Git) Commit(ctx context.Context, paths []string, msg string) (hash, warning string) {
 	timeout := g.Timeout
 	if timeout <= 0 {
 		timeout = defaultGitTimeout
@@ -56,17 +55,18 @@ func (g *Git) Commit(ctx context.Context, dir string, paths []string, msg string
 	fail := func(format string, args ...any) (string, string) {
 		return "", "not committed: " + fmt.Sprintf(format, args...)
 	}
-	bin, name, email, err := g.identity()
-	if err != nil {
-		return fail("%s", err)
+	bin := cmp.Or(g.Bin, "git")
+	if _, err := exec.LookPath(bin); err != nil {
+		return fail("cannot run git (%s). Install git, fix the path %q, or set commit_on_write: false in the config", err, bin)
 	}
+	author := g.Name + " <" + g.Email + ">"
 	// fix is the command that makes this commit by hand, author and message included.
 	fix := fmt.Sprintf(
 		"run `git add -- %[1]s && git commit --only -m %[2]s --author=%[3]s -- %[1]s` in %[4]s",
 		pathList(paths),
 		shellQuote(msg),
-		shellQuote(name+" <"+email+">"),
-		dir,
+		shellQuote(author),
+		g.Dir,
 	)
 	// problem turns a failed git run into a warning, telling a timeout and a
 	// lock left by another git process from other failures.
@@ -93,7 +93,7 @@ func (g *Git) Commit(ctx context.Context, dir string, paths []string, msg string
 					"prep-mcp never deletes it",
 				m[1],
 				staged,
-				dir,
+				g.Dir,
 				m[1],
 				fix,
 			)
@@ -106,24 +106,24 @@ func (g *Git) Commit(ctx context.Context, dir string, paths []string, msg string
 		)
 	}
 
-	r := runner{bin: bin, dir: dir, env: append(os.Environ(),
+	r := runner{bin: bin, dir: g.Dir, env: append(os.Environ(),
 		"GIT_TERMINAL_PROMPT=0",
 		"LC_ALL=C", // stable messages, so "not a git repository" can be recognised
-		"GIT_COMMITTER_NAME="+name, "GIT_COMMITTER_EMAIL="+email,
+		"GIT_COMMITTER_NAME="+g.Name, "GIT_COMMITTER_EMAIL="+g.Email,
 	)}
 
 	top, err := r.run(ctx, "rev-parse", "--show-toplevel")
 	if err != nil {
 		if strings.Contains(top, "not a git repository") {
 			return fail("%s is not a git repository. "+
-				"Run `git init` in %s to get a commit per write, or set commit_on_write: false", dir, dir)
+				"Run `git init` in %s to get a commit per write, or set commit_on_write: false", g.Dir, g.Dir)
 		}
 		return problem("git rev-parse", top, err)
 	}
-	if top = strings.TrimSpace(top); !samePath(dir, top) {
+	if top = strings.TrimSpace(top); !samePath(g.Dir, top) {
 		return fail("%s is inside the git repository at %s but is not its root, so nothing is committed there. "+
 			"Run `git init` in %s to make the vault its own repository, or set commit_on_write: false",
-			dir, top, dir)
+			g.Dir, top, g.Dir)
 	}
 
 	if out, err := r.run(ctx, append([]string{"add", "--"}, paths...)...); err != nil {
@@ -137,7 +137,7 @@ func (g *Git) Commit(ctx context.Context, dir string, paths []string, msg string
 	}
 	// A failed commit leaves the paths staged. No git reset: it is one more call
 	// that can fail in a repo already in an odd state, and they belong in the next commit.
-	commit := []string{"commit", "--only", "-m", msg, "--author=" + name + " <" + email + ">", "--"}
+	commit := []string{"commit", "--only", "-m", msg, "--author=" + author, "--"}
 	if out, err := r.run(ctx, append(commit, paths...)...); err != nil {
 		return problem("git commit", out, err)
 	}
@@ -146,21 +146,6 @@ func (g *Git) Commit(ctx context.Context, dir string, paths []string, msg string
 		return problem("git rev-parse", out, err)
 	}
 	return strings.TrimSpace(out), ""
-}
-
-// identity finds the git binary, defaulting to git on the PATH, and splits the
-// author into name and email.
-func (g *Git) identity() (bin, name, email string, err error) {
-	bin = cmp.Or(g.Bin, "git")
-	if _, err := exec.LookPath(bin); err != nil {
-		return "", "", "", fmt.Errorf(
-			"cannot run git (%w). Install git, fix the path %q, or set commit_on_write: false in the config", err, bin)
-	}
-	name, email, ok := config.ParseAuthor(g.Author)
-	if !ok {
-		return "", "", "", fmt.Errorf("author %q must look like \"Name <email>\"; fix author in the config", g.Author)
-	}
-	return bin, name, email, nil
 }
 
 type runner struct {

@@ -18,7 +18,8 @@ import (
 // Writer applies safe changes to one vault. Writes are serialised, since tool
 // calls may overlap; every write goes through the batch engine (batch.go, Apply
 // and Batch), and every file is replaced atomically. A nil Git means no commits
-// and no commit warnings, so tests do not depend on git state.
+// and no commit warnings: main passes nil when commits are off, and tests do,
+// so they do not depend on git state.
 type Writer struct {
 	mu  sync.Mutex
 	v   *vault.Vault
@@ -53,15 +54,10 @@ func (e *ConflictError) Error() string {
 // commit commits paths with msg when commits are on and anything was written,
 // and returns the commit's hash and any warning.
 func (w *Writer) commit(ctx context.Context, paths []string, msg string) (string, []string) {
-	if w.git == nil || !w.cfg.CommitOnWrite || len(paths) == 0 {
+	if w.git == nil || len(paths) == 0 {
 		return "", nil
 	}
-	hash, warning := w.git.Commit(
-		ctx,
-		w.v.Dir(),
-		paths,
-		msg,
-	)
+	hash, warning := w.git.Commit(ctx, paths, msg)
 	if warning == "" {
 		return hash, nil
 	}

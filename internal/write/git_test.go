@@ -53,10 +53,11 @@ func git(t *testing.T, dir string, args ...string) string {
 	return strings.TrimSpace(string(out))
 }
 
-// initRepo makes dir a git repo with everything in it committed by the human.
+// initRepo makes dir a git repo on branch main with everything in it
+// committed by the human.
 func initRepo(t *testing.T, dir string) {
 	t.Helper()
-	git(t, dir, "init", "-q")
+	git(t, dir, "init", "-q", "-b", "main")
 	git(t, dir, "add", "-A")
 	git(t, dir, "commit", "-q", "-m", "init")
 }
@@ -69,12 +70,13 @@ func newGitEnv(t *testing.T, timeout time.Duration) *env {
 	t.Helper()
 	isolateGit(t)
 	e := newEnv(t)
-	e.w = write.New(e.v, e.cfg, gitFor(e, "git", timeout), testvault.Clock())
+	e.w = write.New(e.v, e.cfg, gitFor(e.v.Dir(), "git", timeout), testvault.Clock())
 	return e
 }
 
-func gitFor(e *env, bin string, timeout time.Duration) *write.Git {
-	return &write.Git{Bin: bin, Author: e.cfg.Author, Timeout: timeout}
+// gitFor is a Git that commits in dir as Claude <claude@local>.
+func gitFor(dir, bin string, timeout time.Duration) *write.Git {
+	return &write.Git{Dir: dir, Name: "Claude", Email: "claude@local", Bin: bin, Timeout: timeout}
 }
 
 const gitTimeout = 10 * time.Second
@@ -159,23 +161,6 @@ func TestGitNotRepo(t *testing.T) {
 	}
 	if e.exists(".git") {
 		t.Error("the server must never create a repository")
-	}
-}
-
-func TestGitDisabled(t *testing.T) {
-	e := newGitEnv(t, gitTimeout)
-	initRepo(t, e.root)
-	e.cfg.CommitOnWrite = false
-	before := commitCount(t, e.root)
-
-	res := createNote(t, e)
-
-	if got := commitCount(t, e.root); got != before {
-		t.Errorf("commit count = %s, want %s: commit_on_write is false", got, before)
-	}
-	wantNoWarnings(t, res)
-	if res.Commit != "" {
-		t.Errorf("Result.Commit = %q, want empty", res.Commit)
 	}
 }
 
@@ -379,7 +364,7 @@ func TestGitRootViaSymlink(t *testing.T) {
 			t.Fatal(err)
 		}
 		testvault.CloseOnCleanup(t, v)
-		w := write.New(v, e.cfg, gitFor(e, "git", gitTimeout), testvault.Clock())
+		w := write.New(v, e.cfg, gitFor(v.Dir(), "git", gitTimeout), testvault.Clock())
 		before := commitCount(t, e.root)
 
 		res, err := w.Apply(ctx, ddiaOp(t))
@@ -395,7 +380,7 @@ func TestGitRootViaSymlink(t *testing.T) {
 		testvault.Write(t, e.root, "direct.md", "x\n")
 		before := commitCount(t, e.root)
 
-		hash, warning := gitFor(e, "git", gitTimeout).Commit(ctx, link, []string{"direct.md"}, "direct: direct.md")
+		hash, warning := gitFor(link, "git", gitTimeout).Commit(ctx, []string{"direct.md"}, "direct: direct.md")
 
 		if warning != "" {
 			t.Fatalf("warning = %q, want none", warning)
@@ -473,6 +458,7 @@ func TestGitLock(t *testing.T) {
 	}{
 		{lock: "index.lock", staged: "", say: "nothing was staged"},
 		{lock: "HEAD.lock", staged: "learning/ddia-ch5.md", say: "the change is staged"},
+		{lock: "refs/heads/main.lock", staged: "learning/ddia-ch5.md", say: "the change is staged"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.lock, func(t *testing.T) {
@@ -577,7 +563,7 @@ func TestGitHintCommandRuns(t *testing.T) {
 		t.Fatalf("%s: %v\n%s", cmdline, err, out)
 	}
 	got := git(t, e.root, "log", "-1", "--format=%an <%ae>|%s")
-	if want := e.cfg.Author + "|append_section: " + p; got != want {
+	if want := "Claude <claude@local>|append_section: " + p; got != want {
 		t.Errorf("last commit = %q, want %q", got, want)
 	}
 }
@@ -585,7 +571,7 @@ func TestGitHintCommandRuns(t *testing.T) {
 func TestGitNoBinary(t *testing.T) {
 	e := newGitEnv(t, gitTimeout)
 	initRepo(t, e.root)
-	e.w = write.New(e.v, e.cfg, gitFor(e, "/nonexistent/git", gitTimeout), testvault.Clock())
+	e.w = write.New(e.v, e.cfg, gitFor(e.v.Dir(), "/nonexistent/git", gitTimeout), testvault.Clock())
 	before := commitCount(t, e.root)
 
 	res := createNote(t, e)

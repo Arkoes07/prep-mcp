@@ -45,3 +45,9 @@ Cost: deleting and moving files is manual, and an injected change to a template 
 Models pick tools better from a small set, and filters compose. So `list_docs` takes type, tags, `where` and dates together, instead of one tool per filter.
 
 Cost: more complex parameters.
+
+### Locks are reported by the write that hits them
+
+A git lock left behind stops every commit. Only the commit reports it: git names the lock in its error, so the warning is right for any lock (the index, HEAD, a branch ref), and no copy of git's lock rules lives here. `get_context` does not look for locks: a copy drifts from git's rules, and looking would reach into `.git` around the vault's confined root.
+
+Cost: a stale lock shows up at the first write of a conversation, not at its start. The file is still saved, and the warning names the lock and the command to commit by hand.
