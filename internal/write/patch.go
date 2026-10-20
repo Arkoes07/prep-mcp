@@ -202,7 +202,8 @@ func (pl *patchPlan) changeTags(m *yaml.Node) {
 
 // stampUpdated sets updated to today, unless the patch sets or unsets it itself.
 func (pl *patchPlan) stampUpdated(today string) {
-	if pl.touched["updated"] || slices.Contains(pl.patch.Unset, "updated") {
+	// setKeys, not touched: a set to the value updated already has touches nothing.
+	if slices.Contains(pl.setKeys, "updated") || slices.Contains(pl.patch.Unset, "updated") {
 		return
 	}
 	day := strNode(today)

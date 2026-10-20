@@ -72,6 +72,11 @@ func TestApplyPatch(t *testing.T) {
 		{name: "tags_conflict", src: doc("a: 1\n", ""), set: `{"tags":["x"]}`, add: []string{"y"}, wantErr: "add_tags"},
 		{name: "set_unset_same", src: doc("status: x\n", ""), set: `{"status":"y"}`, unset: []string{"status"}, wantErr: "status"},
 		{name: "explicit_updated", src: doc("a: 1\n", ""), set: `{"updated":"2020-01-01"}`, want: doc("a: 1\nupdated: 2020-01-01\n", "")},
+		// Setting updated to the value it has keeps it, even alongside another change.
+		{
+			name: "explicit_updated_unchanged", src: doc("a: 1\nupdated: 2020-01-01\n", ""), set: `{"a":2,"updated":"2020-01-01"}`,
+			want: doc("a: 2\nupdated: 2020-01-01\n", ""),
+		},
 		// An existing updated line is replaced in place, not duplicated.
 		{name: "updated_existing", src: doc("a: 1\nupdated: 2025-12-01\n", "x\n"), set: `{"a":2}`, want: doc("a: 2\nupdated: 2026-01-14\n", "x\n")},
 		{
