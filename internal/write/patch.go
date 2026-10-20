@@ -90,11 +90,11 @@ func checkPatch(p Patch) ([]string, error) {
 		switch {
 		case slices.Contains(setKeys, k):
 			return nil, fmt.Errorf("%s is in both set and unset; choose one", k)
-		case k == "tags" && p.hasTagOps():
+		case k == vault.FieldTags && p.hasTagOps():
 			return nil, errors.New("tags is unset and also changed by add_tags/remove_tags; use one or the other")
 		}
 	}
-	if slices.Contains(setKeys, "tags") && p.hasTagOps() {
+	if slices.Contains(setKeys, vault.FieldTags) && p.hasTagOps() {
 		return nil, errors.New("set.tags cannot be combined with add_tags or remove_tags; use one or the other")
 	}
 	return setKeys, nil
@@ -156,7 +156,7 @@ func (pl *patchPlan) unsetKeys() {
 func (pl *patchPlan) setValues() {
 	for key, val := range vault.Pairs(pl.patch.Set) {
 		k := key.Value
-		if k == "tags" {
+		if k == vault.FieldTags {
 			continue
 		}
 		if s, ok := pl.spans[k]; ok && nodeEqual(s.val, val) {
@@ -171,14 +171,14 @@ func (pl *patchPlan) setValues() {
 // that is not there. m is the current frontmatter.
 func (pl *patchPlan) changeTags(m *yaml.Node) {
 	p := pl.patch
-	setTags := slices.Contains(pl.setKeys, "tags")
+	setTags := slices.Contains(pl.setKeys, vault.FieldTags)
 	if !setTags && !p.hasTagOps() {
 		return
 	}
 	pl.hasTagChange = true
-	cur := vault.Values(m, "tags")
+	cur := vault.Values(m, vault.FieldTags)
 	if setTags {
-		pl.wantTags = vault.Values(p.Set, "tags")
+		pl.wantTags = vault.Values(p.Set, vault.FieldTags)
 	} else {
 		want := slices.Clone(cur)
 		for _, t := range vault.NormalizeTagList(p.AddTags) {
@@ -196,19 +196,19 @@ func (pl *patchPlan) changeTags(m *yaml.Node) {
 		pl.wantTags = slices.DeleteFunc(want, func(t string) bool { return slices.Contains(drop, t) })
 	}
 	if !slices.Equal(cur, pl.wantTags) {
-		pl.put("tags", renderTags(vault.Field(m, "tags"), pl.wantTags, pl.commentOf("tags")))
+		pl.put(vault.FieldTags, renderTags(vault.Field(m, vault.FieldTags), pl.wantTags, pl.commentOf(vault.FieldTags)))
 	}
 }
 
 // stampUpdated sets updated to today, unless the patch sets or unsets it itself.
 func (pl *patchPlan) stampUpdated(today string) {
 	// setKeys, not touched: a set to the value updated already has touches nothing.
-	if slices.Contains(pl.setKeys, "updated") || slices.Contains(pl.patch.Unset, "updated") {
+	if slices.Contains(pl.setKeys, vault.FieldUpdated) || slices.Contains(pl.patch.Unset, vault.FieldUpdated) {
 		return
 	}
 	day := strNode(today)
-	if s, ok := pl.spans["updated"]; !ok || !nodeEqual(s.val, day) {
-		pl.put("updated", renderKey("updated", day, pl.commentOf("updated")))
+	if s, ok := pl.spans[vault.FieldUpdated]; !ok || !nodeEqual(s.val, day) {
+		pl.put(vault.FieldUpdated, renderKey(vault.FieldUpdated, day, pl.commentOf(vault.FieldUpdated)))
 	}
 }
 
@@ -314,7 +314,7 @@ func renderTags(existing *yaml.Node, tags []string, comment string) []string {
 		}
 		return out
 	}
-	return renderKey("tags", tagsNode(tags), comment)
+	return renderKey(vault.FieldTags, tagsNode(tags), comment)
 }
 
 // tagsNode is a flow list of tags, the form create_doc and patches write.
@@ -418,7 +418,7 @@ func verifyPatch(src, out []byte, old *vault.Frontmatter, pl *patchPlan) error {
 		return bug("key order changed")
 	}
 	for _, k := range pl.setKeys {
-		if k == "tags" {
+		if k == vault.FieldTags {
 			continue
 		}
 		if !nodeEqual(vault.Field(p.Set, k), vault.Field(re.Map, k)) {
@@ -430,7 +430,7 @@ func verifyPatch(src, out []byte, old *vault.Frontmatter, pl *patchPlan) error {
 			return bug("%s is still present", k)
 		}
 	}
-	if pl.hasTagChange && !slices.Equal(vault.Values(re.Map, "tags"), pl.wantTags) {
+	if pl.hasTagChange && !slices.Equal(vault.Values(re.Map, vault.FieldTags), pl.wantTags) {
 		return bug("tags differ")
 	}
 	return nil

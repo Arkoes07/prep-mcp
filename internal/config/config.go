@@ -145,26 +145,31 @@ func (c *Config) Validate() error {
 			errs = append(errs, fmt.Errorf("tags_file %q: %w", c.TagsFile, err))
 		}
 	}
-	errs = append(errs, fieldListErrors("summary_fields", c.SummaryFields, alwaysShown)...)
+	errs = append(errs, fieldListErrors("summary_fields", c.SummaryFields, AlwaysShown, DefaultDateField)...)
 	errs = append(errs, c.typeErrors()...)
 	errs = append(errs, c.weekErrors()...)
 	errs = append(errs, c.queryErrors()...)
 	return errors.Join(errs...)
 }
 
-// alwaysShown are the fields every document's metadata already carries, so
-// they cannot be summary fields as well.
-var alwaysShown = []string{"type", "title", "tags", "date", "updated"}
+// AlwaysShown are the keys every listing shows for a document (read.Meta's,
+// but path and fields), so no list of fields to show can name them.
+var AlwaysShown = []string{"type", "title", "tags", "date", "date_source", "updated"}
 
 // fieldListErrors checks a list of fields to show, named label in the
-// messages, for empty names, names in shown and repeats.
-func fieldListErrors(label string, fields, shown []string) []error {
+// messages, for empty names, names in shown and repeats. dateField dates the
+// documents the list is for.
+func fieldListErrors(label string, fields, shown []string, dateField string) []error {
 	var errs []error
 	seen := map[string]bool{}
 	for i, f := range fields {
 		switch {
 		case strings.TrimSpace(f) == "":
 			errs = append(errs, fmt.Errorf("%s[%d] is empty; name a frontmatter field or remove the entry", label, i))
+		case f == DefaultDateField && dateField != DefaultDateField:
+			// The field would collide with the date key, which holds dateField.
+			errs = append(errs, fmt.Errorf("%s: date is get_context's date attribute (this type is dated by %s); "+
+				`remove it, and pass fields: ["date"] to list_docs when you need it`, label, dateField))
 		case slices.Contains(shown, f):
 			errs = append(errs, fmt.Errorf("%s: %s is always shown; remove it from the list", label, f))
 		case seen[f]:
@@ -175,8 +180,8 @@ func fieldListErrors(label string, fields, shown []string) []error {
 	return errs
 }
 
-// notDates are the always-shown fields that can never date a document.
-var notDates = []string{"type", "title", "tags"}
+// notDates are the frontmatter fields that can never date a document.
+var notDates = []string{vault.FieldType, vault.FieldTitle, vault.FieldTags}
 
 func (c *Config) typeErrors() []error {
 	var errs []error
@@ -192,8 +197,8 @@ func (c *Config) typeErrors() []error {
 			))
 		}
 		// The type's date field is shown as date already.
-		shown := append(slices.Clone(alwaysShown), t.DateField)
-		errs = append(errs, fieldListErrors("type "+name+": show", t.Show, shown)...)
+		shown := append(slices.Clone(AlwaysShown), t.DateField)
+		errs = append(errs, fieldListErrors("type "+name+": show", t.Show, shown, t.DateField)...)
 		if t.Folder == "" {
 			errs = append(errs, fmt.Errorf("type %s: folder is required (for example folder: notes)", name))
 		} else if err := checkFolder(t.Folder); err != nil {

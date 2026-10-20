@@ -162,17 +162,6 @@ type listDocsIn struct {
 	GroupBy []string       `json:"group_by,omitempty" jsonschema:"Field names to count documents by, instead of listing them, for example [\"type\", \"status\"]."`
 }
 
-type docMeta struct {
-	Path       string            `json:"path"`
-	Type       string            `json:"type"`
-	Title      string            `json:"title"`
-	Tags       []string          `json:"tags"`
-	Date       string            `json:"date"`
-	DateSource string            `json:"date_source"` // field (the type's date field) or mtime
-	Updated    string            `json:"updated,omitempty"`
-	Fields     map[string]string `json:"fields,omitempty"` // the shown fields the document sets
-}
-
 func (h *handlers) listDocs(
 	_ context.Context,
 	req *mcp.CallToolRequest,
@@ -191,17 +180,17 @@ func (h *handlers) listDocs(
 	}
 
 	out := struct {
-		Docs     []docMeta      `json:"docs"`
+		Docs     []read.Meta    `json:"docs"`
 		Count    int            `json:"count"`
 		Note     string         `json:"note,omitempty"`
 		Problems []read.Problem `json:"problems,omitempty"`
-	}{Docs: make([]docMeta, 0, len(docs)), Count: len(docs), Problems: problems}
+	}{Docs: make([]read.Meta, 0, len(docs)), Count: len(docs), Problems: problems}
 	for _, d := range docs {
 		fields := in.Fields
 		if fields == nil {
 			fields = h.cfg.ShowFields(d.Type)
 		}
-		out.Docs = append(out.Docs, metaOf(d, fields))
+		out.Docs = append(out.Docs, d.Meta(fields))
 	}
 	out.Note = h.typeNote(in.Type, len(docs) == 0)
 	return jsonResult(out)
@@ -272,27 +261,6 @@ func whereOf(args json.RawMessage) (map[string][]string, error) {
 		where[k.Value] = vault.Values(m, k.Value)
 	}
 	return where, nil
-}
-
-// metaOf is the list_docs entry for d: its date with where it came from, and
-// each of fields it sets.
-func metaOf(d *read.Doc, fields []string) docMeta {
-	m := docMeta{
-		Path:       d.Path,
-		Type:       d.Type,
-		Title:      d.Title,
-		Tags:       append([]string{}, d.Tags...),
-		Date:       d.Date.Format(time.DateOnly),
-		DateSource: d.DateSource(),
-		Updated:    vault.Text(d.Frontmatter, "updated"),
-		Fields:     map[string]string{},
-	}
-	for _, k := range fields {
-		if v := d.Shown(k); v != "" {
-			m.Fields[k] = v
-		}
-	}
-	return m
 }
 
 type readDocIn struct {

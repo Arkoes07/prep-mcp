@@ -221,7 +221,8 @@ func (r *Reader) queryBlock(docs []*Doc, q config.Query, isRecent bool) (string,
 		b.WriteString("(none)\n")
 	}
 	for _, d := range got {
-		b.WriteString(metaLine(d, r.cfg.ShowFields(d.Type)))
+		fields := r.cfg.ShowFields(d.Type)
+		b.WriteString(metaLine(d.Meta(fields), fields))
 		b.WriteByte('\n')
 	}
 	return b.String(), nil
@@ -229,25 +230,26 @@ func (r *Reader) queryBlock(docs []*Doc, q config.Query, isRecent bool) (string,
 
 // metaLine is "- path | title | attributes | tags". The attributes are the
 // date, followed by date_source=mtime when it is the file's modification time,
-// updated when the document sets it, then each of fields that the document sets.
-func metaLine(d *Doc, fields []string) string {
-	attrs := []string{"date=" + d.Date.Format(time.DateOnly)}
-	if d.DateFromMtime {
-		attrs = append(attrs, "date_source="+d.DateSource())
+// updated when the document sets it, then each of fields, in order, that the
+// document sets.
+func metaLine(m Meta, fields []string) string {
+	attrs := []string{"date=" + m.Date}
+	if m.DateSource == "mtime" {
+		attrs = append(attrs, "date_source="+m.DateSource)
 	}
-	if updated := vault.Text(d.Frontmatter, "updated"); updated != "" {
-		attrs = append(attrs, "updated="+oneLine(updated))
+	if m.Updated != "" {
+		attrs = append(attrs, "updated="+oneLine(m.Updated))
 	}
 	for _, k := range fields {
-		if val := d.Shown(k); val != "" {
+		if val := m.Fields[k]; val != "" {
 			attrs = append(attrs, k+"="+oneLine(val))
 		}
 	}
-	a, tags := strings.Join(attrs, " "), strings.Join(d.Tags, ", ")
+	a, tags := strings.Join(attrs, " "), strings.Join(m.Tags, ", ")
 	if tags == "" {
 		tags = "-"
 	}
-	return fmt.Sprintf("- %s | %s | %s | %s", d.Path, oneLine(d.Title), a, tags)
+	return fmt.Sprintf("- %s | %s | %s | %s", m.Path, oneLine(m.Title), a, tags)
 }
 
 func tagLine(stats []TagCount, since time.Time) string {

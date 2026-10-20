@@ -89,7 +89,7 @@ func placeholderValue(name string, fm *yaml.Node, slug, date string) (string, er
 			return "", fmt.Errorf("slug %q has no letters or digits to build a filename from; pass a different slug",
 				slug)
 		}
-		if title := vault.Text(fm, "title"); title != "" {
+		if title := vault.Text(fm, vault.FieldTitle); title != "" {
 			if s := slugify(title); s != "" {
 				return s, nil
 			}

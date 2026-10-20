@@ -82,25 +82,25 @@ func newFrontmatter(typ string, fm *yaml.Node, today string) (*yaml.Node, error)
 	if fm != nil && fm.Kind != yaml.MappingNode {
 		return nil, errors.New("frontmatter must be an object of key: value pairs")
 	}
-	doc := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map", Content: []*yaml.Node{keyNode("type"), strNode(typ)}}
+	doc := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map", Content: []*yaml.Node{keyNode(vault.FieldType), strNode(typ)}}
 	hasCreated := false
 	for key, val := range vault.Pairs(fm) {
 		switch key.Value {
-		case "type":
-			if got := vault.Text(fm, "type"); got != typ {
+		case vault.FieldType:
+			if got := vault.Text(fm, vault.FieldType); got != typ {
 				return nil, fmt.Errorf("frontmatter type %q conflicts with type %q; "+
 					"drop it from frontmatter or make them match", got, typ)
 			}
 			continue
-		case "created":
+		case vault.FieldCreated:
 			hasCreated = true
-		case "tags":
-			val = tagsNode(vault.Values(fm, "tags"))
+		case vault.FieldTags:
+			val = tagsNode(vault.Values(fm, vault.FieldTags))
 		}
 		doc.Content = append(doc.Content, key, val)
 	}
 	if !hasCreated {
-		doc.Content = append(doc.Content, keyNode("created"), strNode(today))
+		doc.Content = append(doc.Content, keyNode(vault.FieldCreated), strNode(today))
 	}
 	return doc, nil
 }

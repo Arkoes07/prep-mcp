@@ -312,6 +312,25 @@ types:
 			wantErr: []string{"type note: show: finished is always shown", "remove it"},
 		},
 		{
+			// A field named date would read as the date attribute, which comes from finished.
+			name: "show_date_with_another_date_field",
+			yaml: `
+types:
+  book: {folder: books, filename: "{slug}.md", date_field: finished, show: [date]}
+`,
+			wantErr: []string{`type book: show: date is get_context's date attribute (this type is dated by finished); ` +
+				`remove it, and pass fields: ["date"] to list_docs when you need it`},
+		},
+		{
+			// Every listing shows date_source as well.
+			name: "show_date_source",
+			yaml: `
+types:
+  note: {folder: notes, filename: "{slug}.md", show: [date_source]}
+`,
+			wantErr: []string{"type note: show: date_source is always shown", "remove it"},
+		},
+		{
 			name: "show_twice",
 			yaml: `
 types:

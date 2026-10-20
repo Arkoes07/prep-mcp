@@ -9,6 +9,15 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// The frontmatter fields the server reads or writes by name.
+const (
+	FieldType    = "type"
+	FieldTags    = "tags"
+	FieldTitle   = "title"
+	FieldCreated = "created"
+	FieldUpdated = "updated"
+)
+
 // What a frontmatter field's values are, whether it has a value, and the day
 // a date field holds, is decided here; reads, writes and the where conditions
 // of the server and the config all ask these functions rather than look at
@@ -22,7 +31,7 @@ import (
 func Values(m *yaml.Node, key string) []string {
 	n := deref(Field(m, key))
 	switch {
-	case key == "tags":
+	case key == FieldTags:
 		return normalizeTags(n)
 	case n == nil:
 		return []string{}
@@ -36,7 +45,7 @@ func Values(m *yaml.Node, key string) []string {
 // blank, a mapping that is not empty, or a list with an item that has one.
 // tags have one when a tag survives normalising.
 func HasValue(m *yaml.Node, key string) bool {
-	if key == "tags" {
+	if key == FieldTags {
 		return len(Values(m, key)) > 0
 	}
 	return hasValue(Field(m, key))

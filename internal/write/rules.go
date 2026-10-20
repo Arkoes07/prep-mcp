@@ -80,8 +80,8 @@ func stateOf(src []byte) docState {
 	}
 	return docState{
 		fm:   fm.Map,
-		typ:  vault.Text(fm.Map, "type"),
-		tags: vault.Values(fm.Map, "tags"),
+		typ:  vault.Text(fm.Map, vault.FieldType),
+		tags: vault.Values(fm.Map, vault.FieldTags),
 	}
 }
 

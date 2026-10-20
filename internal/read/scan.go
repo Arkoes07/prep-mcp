@@ -131,7 +131,7 @@ func (r *Reader) parseDoc(p string, d fs.DirEntry, src []byte) (*Doc, []Problem)
 	if fm == nil {
 		return nil, nil
 	}
-	typ := vault.Text(fm.Map, "type")
+	typ := vault.Text(fm.Map, vault.FieldType)
 	if typ == "" {
 		return nil, nil
 	}
@@ -152,13 +152,13 @@ func (r *Reader) parseDoc(p string, d fs.DirEntry, src []byte) (*Doc, []Problem)
 		Body:          src[fm.BodyOffset:],
 		src:           src,
 		BodyLine:      fm.BodyLine,
-		Tags:          vault.Values(fm.Map, "tags"),
+		Tags:          vault.Values(fm.Map, vault.FieldTags),
 		Date:          info.ModTime(),
 		DateFromMtime: true,
 	}
-	if t := vault.Text(fm.Map, "title"); t != "" {
+	if t := vault.Text(fm.Map, vault.FieldTitle); t != "" {
 		doc.Title = t
-		doc.titleLine = vault.Field(fm.Map, "title").Line + 1
+		doc.titleLine = vault.Field(fm.Map, vault.FieldTitle).Line + 1
 	}
 	field := r.cfg.DateField(typ)
 	day, err := vault.Day(fm.Map, field)
@@ -185,6 +185,39 @@ func (d *Doc) DateSource() string {
 		return "mtime"
 	}
 	return "field"
+}
+
+// Meta is a document's metadata as a listing shows it. Its keys, but path and
+// fields, are config.AlwaysShown, so no field to show can collide with one.
+type Meta struct {
+	Path       string            `json:"path"`
+	Type       string            `json:"type"`
+	Title      string            `json:"title"`
+	Tags       []string          `json:"tags"`
+	Date       string            `json:"date"`
+	DateSource string            `json:"date_source"` // field (the type's date field) or mtime
+	Updated    string            `json:"updated,omitempty"`
+	Fields     map[string]string `json:"fields,omitempty"` // the fields to show that the document sets
+}
+
+// Meta is d's metadata, with each of fields that d sets.
+func (d *Doc) Meta(fields []string) Meta {
+	m := Meta{
+		Path:       d.Path,
+		Type:       d.Type,
+		Title:      d.Title,
+		Tags:       append([]string{}, d.Tags...),
+		Date:       d.Date.Format(time.DateOnly),
+		DateSource: d.DateSource(),
+		Updated:    vault.Text(d.Frontmatter, vault.FieldUpdated),
+		Fields:     map[string]string{},
+	}
+	for _, k := range fields {
+		if v := d.Shown(k); v != "" {
+			m.Fields[k] = v
+		}
+	}
+	return m
 }
 
 // Shown is field as a listing shows it: its values that are not "", joined

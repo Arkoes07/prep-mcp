@@ -1,6 +1,8 @@
 package read_test
 
 import (
+	"encoding/json"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -10,6 +12,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/arkoes07/prep-mcp/internal/config"
 	"github.com/arkoes07/prep-mcp/internal/read"
 	"github.com/arkoes07/prep-mcp/internal/testvault"
 	"github.com/arkoes07/prep-mcp/internal/vault"
@@ -387,4 +390,23 @@ func find(t *testing.T, docs []*read.Doc, p string) *read.Doc {
 	}
 	t.Fatalf("%s missing from %v", p, paths(docs))
 	return nil
+}
+
+// Meta's keys, but path and fields, are the ones the config reserves, so no
+// field to show can collide with one.
+func TestMetaKeysAreReserved(t *testing.T) {
+	b, err := json.Marshal(read.Meta{Updated: "2026-01-12", Fields: map[string]string{"status": "open"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var keys map[string]any
+	if err := json.Unmarshal(b, &keys); err != nil {
+		t.Fatal(err)
+	}
+	delete(keys, "path")
+	delete(keys, "fields")
+	got, want := slices.Sorted(maps.Keys(keys)), slices.Sorted(slices.Values(config.AlwaysShown))
+	if !slices.Equal(got, want) {
+		t.Errorf("Meta's keys = %q, want config.AlwaysShown %q", got, want)
+	}
 }
