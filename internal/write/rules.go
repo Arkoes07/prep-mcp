@@ -95,7 +95,6 @@ type verdict struct {
 // check holds after, an op's result, to the document rules against before,
 // the file as the earlier ops leave it (nil for a new file).
 func (p *batchPlan) check(r opRules, before, after []byte) ([]string, error) {
-	w := p.w
 	was, now := stateOf(before), stateOf(after)
 	switch {
 	case now.broken != "" && was.broken != "":
@@ -112,9 +111,9 @@ func (p *batchPlan) check(r opRules, before, after []byte) ([]string, error) {
 		return nil, nil
 	}
 	var v verdict
-	w.checkType(&v, r, was, now)
-	w.checkRequired(&v, r, was, now)
-	w.checkDate(&v, was, now)
+	p.checkType(&v, r, was, now)
+	p.checkRequired(&v, r, was, now)
+	p.checkDate(&v, was, now)
 	p.checkTags(&v, was, now)
 	if len(v.errs) > 0 {
 		return nil, errors.Join(v.errs...)
@@ -124,34 +123,34 @@ func (p *batchPlan) check(r opRules, before, after []byte) ([]string, error) {
 
 // checkType holds the result to "the type is configured". A file without a
 // type before and after is a plain file, which the rule leaves alone.
-func (w *Writer) checkType(v *verdict, r opRules, was, now docState) {
-	_, known := w.cfg.Types[now.typ]
+func (p *batchPlan) checkType(v *verdict, r opRules, was, now docState) {
+	_, known := p.w.cfg.Types[now.typ]
 	switch {
 	case now.typ == was.typ:
 		if now.typ != "" && !known {
-			v.warnings = append(v.warnings, w.unknownType(now.typ)+"; set it with update_frontmatter")
+			v.warnings = append(v.warnings, p.unknownType(now.typ)+"; set it with update_frontmatter")
 		}
 	case r.keepType:
 		v.errs = append(v.errs, fmt.Errorf("this edit changes the type %q to %q; "+
 			"keep the frontmatter's type line as it is", was.typ, now.typ))
 	case now.typ == "":
 		v.errs = append(v.errs, fmt.Errorf("this write removes the type %q, but every document needs one: "+
-			"keep it, or set it to one of the configured types: %s", was.typ, w.cfg.TypeList()))
+			"keep it, or set it to one of the configured types: %s", was.typ, p.w.cfg.TypeList()))
 	case !known:
-		v.errs = append(v.errs, errors.New(w.unknownType(now.typ)))
+		v.errs = append(v.errs, errors.New(p.unknownType(now.typ)))
 	}
 }
 
 // unknownType is the type rule's text for a type the config does not define.
-func (w *Writer) unknownType(typ string) string {
-	return fmt.Sprintf("unknown type %q; use one of the configured types: %s", typ, w.cfg.TypeList())
+func (p *batchPlan) unknownType(typ string) string {
+	return fmt.Sprintf("unknown type %q; use one of the configured types: %s", typ, p.w.cfg.TypeList())
 }
 
 // checkRequired holds the result to "the type's required fields have
 // values". A changed type is checked like a new document: every field it
 // misses is the op's doing.
-func (w *Writer) checkRequired(v *verdict, r opRules, was, now docState) {
-	spec, ok := w.cfg.Types[now.typ]
+func (p *batchPlan) checkRequired(v *verdict, r opRules, was, now docState) {
+	spec, ok := p.w.cfg.Types[now.typ]
 	if !ok {
 		return
 	}
@@ -182,8 +181,8 @@ func (w *Writer) checkRequired(v *verdict, r opRules, was, now docState) {
 
 // checkDate holds the result to "the type's date field holds a date". A
 // changed type is checked like a new document.
-func (w *Writer) checkDate(v *verdict, was, now docState) {
-	spec, ok := w.cfg.Types[now.typ]
+func (p *batchPlan) checkDate(v *verdict, was, now docState) {
+	spec, ok := p.w.cfg.Types[now.typ]
 	if !ok {
 		return
 	}

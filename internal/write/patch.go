@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 
@@ -17,16 +18,26 @@ type Patch struct {
 	Unset, AddTags, RemoveTags []string
 }
 
-// ApplyPatch changes only the affected top-level keys of src's frontmatter and
-// returns the new file with its frontmatter, re-read. Untouched lines and the
-// whole body keep their exact bytes. newFM is nil, and out is src, when the
-// patch changes nothing. With stamp, any real change also sets updated to
-// today, unless the patch sets or unsets it.
+// PatchOp changes frontmatter keys and tags, leaving the body's bytes alone.
+func PatchOp(path string, patch Patch) Op {
+	return Op{tool: ToolPatch, target: path, apply: func(p *batchPlan) (*file, []byte, []string, error) {
+		return p.modify(path, patchRules, func(f *file) ([]byte, []string, error) {
+			// No updated date on a template: every document made from it would copy it.
+			return applyPatch(f.cur, patch, p.w.now().Format(time.DateOnly), !f.template)
+		})
+	}}
+}
+
+// applyPatch changes only the affected top-level keys of src's frontmatter
+// and returns the new file and its warnings. Untouched lines and the whole
+// body keep their exact bytes. A patch that changes nothing returns src. With
+// stamp, any real change also sets updated to today, unless the patch sets or
+// unsets it.
 //
 // It splices lines instead of re-encoding the frontmatter through yaml.Node,
 // which collapses the aligned "# a | b" comments templates produce and would
 // make every edit a noisy diff. The cost is more code, checked by verifyPatch.
-func ApplyPatch(src []byte, p Patch, today string, stamp bool) (out []byte, newFM *vault.Frontmatter, err error) {
+func applyPatch(src []byte, p Patch, today string, stamp bool) ([]byte, []string, error) {
 	fm, err := vault.SplitFrontmatter(src)
 	if err != nil {
 		return nil, nil, err
@@ -51,7 +62,7 @@ func ApplyPatch(src []byte, p Patch, today string, stamp bool) (out []byte, newF
 	pl.setValues()
 	pl.changeTags(fm.Map)
 	if len(pl.touched) == 0 {
-		return src, nil, nil
+		return src, pl.warnings, nil
 	}
 	if stamp {
 		pl.stampUpdated(today)
@@ -61,12 +72,11 @@ func ApplyPatch(src []byte, p Patch, today string, stamp bool) (out []byte, newF
 	if fm.CRLF {
 		eol = "\r\n"
 	}
-	out = slices.Concat(src[:fm.Start], []byte(pl.rebuild(lines, eol)), src[fm.End:])
-	newFM, err = verifyPatch(src, out, fm, pl)
-	if err != nil {
+	out := slices.Concat(src[:fm.Start], []byte(pl.rebuild(lines, eol)), src[fm.End:])
+	if err := verifyPatch(src, out, fm, pl); err != nil {
 		return nil, nil, err
 	}
-	return out, newFM, nil
+	return out, pl.warnings, nil
 }
 
 // checkPatch rejects a patch that contradicts itself and returns the keys of
@@ -107,6 +117,7 @@ type patchPlan struct {
 	touched      map[string]bool     // keys set, changed or removed
 	hasTagChange bool                // the patch sets or changes tags
 	wantTags     []string            // the normalised tags asked for, when hasTagChange
+	warnings     []string
 }
 
 // commentOf returns the line comment of an existing key, so a rewrite keeps it.
@@ -156,7 +167,8 @@ func (pl *patchPlan) setValues() {
 }
 
 // changeTags works out the tag list the patch asks for and rewrites the tags
-// key if that differs from the current list. m is the current frontmatter.
+// key if that differs from the current list, warning about each tag to remove
+// that is not there. m is the current frontmatter.
 func (pl *patchPlan) changeTags(m *yaml.Node) {
 	p := pl.patch
 	setTags := slices.Contains(pl.setKeys, "tags")
@@ -175,6 +187,12 @@ func (pl *patchPlan) changeTags(m *yaml.Node) {
 			}
 		}
 		drop := vault.NormalizeTagList(p.RemoveTags)
+		for _, t := range drop {
+			if !slices.Contains(cur, t) {
+				pl.warnings = append(pl.warnings,
+					fmt.Sprintf("tag %q is not on this document, so there was nothing to remove", t))
+			}
+		}
 		pl.wantTags = slices.DeleteFunc(want, func(t string) bool { return slices.Contains(drop, t) })
 	}
 	if !slices.Equal(cur, pl.wantTags) {
@@ -364,8 +382,8 @@ func nodeEqual(a, b *yaml.Node) bool {
 func isNull(n *yaml.Node) bool { return n.Kind == yaml.ScalarNode && n.Tag == "!!null" }
 
 // verifyPatch is the safety net: the result must re-read as the patch intended,
-// with every untouched key and the body unchanged. It returns what it re-read.
-func verifyPatch(src, out []byte, old *vault.Frontmatter, pl *patchPlan) (*vault.Frontmatter, error) {
+// with every untouched key and the body unchanged.
+func verifyPatch(src, out []byte, old *vault.Frontmatter, pl *patchPlan) error {
 	const failed = "internal error: the patched frontmatter did not re-read as intended (%w); " +
 		"nothing was written. Report this as a bug and use replace_doc instead"
 	bug := func(format string, args ...any) error {
@@ -373,11 +391,11 @@ func verifyPatch(src, out []byte, old *vault.Frontmatter, pl *patchPlan) (*vault
 	}
 	re, err := reread(out)
 	if err != nil {
-		return nil, fmt.Errorf(failed, err)
+		return fmt.Errorf(failed, err)
 	}
 	p, touched := pl.patch, pl.touched
 	if !bytes.Equal(out[re.BodyOffset:], src[old.BodyOffset:]) {
-		return nil, bug("the body changed")
+		return bug("the body changed")
 	}
 	var oldOrder, newOrder []string
 	for key, val := range vault.Pairs(old.Map) {
@@ -387,7 +405,7 @@ func verifyPatch(src, out []byte, old *vault.Frontmatter, pl *patchPlan) (*vault
 		}
 		oldOrder = append(oldOrder, k)
 		if !nodeEqual(val, vault.Field(re.Map, k)) {
-			return nil, bug("%s changed", k)
+			return bug("%s changed", k)
 		}
 	}
 	for key := range vault.Pairs(re.Map) {
@@ -396,25 +414,25 @@ func verifyPatch(src, out []byte, old *vault.Frontmatter, pl *patchPlan) (*vault
 		}
 	}
 	if !slices.Equal(oldOrder, newOrder) {
-		return nil, bug("key order changed")
+		return bug("key order changed")
 	}
 	for _, k := range pl.setKeys {
 		if k == "tags" {
 			continue
 		}
 		if !nodeEqual(vault.Field(p.Set, k), vault.Field(re.Map, k)) {
-			return nil, bug("%s was not written as given", k)
+			return bug("%s was not written as given", k)
 		}
 	}
 	for _, k := range p.Unset {
 		if vault.Field(re.Map, k) != nil {
-			return nil, bug("%s is still present", k)
+			return bug("%s is still present", k)
 		}
 	}
 	if pl.hasTagChange && !slices.Equal(vault.Values(re.Map, "tags"), pl.wantTags) {
-		return nil, bug("tags differ")
+		return bug("tags differ")
 	}
-	return re, nil
+	return nil
 }
 
 // reread parses the frontmatter of a file this package built, which must have one.

@@ -14,10 +14,10 @@ import (
 	"github.com/arkoes07/prep-mcp/internal/vault"
 )
 
-// Slugify turns free text into a lowercase kebab-case file name part. Letters
+// slugify turns free text into a lowercase kebab-case file name part. Letters
 // and digits of any script are kept; every other run of characters becomes one
 // hyphen. It returns "" when nothing usable is left.
-func Slugify(s string) string {
+func slugify(s string) string {
 	var b strings.Builder
 	pendingHyphen := false
 	for _, r := range strings.ToLower(s) {
@@ -36,7 +36,7 @@ func Slugify(s string) string {
 
 var placeholderRE = regexp.MustCompile(`\{([^{}]+)\}`)
 
-// RenderFilename fills the filename pattern of type spec. {slug} comes from
+// renderFilename fills the filename pattern of type spec. {slug} comes from
 // the slug argument, else the title field; {date} is the day the type's date
 // field holds (YYYY-MM-DD), else today, and a date field that holds no date
 // fails; any other placeholder comes from the field of that name. Values
@@ -45,7 +45,7 @@ var placeholderRE = regexp.MustCompile(`\{([^{}]+)\}`)
 // part is slugified alone, so the result stays below the type folder. Every
 // other value can never contain a path separator. On a case-sensitive file
 // system an existing uppercase file of the same name is not detected.
-func RenderFilename(spec config.TypeSpec, fm *yaml.Node, slug string, today time.Time) (string, error) {
+func renderFilename(spec config.TypeSpec, fm *yaml.Node, slug string, today time.Time) (string, error) {
 	if strings.ContainsAny(slug, `/\`) {
 		return folderFilename(spec.Filename, slug)
 	}
@@ -83,14 +83,14 @@ func placeholderValue(name string, fm *yaml.Node, slug, date string) (string, er
 	switch name {
 	case "slug":
 		if strings.TrimSpace(slug) != "" {
-			if s := Slugify(slug); s != "" {
+			if s := slugify(slug); s != "" {
 				return s, nil
 			}
 			return "", fmt.Errorf("slug %q has no letters or digits to build a filename from; pass a different slug",
 				slug)
 		}
 		if title := vault.Text(fm, "title"); title != "" {
-			if s := Slugify(title); s != "" {
+			if s := slugify(title); s != "" {
 				return s, nil
 			}
 		}
@@ -105,7 +105,7 @@ func placeholderValue(name string, fm *yaml.Node, slug, date string) (string, er
 	case len(vals) != 1:
 		return "", fmt.Errorf("%s must be a single value to build the filename, not a list or mapping", name)
 	}
-	s := Slugify(vals[0])
+	s := slugify(vals[0])
 	if s == "" {
 		return "", fmt.Errorf("%s (%q) has no letters or digits to build a filename from; use a different value",
 			name, vals[0])
@@ -123,7 +123,7 @@ func folderFilename(pattern, slug string) (string, error) {
 	}
 	parts := strings.Split(slug, "/")
 	for i, part := range parts {
-		s := Slugify(part)
+		s := slugify(part)
 		if s == "" || strings.Contains(part, `\`) {
 			return "", fmt.Errorf("slug %q has a part %q with no letters or digits, or with \"\\\"; "+
 				"pass folder/name with letters and digits in each part", slug, part)

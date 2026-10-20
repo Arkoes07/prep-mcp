@@ -14,12 +14,23 @@ var (
 	listItemRE = regexp.MustCompile(`^\s*([-*+]|\d+[.)])\s+`)
 )
 
-// InsertSection adds content to the end of the level-2 "## heading" section of
+// AppendOp adds content to the end of a "## heading" section, or adds the
+// section at the end of the file.
+func AppendOp(path, heading, content string) Op {
+	return Op{tool: ToolAppend, target: path, apply: func(p *batchPlan) (*file, []byte, []string, error) {
+		return p.modify(path, contentRules, func(f *file) ([]byte, []string, error) {
+			next, err := insertSection(f.cur, heading, content)
+			return next, nil, err
+		})
+	}}
+}
+
+// insertSection adds content to the end of the level-2 "## heading" section of
 // src, just before the next # or ## heading, or as a new section at the end of
 // the file. Only insertions are made: no existing byte changes. Frontmatter is
 // never searched. The last of several equal headings is used; headings inside
 // code fences do not count.
-func InsertSection(src []byte, heading, content string) ([]byte, error) {
+func insertSection(src []byte, heading, content string) ([]byte, error) {
 	heading, content, err := cleanSectionArgs(heading, content)
 	if err != nil {
 		return nil, err

@@ -49,56 +49,6 @@ type Op struct {
 	apply func(p *batchPlan) (f *file, next []byte, warnings []string, err error)
 }
 
-// CreateOp makes a new document of a configured type. The path comes from the
-// type's folder and filename pattern.
-func CreateOp(d Draft) Op {
-	return Op{tool: ToolCreate, target: d.Type, apply: func(p *batchPlan) (*file, []byte, []string, error) {
-		return p.create(d)
-	}}
-}
-
-// AppendOp adds content to the end of a "## heading" section, or adds the
-// section at the end of the file.
-func AppendOp(path, heading, content string) Op {
-	return Op{tool: ToolAppend, target: path, apply: func(p *batchPlan) (*file, []byte, []string, error) {
-		return p.modify(path, contentRules, func(f *file) ([]byte, []string, error) {
-			next, err := InsertSection(f.cur, heading, content)
-			return next, nil, err
-		})
-	}}
-}
-
-// PatchOp changes frontmatter keys and tags, leaving the body's bytes alone.
-func PatchOp(path string, patch Patch) Op {
-	return Op{tool: ToolPatch, target: path, apply: func(p *batchPlan) (*file, []byte, []string, error) {
-		return p.modify(path, patchRules, func(f *file) ([]byte, []string, error) {
-			return p.w.patchDoc(f, patch)
-		})
-	}}
-}
-
-// ReplaceOp rewrites a whole file, but only if it still has the content whose
-// hash the caller read.
-func ReplaceOp(path, content, expectedHash string) Op {
-	return Op{tool: ToolReplace, target: path, apply: func(p *batchPlan) (*file, []byte, []string, error) {
-		return p.modify(path, contentRules, func(f *file) ([]byte, []string, error) {
-			next, err := replaceContent(f, content, expectedHash)
-			return next, nil, err
-		})
-	}}
-}
-
-// EditOp replaces the one occurrence of old in a file with replacement. An
-// empty replacement deletes it.
-func EditOp(path, old, replacement string) Op {
-	return Op{tool: ToolEdit, target: path, apply: func(p *batchPlan) (*file, []byte, []string, error) {
-		return p.modify(path, editRules, func(f *file) ([]byte, []string, error) {
-			next, err := editText(f.cur, f.rel, old, replacement)
-			return next, nil, err
-		})
-	}}
-}
-
 // FailedOp stands for an op of tool the caller could not build, for example
 // because its arguments did not decode. Apply and Batch report err as its failure.
 func FailedOp(tool string, err error) Op {

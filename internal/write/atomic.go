@@ -19,10 +19,6 @@ import (
 // A crash never leaves a half-written note, and a hard link to a file outside
 // the vault is replaced rather than written through.
 
-// beforeRename is a test seam: it runs after the temp file is written and
-// before it is renamed into place. Production leaves it nil.
-var beforeRename func(tmp string) error
-
 // replaceFile atomically replaces an existing file, provided it still has the
 // content with hash oldHash. If it does not, nothing is written and the error
 // is a *ConflictError carrying the file's current hash.
@@ -108,12 +104,12 @@ func (w *Writer) stage(rel string, data []byte, mode fs.FileMode) (string, error
 	return tmp, nil
 }
 
-// finish runs the test seam and check, then renames tmp over rel. On any
+// finish runs the rename hook and check, then renames tmp over rel. On any
 // failure, a refusing check included, the temp file is removed and the error
 // returned.
 func (w *Writer) finish(rel, tmp string, check func() error) error {
-	if beforeRename != nil {
-		if err := beforeRename(tmp); err != nil {
+	if w.beforeRename != nil {
+		if err := w.beforeRename(tmp); err != nil {
 			return w.discard(tmp, fmt.Errorf("cannot write %s: %w; report this as a bug", rel, err))
 		}
 	}

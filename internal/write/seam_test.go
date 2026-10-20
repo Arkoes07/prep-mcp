@@ -1,8 +1,7 @@
-package write
+package write_test
 
-// White-box tests: they use the beforeRename seam to fail or interfere at the
-// one moment black-box tests cannot reach, between writing the temp file and
-// renaming it into place.
+// These tests use the rename hook to fail or interfere at the one moment the
+// tools cannot reach, between writing the temp file and renaming it into place.
 
 import (
 	"context"
@@ -13,57 +12,31 @@ import (
 	"strings"
 	"testing"
 
-	"gopkg.in/yaml.v3"
-
-	"github.com/arkoes07/prep-mcp/internal/testvault"
 	"github.com/arkoes07/prep-mcp/internal/vault"
+	"github.com/arkoes07/prep-mcp/internal/write"
 )
-
-func seamEnv(t *testing.T) (string, *Writer) {
-	t.Helper()
-	root := testvault.Copy(t)
-	cfg, v := testvault.Open(t, root)
-	return root, New(v, cfg, nil, testvault.Clock())
-}
-
-func setSeam(t *testing.T, f func(tmp string) error) {
-	t.Helper()
-	beforeRename = f
-	t.Cleanup(func() { beforeRename = nil })
-}
-
-func tempFiles(t *testing.T, root string) []string {
-	t.Helper()
-	var out []string
-	filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
-		if err == nil && strings.HasPrefix(d.Name(), ".prep-tmp-") {
-			out = append(out, p)
-		}
-		return nil
-	})
-	return out
-}
 
 func TestFailureBeforeRenameLeavesNothingBehind(t *testing.T) {
 	const p = "weeks/2026-w03.md"
-	root, w := seamEnv(t)
+	e := newEnv(t)
+	root, w := e.root, e.w
 	orig, err := os.ReadFile(filepath.Join(root, p))
 	if err != nil {
 		t.Fatal(err)
 	}
-	setSeam(t, func(tmp string) error {
+	w.SetBeforeRename(func(tmp string) error {
 		if _, err := os.Stat(filepath.Join(root, tmp)); err != nil {
 			t.Errorf("the temp file should exist at the seam: %v", err)
 		}
 		return errors.New("injected failure")
 	})
 
-	_, err = w.Apply(context.Background(), AppendOp(p, "Log", "- Tue: x"))
+	_, err = w.Apply(context.Background(), write.AppendOp(p, "Log", "- Tue: x"))
 	if err == nil || !strings.Contains(err.Error(), "injected failure") {
 		t.Fatalf("append error = %v, want the injected failure", err)
 	}
-	d := Draft{Type: "reference", Frontmatter: nodeOf(t, `{"title":"T"}`), Body: "x"}
-	if _, err := w.Apply(context.Background(), CreateOp(d)); err == nil {
+	d := write.Draft{Type: "reference", Frontmatter: node(t, `{"title":"T"}`), Body: "x"}
+	if _, err := w.Apply(context.Background(), write.CreateOp(d)); err == nil {
 		t.Fatal("create succeeded despite the injected failure")
 	}
 	if got, _ := os.ReadFile(filepath.Join(root, p)); string(got) != string(orig) {
@@ -72,7 +45,7 @@ func TestFailureBeforeRenameLeavesNothingBehind(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(root, "reference/t.md")); err == nil {
 		t.Error("the new file appeared")
 	}
-	if left := tempFiles(t, root); len(left) > 0 {
+	if left := leftovers(t, root); len(left) > 0 {
 		t.Errorf("temp files left behind: %v", left)
 	}
 }
@@ -81,19 +54,20 @@ func TestFailureBeforeRenameLeavesNothingBehind(t *testing.T) {
 // the write starts over from the new content.
 func TestHumanEditDuringWriteIsKept(t *testing.T) {
 	const p = "weeks/2026-w03.md"
-	root, w := seamEnv(t)
+	e := newEnv(t)
+	root, w := e.root, e.w
 	target := filepath.Join(root, p)
 	orig, _ := os.ReadFile(target)
 
 	calls := 0
-	setSeam(t, func(string) error {
+	w.SetBeforeRename(func(string) error {
 		calls++
 		if calls == 1 {
 			return os.WriteFile(target, append(append([]byte{}, orig...), "- human edit\n"...), 0o644)
 		}
 		return nil
 	})
-	res, err := w.Apply(context.Background(), AppendOp(p, "Log", "- Tue: x"))
+	res, err := w.Apply(context.Background(), write.AppendOp(p, "Log", "- Tue: x"))
 	if err != nil {
 		t.Fatalf("AppendSection: %v", err)
 	}
@@ -104,7 +78,7 @@ func TestHumanEditDuringWriteIsKept(t *testing.T) {
 	if res.Hash != vault.Hash(got) {
 		t.Errorf("hash = %s, want the hash of the final file", res.Hash)
 	}
-	if left := tempFiles(t, root); len(left) > 0 {
+	if left := leftovers(t, root); len(left) > 0 {
 		t.Errorf("temp files left behind: %v", left)
 	}
 }
@@ -112,15 +86,16 @@ func TestHumanEditDuringWriteIsKept(t *testing.T) {
 // If the file keeps changing, give up without writing rather than loop.
 func TestGivesUpWhenFileKeepsChanging(t *testing.T) {
 	const p = "weeks/2026-w03.md"
-	root, w := seamEnv(t)
+	e := newEnv(t)
+	root, w := e.root, e.w
 	target := filepath.Join(root, p)
 	n := 0
-	setSeam(t, func(string) error {
+	w.SetBeforeRename(func(string) error {
 		n++
 		b, _ := os.ReadFile(target)
 		return os.WriteFile(target, append(b, "- edit\n"...), 0o644)
 	})
-	_, err := w.Apply(context.Background(), AppendOp(p, "Log", "- Tue: x"))
+	_, err := w.Apply(context.Background(), write.AppendOp(p, "Log", "- Tue: x"))
 	if err == nil || !strings.Contains(err.Error(), "re-read it with read_doc") {
 		t.Fatalf("error = %v, want a retry hint", err)
 	}
@@ -130,7 +105,7 @@ func TestGivesUpWhenFileKeepsChanging(t *testing.T) {
 	if b, _ := os.ReadFile(target); strings.Contains(string(b), "Tue: x") {
 		t.Error("the AI's text was written over a changing file")
 	}
-	if left := tempFiles(t, root); len(left) > 0 {
+	if left := leftovers(t, root); len(left) > 0 {
 		t.Errorf("temp files left behind: %v", left)
 	}
 }
@@ -138,32 +113,24 @@ func TestGivesUpWhenFileKeepsChanging(t *testing.T) {
 // replace_doc has no retry: a change after the hash check is a conflict.
 func TestReplaceConflictAtRename(t *testing.T) {
 	const p = "weeks/2026-w03.md"
-	root, w := seamEnv(t)
+	e := newEnv(t)
+	root, w := e.root, e.w
 	target := filepath.Join(root, p)
 	orig, _ := os.ReadFile(target)
-	setSeam(t, func(string) error {
+	w.SetBeforeRename(func(string) error {
 		return os.WriteFile(target, append(append([]byte{}, orig...), "- human edit\n"...), 0o644)
 	})
-	_, err := w.Apply(context.Background(), ReplaceOp(p, string(orig)+"- ai\n", vault.Hash(orig)))
-	var ce *ConflictError
+	_, err := w.Apply(context.Background(), write.ReplaceOp(p, string(orig)+"- ai\n", vault.Hash(orig)))
+	var ce *write.ConflictError
 	if !errors.As(err, &ce) {
-		t.Fatalf("error %T (%v), want *ConflictError", err, err)
+		t.Fatalf("error %T (%v), want *write.ConflictError", err, err)
 	}
 	if b, _ := os.ReadFile(target); strings.Contains(string(b), "- ai") {
 		t.Error("the AI's content was written over the human's edit")
 	}
-	if left := tempFiles(t, root); len(left) > 0 {
+	if left := leftovers(t, root); len(left) > 0 {
 		t.Errorf("temp files left behind: %v", left)
 	}
-}
-
-func nodeOf(t *testing.T, js string) *yaml.Node {
-	t.Helper()
-	n, err := JSONToNode([]byte(js))
-	if err != nil {
-		t.Fatal(err)
-	}
-	return n
 }
 
 const (
@@ -190,24 +157,25 @@ func readAll(t *testing.T, root string, paths ...string) map[string]string {
 // already wrote, byte for byte and with its mode, and removes the files it
 // created. Files it had not reached yet are untouched.
 func TestBatchFailureMidwayRollsBack(t *testing.T) {
-	root, w := seamEnv(t)
+	e := newEnv(t)
+	root, w := e.root, e.w
 	if err := os.Chmod(filepath.Join(root, seamA), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	before := readAll(t, root, seamA, seamC, seamD)
 	calls := 0
-	setSeam(t, func(string) error {
+	w.SetBeforeRename(func(string) error {
 		calls++
 		if calls == 3 { // the third rename: seamC
 			return errors.New("injected failure")
 		}
 		return nil
 	})
-	ops := []Op{
-		PatchOp(seamA, Patch{Set: nodeOf(t, `{"status":"improving"}`)}),
-		CreateOp(Draft{Type: "learning", Frontmatter: nodeOf(t, `{"title":"DDIA ch5","track":"ddia"}`), Body: "x"}),
-		AppendOp(seamC, "Log", "- Tue: x"),
-		PatchOp(seamD, Patch{Set: nodeOf(t, `{"status":"open"}`)}),
+	ops := []write.Op{
+		write.PatchOp(seamA, write.Patch{Set: node(t, `{"status":"improving"}`)}),
+		write.CreateOp(write.Draft{Type: "learning", Frontmatter: node(t, `{"title":"DDIA ch5","track":"ddia"}`), Body: "x"}),
+		write.AppendOp(seamC, "Log", "- Tue: x"),
+		write.PatchOp(seamD, write.Patch{Set: node(t, `{"status":"open"}`)}),
 	}
 
 	_, err := w.Batch(context.Background(), ops, "")
@@ -227,7 +195,7 @@ func TestBatchFailureMidwayRollsBack(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(root, seamB)); !errors.Is(err, fs.ErrNotExist) {
 		t.Errorf("the created %s was not removed (%v)", seamB, err)
 	}
-	if left := tempFiles(t, root); len(left) > 0 {
+	if left := leftovers(t, root); len(left) > 0 {
 		t.Errorf("temp files left behind: %v", left)
 	}
 }
@@ -235,12 +203,13 @@ func TestBatchFailureMidwayRollsBack(t *testing.T) {
 // Rollback never overwrites a human's save: a file changed since the batch
 // wrote it is left as the human saved it, and the error names it.
 func TestBatchRollbackKeepsHumanSave(t *testing.T) {
-	root, w := seamEnv(t)
+	e := newEnv(t)
+	root, w := e.root, e.w
 	targetA := filepath.Join(root, seamA)
 	before := readAll(t, root, seamC)
 	var human []byte
 	calls := 0
-	setSeam(t, func(string) error {
+	w.SetBeforeRename(func(string) error {
 		calls++
 		if calls != 2 { // the second rename: seamC
 			return nil
@@ -255,9 +224,9 @@ func TestBatchRollbackKeepsHumanSave(t *testing.T) {
 		}
 		return errors.New("injected failure")
 	})
-	ops := []Op{
-		PatchOp(seamA, Patch{Set: nodeOf(t, `{"status":"improving"}`)}),
-		AppendOp(seamC, "Log", "- Tue: x"),
+	ops := []write.Op{
+		write.PatchOp(seamA, write.Patch{Set: node(t, `{"status":"improving"}`)}),
+		write.AppendOp(seamC, "Log", "- Tue: x"),
 	}
 
 	_, err := w.Batch(context.Background(), ops, "")
@@ -271,7 +240,7 @@ func TestBatchRollbackKeepsHumanSave(t *testing.T) {
 	if got := readAll(t, root, seamC); got[seamC] != before[seamC] {
 		t.Errorf("%s changed:\n%s", seamC, got[seamC])
 	}
-	if left := tempFiles(t, root); len(left) > 0 {
+	if left := leftovers(t, root); len(left) > 0 {
 		t.Errorf("temp files left behind: %v", left)
 	}
 }
@@ -280,20 +249,21 @@ func TestBatchRollbackKeepsHumanSave(t *testing.T) {
 // conflict: the batch puts back what it wrote, starts over once from the new
 // content, and the human's save is kept.
 func TestBatchHumanEditDuringApplyIsKept(t *testing.T) {
-	root, w := seamEnv(t)
+	e := newEnv(t)
+	root, w := e.root, e.w
 	targetC := filepath.Join(root, seamC)
 	origC, _ := os.ReadFile(targetC)
 	calls := 0
-	setSeam(t, func(string) error {
+	w.SetBeforeRename(func(string) error {
 		calls++
 		if calls == 2 { // the second rename, seamC, on the first attempt
 			return os.WriteFile(targetC, append(append([]byte{}, origC...), "- human edit\n"...), 0o644)
 		}
 		return nil
 	})
-	ops := []Op{
-		PatchOp(seamA, Patch{Set: nodeOf(t, `{"status":"improving"}`)}),
-		AppendOp(seamC, "Log", "- Tue: x"),
+	ops := []write.Op{
+		write.PatchOp(seamA, write.Patch{Set: node(t, `{"status":"improving"}`)}),
+		write.AppendOp(seamC, "Log", "- Tue: x"),
 	}
 
 	if _, err := w.Batch(context.Background(), ops, ""); err != nil {
@@ -311,23 +281,23 @@ func TestBatchHumanEditDuringApplyIsKept(t *testing.T) {
 	if strings.Count(gotA, "status: improving\n") != 1 || strings.Count(gotA, "updated:") != 1 {
 		t.Errorf("%s:\n%s\nwant the patch applied once", seamA, gotA)
 	}
-	if left := tempFiles(t, root); len(left) > 0 {
+	if left := leftovers(t, root); len(left) > 0 {
 		t.Errorf("temp files left behind: %v", left)
 	}
 }
 
 // Several ops on one path are one write of the final content.
 func TestBatchWritesEachFileOnce(t *testing.T) {
-	_, w := seamEnv(t)
+	w := newEnv(t).w
 	calls := 0
-	setSeam(t, func(string) error {
+	w.SetBeforeRename(func(string) error {
 		calls++
 		return nil
 	})
-	ops := []Op{
-		PatchOp(seamA, Patch{Set: nodeOf(t, `{"status":"improving"}`)}),
-		AppendOp(seamA, "Notes", "- a"),
-		PatchOp(seamA, Patch{AddTags: []string{"meta/plan"}}),
+	ops := []write.Op{
+		write.PatchOp(seamA, write.Patch{Set: node(t, `{"status":"improving"}`)}),
+		write.AppendOp(seamA, "Notes", "- a"),
+		write.PatchOp(seamA, write.Patch{AddTags: []string{"meta/plan"}}),
 	}
 
 	if _, err := w.Batch(context.Background(), ops, ""); err != nil {

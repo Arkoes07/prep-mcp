@@ -2,6 +2,7 @@ package write_test
 
 import (
 	"regexp"
+	"slices"
 	"testing"
 
 	"github.com/arkoes07/prep-mcp/internal/vault"
@@ -19,8 +20,9 @@ func TestApplyPatch(t *testing.T) {
 		unset    []string
 		add, rem []string
 		want     string // exact output; for a no-op it is ignored and out must equal src
-		noop     bool   // the frontmatter must be nil and out must equal src
-		squeeze  bool   // compare with runs of spaces before "#" collapsed (comment spacing is not pinned)
+		noop     bool   // out must equal src
+		warnings []string
+		squeeze  bool // compare with runs of spaces before "#" collapsed (comment spacing is not pinned)
 		wantErr  string
 	}{
 		{
@@ -57,7 +59,15 @@ func TestApplyPatch(t *testing.T) {
 		{name: "add_existing_tag", src: doc("tags: [a]\n", "x\n"), add: []string{"A"}, noop: true},
 		{name: "remove_tags", src: doc("tags: [a, b]\n", "x\n"), rem: []string{"a"}, want: doc("tags: [b]\nupdated: 2026-01-14\n", "x\n")},
 		{name: "remove_last", src: doc("tags: [a]\n", "x\n"), rem: []string{"a"}, want: doc("tags: []\nupdated: 2026-01-14\n", "x\n")},
-		{name: "remove_absent", src: doc("tags: [a]\n", "x\n"), rem: []string{"z"}, noop: true},
+		{
+			name: "remove_absent", src: doc("tags: [a]\n", "x\n"), rem: []string{"Z"}, noop: true,
+			warnings: []string{`tag "z" is not on this document, so there was nothing to remove`},
+		},
+		{
+			name: "remove_some_absent", src: doc("tags: [a, b]\n", "x\n"), rem: []string{"z", "a"},
+			want:     doc("tags: [b]\nupdated: 2026-01-14\n", "x\n"),
+			warnings: []string{`tag "z" is not on this document, so there was nothing to remove`},
+		},
 
 		{name: "tags_conflict", src: doc("a: 1\n", ""), set: `{"tags":["x"]}`, add: []string{"y"}, wantErr: "add_tags"},
 		{name: "set_unset_same", src: doc("status: x\n", ""), set: `{"status":"y"}`, unset: []string{"status"}, wantErr: "status"},
@@ -83,7 +93,7 @@ func TestApplyPatch(t *testing.T) {
 			if tc.set != "" {
 				p.Set = node(t, tc.set)
 			}
-			out, fm, err := write.ApplyPatch([]byte(tc.src), p, today, true)
+			out, warnings, err := write.ApplyPatch([]byte(tc.src), p, today, true)
 			if tc.wantErr != "" {
 				mustContain(t, err, tc.wantErr)
 				if tc.name == "no_frontmatter" {
@@ -94,18 +104,15 @@ func TestApplyPatch(t *testing.T) {
 			if err != nil {
 				t.Fatalf("ApplyPatch: %v", err)
 			}
+			if !slices.Equal(warnings, tc.warnings) {
+				t.Errorf("warnings = %q, want %q", warnings, tc.warnings)
+			}
 			got := string(out)
 			if tc.noop {
-				if fm != nil {
-					t.Error("frontmatter returned for a no-op, want nil")
-				}
 				if got != tc.src {
 					t.Errorf("no-op changed the bytes:\n%q\nwant\n%q", got, tc.src)
 				}
 				return
-			}
-			if fm == nil {
-				t.Fatal("no frontmatter returned, want the patched one")
 			}
 			want := tc.want
 			if tc.squeeze {
