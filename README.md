@@ -81,7 +81,7 @@ op 1 (create_doc session): unknown tag "issue/missing-tradof"; closest known tag
 
 ## Install
 
-You need Go 1.26.9 or newer, and git if you want a commit per write. An older `go` (1.21 or later) fetches it on its own unless `GOTOOLCHAIN=local` is set.
+You need Go 1.26.10 or newer, and git if you want a commit per write. An older `go` (1.21 or later) fetches it on its own unless `GOTOOLCHAIN=local` is set.
 
 ```bash
 git clone https://github.com/arkoes07/prep-mcp.git && cd prep-mcp
